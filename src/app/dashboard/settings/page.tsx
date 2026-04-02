@@ -363,6 +363,8 @@ function SettingsContent() {
         </CardContent>
       </Card>
 
+      <FollowMyTruckSection profile={profile} />
+
       {profile && (
         <EmbedWidgetSection
           userId={profile.id}
@@ -370,5 +372,79 @@ function SettingsContent() {
         />
       )}
     </div>
+  );
+}
+
+function FollowMyTruckSection({ profile }: { profile: Profile | null }) {
+  const [subscriberCount, setSubscriberCount] = useState<number | null>(null);
+  const [copied, setCopied] = useState(false);
+  const supabase = createClient();
+
+  const isPremium = profile?.subscription_tier === "premium";
+  const followUrl =
+    typeof window !== "undefined"
+      ? `${window.location.origin}/follow/${profile?.id}`
+      : `/follow/${profile?.id}`;
+
+  useEffect(() => {
+    async function loadCount() {
+      if (!profile || !isPremium) return;
+      const { count } = await supabase
+        .from("follow_subscribers")
+        .select("*", { count: "exact", head: true })
+        .eq("truck_user_id", profile.id)
+        .is("unsubscribed_at", null);
+      setSubscriberCount(count ?? 0);
+    }
+    loadCount();
+  }, [profile, isPremium, supabase]);
+
+  function handleCopy() {
+    navigator.clipboard.writeText(followUrl);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  }
+
+  return (
+    <Card className="max-w-2xl">
+      <CardHeader>
+        <CardTitle>Follow My Truck</CardTitle>
+      </CardHeader>
+      <CardContent>
+        {!isPremium ? (
+          <p className="text-sm text-muted-foreground">
+            Upgrade to Premium to let customers subscribe to your event notifications.
+          </p>
+        ) : (
+          <div className="space-y-3">
+            <div className="flex items-center gap-4">
+              <div className="text-sm text-muted-foreground">
+                Active subscribers:{" "}
+                <span className="font-semibold text-foreground">
+                  {subscriberCount ?? "..."}
+                </span>
+              </div>
+            </div>
+            <div className="space-y-1">
+              <p className="text-sm text-muted-foreground">
+                Share this link so customers can follow your truck:
+              </p>
+              <div className="flex items-center gap-2">
+                <code className="text-sm bg-muted p-2 rounded flex-1 break-all">
+                  {followUrl}
+                </code>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleCopy}
+                >
+                  {copied ? "Copied!" : "Copy"}
+                </Button>
+              </div>
+            </div>
+          </div>
+        )}
+      </CardContent>
+    </Card>
   );
 }

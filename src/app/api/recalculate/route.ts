@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { calculateEventPerformance } from "@/lib/event-performance";
-import { calculateForecast } from "@/lib/forecast-engine";
+import { calculateForecast, calibrateCoefficients } from "@/lib/forecast-engine";
 import type { Event } from "@/lib/database.types";
 
 /**
@@ -54,6 +54,9 @@ export async function POST() {
       );
     }
 
+    // Calibrate per-user coefficients from historical data
+    const calibrated = calibrateCoefficients(allEvents);
+
     // Recalculate forecasts for upcoming events
     const today = new Date().toISOString().split("T")[0];
     const upcomingEvents = allEvents.filter(
@@ -61,7 +64,7 @@ export async function POST() {
     );
 
     for (const event of upcomingEvents) {
-      const forecastResult = calculateForecast(event, allEvents);
+      const forecastResult = calculateForecast(event, allEvents, { calibratedCoefficients: calibrated });
       if (forecastResult) {
         await supabase
           .from("events")

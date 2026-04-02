@@ -10,7 +10,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { CloudSun } from "lucide-react";
-import { calculateForecast } from "@/lib/forecast-engine";
+import { calculateForecast, calibrateCoefficients } from "@/lib/forecast-engine";
 import { TIER_COLORS, WEATHER_COEFFICIENTS } from "@/lib/constants";
 import type { Event } from "@/lib/database.types";
 
@@ -52,9 +52,12 @@ export default async function ForecastsPage() {
     (e) => e.event_date >= today && e.booked
   );
 
+  // Calibrate per-user coefficients
+  const calibrated = calibrateCoefficients(events);
+
   // Calculate forecasts with details
   const forecastDetails = upcomingEvents.map((event) => {
-    const result = calculateForecast(event, events);
+    const result = calculateForecast(event, events, { calibratedCoefficients: calibrated });
     return {
       event,
       forecast: result,
@@ -117,18 +120,23 @@ export default async function ForecastsPage() {
                         )}
                       </div>
                       {forecast && (
-                        <Badge
-                          variant="secondary"
-                          className={
-                            forecast.confidence === "HIGH"
-                              ? "bg-green-100 text-green-800"
-                              : forecast.confidence === "MEDIUM"
-                                ? "bg-yellow-100 text-yellow-800"
-                                : "bg-red-100 text-red-800"
-                          }
-                        >
-                          {forecast.confidence}
-                        </Badge>
+                        <div className="flex flex-col items-end gap-1">
+                          <Badge
+                            variant="secondary"
+                            className={
+                              forecast.confidence === "HIGH"
+                                ? "bg-green-100 text-green-800"
+                                : forecast.confidence === "MEDIUM"
+                                  ? "bg-yellow-100 text-yellow-800"
+                                  : "bg-red-100 text-red-800"
+                            }
+                          >
+                            {forecast.confidence} ({Math.round(forecast.confidenceScore * 100)}%)
+                          </Badge>
+                          {forecast.calibrated && (
+                            <span className="text-xs text-muted-foreground">Calibrated</span>
+                          )}
+                        </div>
                       )}
                     </div>
                   </div>
@@ -184,6 +192,16 @@ export default async function ForecastsPage() {
                             </span>
                           </div>
                         )}
+                      {forecast.venueFamiliarityApplied && (
+                        <div className="col-span-2">
+                          <span className="text-muted-foreground">
+                            Venue familiarity:{" "}
+                          </span>
+                          <span className="font-medium text-green-700">
+                            Applied (prior history at this location)
+                          </span>
+                        </div>
+                      )}
                     </div>
                   )}
 
