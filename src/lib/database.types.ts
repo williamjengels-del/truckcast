@@ -1,0 +1,157 @@
+export type SubscriptionTier = "starter" | "pro" | "premium";
+export type EventType =
+  | "Festival"
+  | "Concert"
+  | "Community/Neighborhood"
+  | "Corporate"
+  | "Weekly Series"
+  | "Private/Catering"
+  | "Sports Event"
+  | "Fundraiser/Charity";
+export type EventTier = "A" | "B" | "C" | "D";
+export type WeatherType =
+  | "Clear"
+  | "Overcast"
+  | "Hot"
+  | "Cold"
+  | "Rain Before Event"
+  | "Rain During Event"
+  | "Storms"
+  | "Snow";
+export type AnomalyFlag = "normal" | "disrupted" | "boosted";
+export type FeeType =
+  | "none"
+  | "flat_fee"
+  | "percentage"
+  | "commission_with_minimum"
+  | "pre_settled";
+export type PosSource = "manual" | "square" | "toast" | "clover" | "mixed";
+export type ConfidenceLevel = "HIGH" | "MEDIUM" | "LOW";
+export type TrendType =
+  | "Growing"
+  | "Declining"
+  | "Stable"
+  | "New/Insufficient Data";
+
+export interface Profile {
+  id: string;
+  business_name: string | null;
+  city: string | null;
+  state: string | null;
+  timezone: string;
+  subscription_tier: SubscriptionTier;
+  stripe_customer_id: string | null;
+  stripe_subscription_id: string | null;
+  onboarding_completed: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface Event {
+  id: string;
+  user_id: string;
+  event_name: string;
+  event_date: string;
+  start_time: string | null;
+  end_time: string | null;
+  setup_time: string | null;
+  location: string | null;
+  city: string | null;
+  city_area: string | null;
+  latitude: number | null;
+  longitude: number | null;
+  booked: boolean;
+  net_sales: number | null;
+  event_type: EventType | null;
+  event_tier: EventTier | null;
+  event_weather: WeatherType | null;
+  anomaly_flag: AnomalyFlag;
+  expected_attendance: number | null;
+  other_trucks: number | null;
+  fee_type: FeeType;
+  fee_rate: number;
+  sales_minimum: number;
+  net_after_fees: number | null;
+  forecast_sales: number | null;
+  notes: string | null;
+  pos_source: PosSource;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface EventPerformance {
+  id: string;
+  user_id: string;
+  event_name: string;
+  times_booked: number;
+  total_sales: number;
+  avg_sales: number;
+  median_sales: number;
+  min_sales: number;
+  max_sales: number;
+  consistency_score: number;
+  yoy_growth: number | null;
+  confidence: ConfidenceLevel;
+  confidence_band_low: number | null;
+  confidence_band_high: number | null;
+  trend: TrendType;
+  years_active: string | null;
+  forecast_next: number | null;
+  notes: string | null;
+  updated_at: string;
+}
+
+export interface Contact {
+  id: string;
+  user_id: string;
+  name: string | null;
+  email: string | null;
+  phone: string | null;
+  organization: string | null;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export type PosProvider = "square" | "clover" | "toast";
+
+export interface PosConnection {
+  id: string;
+  user_id: string;
+  provider: PosProvider;
+  access_token: string;
+  refresh_token: string | null;
+  token_expires_at: string | null;
+  merchant_id: string | null;
+  location_ids: string[];
+  selected_location_ids: string[];
+  sync_enabled: boolean;
+  last_sync_at: string | null;
+  last_sync_status: string;
+  last_sync_error: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface WeatherCache {
+  id: string;
+  date: string;
+  latitude: number;
+  longitude: number;
+  max_temp_f: number | null;
+  min_temp_f: number | null;
+  precipitation_in: number | null;
+  prev_day_precip_in: number | null;
+  weather_classification: WeatherType | null;
+  fetched_at: string;
+}
+
+export interface FollowSubscriber {
+  id: string;
+  truck_user_id: string;
+  email: string;
+  name: string | null;
+  subscribed_at: string;
+  unsubscribed_at: string | null;
+  confirmed: boolean;
+}
