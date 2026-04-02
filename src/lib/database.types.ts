@@ -155,3 +155,12 @@ export interface FollowSubscriber {
   unsubscribed_at: string | null;
   confirmed: boolean;
 }
+
+export interface Feedback {
+  id: string;
+  user_id: string | null;
+  email: string | null;
+  page: string | null;
+  message: string;
+  created_at: string;
+}
