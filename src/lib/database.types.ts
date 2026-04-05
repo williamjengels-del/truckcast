@@ -43,6 +43,8 @@ export interface Profile {
   stripe_customer_id: string | null;
   stripe_subscription_id: string | null;
   onboarding_completed: boolean;
+  data_sharing_enabled: boolean;
+  team_share_token?: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -61,6 +63,7 @@ export interface Event {
   latitude: number | null;
   longitude: number | null;
   booked: boolean;
+  is_private?: boolean;
   net_sales: number | null;
   event_type: EventType | null;
   event_tier: EventTier | null;
@@ -109,6 +112,8 @@ export interface Contact {
   phone: string | null;
   organization: string | null;
   notes: string | null;
+  quality_score: number | null;
+  linked_event_names: string[];
   created_at: string;
   updated_at: string;
 }
@@ -129,8 +134,34 @@ export interface PosConnection {
   last_sync_at: string | null;
   last_sync_status: string;
   last_sync_error: string | null;
+  last_sync_events_updated: number | null;
   created_at: string;
   updated_at: string;
+}
+
+export interface Testimonial {
+  id: string;
+  author_name: string;
+  author_title: string | null;
+  content: string;
+  rating: number;
+  is_active: boolean;
+  display_order: number;
+  created_at: string;
+}
+
+export interface BookingRequest {
+  id: string;
+  truck_user_id: string;
+  requester_name: string;
+  requester_email: string;
+  requester_phone: string | null;
+  event_date: string | null;
+  event_type: string | null;
+  estimated_attendance: number | null;
+  message: string | null;
+  status: "new" | "read" | "replied" | "declined";
+  created_at: string;
 }
 
 export interface WeatherCache {

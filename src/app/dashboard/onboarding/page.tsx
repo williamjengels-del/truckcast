@@ -14,8 +14,17 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { CheckCircle, ArrowRight, TruckIcon } from "lucide-react";
+import {
+  CheckCircle,
+  ArrowRight,
+  TruckIcon,
+  FileSpreadsheet,
+  PlusCircle,
+  TrendingUp,
+  BarChart3,
+} from "lucide-react";
 import { US_STATES, US_TIMEZONES } from "@/lib/constants";
+import Link from "next/link";
 
 export default function OnboardingPage() {
   const [step, setStep] = useState(1);
@@ -40,13 +49,13 @@ export default function OnboardingPage() {
         .from("profiles")
         .update({
           ...profile,
-          onboarding_completed: step >= 3,
+          onboarding_completed: true,
         })
         .eq("id", user.id);
     }
 
     setLoading(false);
-    setStep(step + 1);
+    setStep(2);
   }
 
   async function handleComplete() {
@@ -66,13 +75,30 @@ export default function OnboardingPage() {
     router.refresh();
   }
 
+  async function handleSkipToStep3() {
+    setLoading(true);
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+
+    if (user) {
+      await supabase
+        .from("profiles")
+        .update({ onboarding_completed: true })
+        .eq("id", user.id);
+    }
+
+    setLoading(false);
+    setStep(3);
+  }
+
   return (
     <div className="max-w-2xl mx-auto">
       <div className="text-center mb-8">
         <TruckIcon className="h-12 w-12 text-primary mx-auto mb-4" />
         <h1 className="text-3xl font-bold">Welcome to TruckCast</h1>
         <p className="text-muted-foreground mt-2">
-          Let&apos;s get your account set up in a few quick steps
+          Let&apos;s get your calendar set up in a few quick steps
         </p>
       </div>
 
@@ -102,11 +128,14 @@ export default function OnboardingPage() {
         ))}
       </div>
 
-      {/* Step 1: Business Profile */}
+      {/* Step 1: Your Truck */}
       {step === 1 && (
         <Card>
           <CardHeader>
-            <CardTitle>Your Business</CardTitle>
+            <CardTitle>First, tell us about your truck</CardTitle>
+            <p className="text-sm text-muted-foreground">
+              This helps us tailor forecasts and weather data to your area
+            </p>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="space-y-2">
@@ -187,68 +216,167 @@ export default function OnboardingPage() {
         </Card>
       )}
 
-      {/* Step 2: Import or Add Events */}
+      {/* Step 2: Get Your Schedule In */}
       {step === 2 && (
         <Card>
           <CardHeader>
-            <CardTitle>Add Your Events</CardTitle>
+            <CardTitle>Now let&apos;s get your events in</CardTitle>
+            <p className="text-sm text-muted-foreground">
+              The more events you add, the smarter your forecasts get. Even 10
+              past events makes a big difference.
+            </p>
           </CardHeader>
           <CardContent className="space-y-4">
-            <p className="text-muted-foreground">
-              The more historical data you add, the better your forecasts will
-              be. You can always add more later.
-            </p>
             <div className="grid gap-4">
-              <Button
-                variant="outline"
-                className="h-20 text-left justify-start gap-4"
+              {/* Import CSV option */}
+              <button
+                type="button"
                 onClick={() => router.push("/dashboard/events/import")}
+                className="flex items-start gap-4 rounded-xl border-2 border-border bg-card p-5 text-left transition-colors hover:border-primary hover:bg-primary/5 focus:outline-none focus:ring-2 focus:ring-primary"
               >
+                <div className="mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                  <FileSpreadsheet className="h-5 w-5" />
+                </div>
                 <div>
-                  <div className="font-semibold">Import CSV</div>
-                  <div className="text-sm text-muted-foreground">
-                    Upload historical events from a spreadsheet
+                  <div className="font-semibold">Import from CSV / Spreadsheet</div>
+                  <div className="mt-1 text-sm text-muted-foreground">
+                    Have your events in Excel, Google Sheets, or Airtable? Upload
+                    them all at once.
                   </div>
                 </div>
-              </Button>
-              <Button
-                variant="outline"
-                className="h-20 text-left justify-start gap-4"
-                onClick={() => router.push("/dashboard/events")}
+              </button>
+
+              {/* Add manually option */}
+              <button
+                type="button"
+                onClick={() => router.push("/dashboard/events?new=true")}
+                className="flex items-start gap-4 rounded-xl border-2 border-border bg-card p-5 text-left transition-colors hover:border-primary hover:bg-primary/5 focus:outline-none focus:ring-2 focus:ring-primary"
               >
+                <div className="mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                  <PlusCircle className="h-5 w-5" />
+                </div>
                 <div>
-                  <div className="font-semibold">Add Events Manually</div>
-                  <div className="text-sm text-muted-foreground">
-                    Enter events one at a time
+                  <div className="font-semibold">Add Your First Event</div>
+                  <div className="mt-1 text-sm text-muted-foreground">
+                    Start fresh and add events one by one.
                   </div>
                 </div>
-              </Button>
+              </button>
             </div>
-            <Button
-              variant="ghost"
-              className="w-full"
-              onClick={() => setStep(3)}
-            >
-              Skip for now
-            </Button>
+
+            {/* Skip — less prominent */}
+            <div className="pt-2 text-center">
+              <button
+                type="button"
+                onClick={handleSkipToStep3}
+                disabled={loading}
+                className="text-sm text-muted-foreground underline-offset-4 hover:text-foreground hover:underline disabled:opacity-50"
+              >
+                I&apos;ll do this later
+              </button>
+              <p className="mt-1.5 text-xs text-muted-foreground">
+                You can always import later from the Events page. We recommend
+                adding at least 5 past events to get started.
+              </p>
+            </div>
           </CardContent>
         </Card>
       )}
 
-      {/* Step 3: Done */}
+      {/* Step 3: You're ready! */}
       {step === 3 && (
         <Card>
           <CardHeader>
-            <CardTitle className="text-center">You&apos;re all set!</CardTitle>
+            <CardTitle className="text-center">
+              You&apos;re all set — here&apos;s what to do next
+            </CardTitle>
           </CardHeader>
-          <CardContent className="text-center space-y-4">
-            <CheckCircle className="h-16 w-16 text-green-500 mx-auto" />
-            <p className="text-muted-foreground">
-              Your TruckCast account is ready. Start adding events and the
-              forecast engine will learn your business patterns over time.
-            </p>
-            <Button className="gap-2" onClick={handleComplete} disabled={loading}>
-              Go to Dashboard <ArrowRight className="h-4 w-4" />
+          <CardContent className="space-y-6">
+            {/* Setup checklist */}
+            <div className="space-y-3">
+              {/* Business profile — always done */}
+              <div className="flex items-start gap-3 rounded-lg border bg-muted/30 p-4">
+                <CheckCircle className="mt-0.5 h-5 w-5 shrink-0 text-green-500" />
+                <div>
+                  <div className="font-medium">Business profile set up</div>
+                  <div className="text-sm text-muted-foreground">
+                    Your truck is registered in TruckCast
+                  </div>
+                </div>
+              </div>
+
+              {/* Add first event */}
+              <div className="flex items-start gap-3 rounded-lg border p-4">
+                <div className="mt-0.5 h-5 w-5 shrink-0 rounded-full border-2 border-muted-foreground/30" />
+                <div className="flex-1">
+                  <div className="font-medium">Add your first event</div>
+                  <div className="text-sm text-muted-foreground">
+                    Log a past or upcoming event to get started
+                  </div>
+                  <div className="mt-2 flex gap-2">
+                    <Link href="/dashboard/events?new=true">
+                      <Button size="sm" variant="outline" className="h-7 text-xs">
+                        <PlusCircle className="mr-1.5 h-3.5 w-3.5" />
+                        Add event
+                      </Button>
+                    </Link>
+                    <Link href="/dashboard/events/import">
+                      <Button size="sm" variant="outline" className="h-7 text-xs">
+                        <FileSpreadsheet className="mr-1.5 h-3.5 w-3.5" />
+                        Import CSV
+                      </Button>
+                    </Link>
+                  </div>
+                </div>
+              </div>
+
+              {/* Log sales */}
+              <div className="flex items-start gap-3 rounded-lg border p-4">
+                <div className="mt-0.5 h-5 w-5 shrink-0 rounded-full border-2 border-muted-foreground/30" />
+                <div>
+                  <div className="font-medium">Log sales after an event</div>
+                  <div className="text-sm text-muted-foreground">
+                    After each event, enter your actual sales so forecasts
+                    improve over time
+                  </div>
+                </div>
+              </div>
+
+              {/* Check forecasts */}
+              <div className="flex items-start gap-3 rounded-lg border p-4">
+                <div className="mt-0.5 h-5 w-5 shrink-0 rounded-full border-2 border-muted-foreground/30" />
+                <div className="flex-1">
+                  <div className="font-medium">Check your forecasts</div>
+                  <div className="text-sm text-muted-foreground">
+                    See revenue predictions for upcoming events
+                  </div>
+                  <div className="mt-2">
+                    <Link href="/dashboard/forecasts">
+                      <Button size="sm" variant="outline" className="h-7 text-xs">
+                        <BarChart3 className="mr-1.5 h-3.5 w-3.5" />
+                        View forecasts
+                      </Button>
+                    </Link>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="rounded-lg bg-primary/5 border border-primary/20 p-4 flex items-start gap-3">
+              <TrendingUp className="mt-0.5 h-5 w-5 text-primary shrink-0" />
+              <p className="text-sm text-muted-foreground">
+                <span className="font-medium text-foreground">Pro tip:</span>{" "}
+                Operators with 10+ past events see forecast accuracy improve
+                significantly. Import your history when you get a chance.
+              </p>
+            </div>
+
+            <Button
+              className="w-full gap-2"
+              onClick={handleComplete}
+              disabled={loading}
+            >
+              Go to my dashboard <ArrowRight className="h-4 w-4" />
             </Button>
           </CardContent>
         </Card>

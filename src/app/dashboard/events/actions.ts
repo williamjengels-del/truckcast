@@ -17,6 +17,7 @@ export type EventFormData = {
   latitude?: number;
   longitude?: number;
   booked?: boolean;
+  is_private?: boolean;
   net_sales?: number;
   event_type?: string;
   event_tier?: string;
@@ -45,6 +46,7 @@ export async function createEvent(formData: EventFormData) {
     event_name: formData.event_name,
     event_date: formData.event_date,
     booked: formData.booked ?? true,
+    is_private: formData.is_private ?? false,
   };
 
   // Only include optional fields if they have values

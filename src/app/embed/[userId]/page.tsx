@@ -73,6 +73,7 @@ export default async function EmbedSchedulePage({ params, searchParams }: PagePr
     .select("event_name, event_date, start_time, end_time, location, city, event_type")
     .eq("user_id", userId)
     .eq("booked", true)
+    .neq("is_private", true)
     .gte("event_date", today)
     .order("event_date", { ascending: true })
     .limit(limit);

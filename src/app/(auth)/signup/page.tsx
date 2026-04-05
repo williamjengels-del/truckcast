@@ -14,6 +14,9 @@ export default function SignupPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [businessName, setBusinessName] = useState("");
+  const [inviteCode, setInviteCode] = useState("");
+  const [inviteValid, setInviteValid] = useState<boolean | null>(null);
+  const [inviteTier, setInviteTier] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
@@ -50,6 +53,15 @@ export default function SignupPage() {
         .eq("id", data.user.id);
     }
 
+    // Redeem invite code if provided
+    if (inviteCode.trim() && data.user) {
+      await fetch("/api/beta/redeem", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ code: inviteCode.trim() }),
+      });
+    }
+
     // If email confirmation is enabled
     if (data.user && !data.session) {
       setSuccess(true);
@@ -59,6 +71,15 @@ export default function SignupPage() {
     }
 
     setLoading(false);
+  }
+
+  async function handleInviteBlur() {
+    const code = inviteCode.trim();
+    if (!code) { setInviteValid(null); setInviteTier(null); return; }
+    const res = await fetch(`/api/beta/redeem?code=${encodeURIComponent(code)}`);
+    const data = await res.json();
+    setInviteValid(data.valid);
+    setInviteTier(data.valid ? data.grantedTier : null);
   }
 
   async function handleGoogleSignup() {
@@ -136,6 +157,32 @@ export default function SignupPage() {
                 required
               />
             </div>
+            <div className="space-y-2">
+              <Label htmlFor="inviteCode">
+                Beta Invite Code{" "}
+                <span className="text-xs text-muted-foreground font-normal">(optional)</span>
+              </Label>
+              <Input
+                id="inviteCode"
+                type="text"
+                placeholder="TC-XXXXXXXX"
+                value={inviteCode}
+                onChange={(e) => { setInviteCode(e.target.value.toUpperCase()); setInviteValid(null); setInviteTier(null); }}
+                onBlur={handleInviteBlur}
+                className="font-mono"
+              />
+              {inviteValid === true && inviteTier && (
+                <p className="text-xs text-green-700 dark:text-green-400">
+                  Valid code — unlocks {inviteTier} plan for your trial
+                </p>
+              )}
+              {inviteValid === false && (
+                <p className="text-xs text-destructive">
+                  Invalid or already used code
+                </p>
+              )}
+            </div>
+
             {error && (
               <p className="text-sm text-destructive">{error}</p>
             )}
@@ -179,7 +226,15 @@ export default function SignupPage() {
             Continue with Google
           </Button>
 
-          <p className="mt-6 text-center text-sm text-muted-foreground">
+          <p className="mt-4 text-center text-xs text-muted-foreground">
+            By creating an account you agree to our{" "}
+            <Link href="/terms" className="text-primary hover:underline">Terms of Service</Link>
+            {" "}and{" "}
+            <Link href="/privacy" className="text-primary hover:underline">Privacy Policy</Link>
+            , including the use of your event data for internal forecast improvement (opt-out available in Settings).
+          </p>
+
+          <p className="mt-3 text-center text-sm text-muted-foreground">
             Already have an account?{" "}
             <Link href="/login" className="text-primary hover:underline font-medium">
               Sign in

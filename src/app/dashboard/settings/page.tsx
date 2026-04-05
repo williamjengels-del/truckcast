@@ -68,7 +68,25 @@ function SettingsContent() {
           .select("*")
           .eq("id", user.id)
           .single();
-        setProfile(data);
+
+        if (data) {
+          // If business_name is null, check user metadata as fallback
+          if (!data.business_name) {
+            const metaName = user.user_metadata?.business_name as string | undefined;
+            if (metaName) {
+              // Auto-save it to profile
+              await supabase
+                .from("profiles")
+                .update({ business_name: metaName })
+                .eq("id", user.id);
+              setProfile({ ...data, business_name: metaName });
+            } else {
+              setProfile(data);
+            }
+          } else {
+            setProfile(data);
+          }
+        }
       }
       setLoading(false);
     }
@@ -135,6 +153,7 @@ function SettingsContent() {
                     p ? { ...p, business_name: e.target.value } : p
                   )
                 }
+                placeholder="Enter your food truck name"
               />
             </div>
             <div className="grid grid-cols-2 gap-4">
@@ -148,6 +167,7 @@ function SettingsContent() {
                       p ? { ...p, city: e.target.value } : p
                     )
                   }
+                  placeholder="e.g. St. Louis"
                 />
               </div>
               <div className="space-y-2">
@@ -211,105 +231,7 @@ function SettingsContent() {
             )}
           </div>
 
-          {/* Plan selection */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-            {[
-              {
-                tier: "starter",
-                label: "Starter",
-                monthly: "$9/mo",
-                annual: "$89/yr",
-                features: ["Events & Sales Tracking", "Dashboard & KPIs", "Fee Calculator", "Contacts"],
-              },
-              {
-                tier: "pro",
-                label: "Pro",
-                monthly: "$29/mo",
-                annual: "$279/yr",
-                features: ["Everything in Starter", "CSV Import", "POS Integration", "Weather Forecasts", "Public Schedule & Widget"],
-              },
-              {
-                tier: "premium",
-                label: "Premium",
-                monthly: "$49/mo",
-                annual: "$469/yr",
-                features: ["Everything in Pro", "Monthly Reports", "Risk Analysis", "Anomaly Detection", "Follow My Truck Notifications"],
-              },
-            ].map((plan) => {
-              const isCurrent = profile?.subscription_tier === plan.tier;
-              return (
-                <div
-                  key={plan.tier}
-                  className={`rounded-lg border p-4 space-y-3 ${
-                    isCurrent
-                      ? "border-primary bg-primary/5 ring-1 ring-primary"
-                      : "border-border"
-                  }`}
-                >
-                  <div>
-                    <h3 className="font-semibold text-lg">{plan.label}</h3>
-                    <p className="text-sm text-muted-foreground">
-                      {plan.monthly}{" "}
-                      <span className="text-xs">or {plan.annual}</span>
-                    </p>
-                  </div>
-                  <ul className="text-xs text-muted-foreground space-y-1">
-                    {plan.features.map((f) => (
-                      <li key={f} className="flex items-start gap-1">
-                        <span className="text-green-600 mt-0.5">&#10003;</span>
-                        {f}
-                      </li>
-                    ))}
-                  </ul>
-                  {isCurrent ? (
-                    <Button size="sm" disabled className="w-full">
-                      Current Plan
-                    </Button>
-                  ) : (
-                    <div className="flex gap-2">
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        className="flex-1"
-                        onClick={async () => {
-                          const res = await fetch("/api/stripe/checkout", {
-                            method: "POST",
-                            headers: { "Content-Type": "application/json" },
-                            body: JSON.stringify({
-                              tier: plan.tier,
-                              billing: "monthly",
-                            }),
-                          });
-                          const { url } = await res.json();
-                          if (url) window.location.href = url;
-                        }}
-                      >
-                        Monthly
-                      </Button>
-                      <Button
-                        size="sm"
-                        className="flex-1"
-                        onClick={async () => {
-                          const res = await fetch("/api/stripe/checkout", {
-                            method: "POST",
-                            headers: { "Content-Type": "application/json" },
-                            body: JSON.stringify({
-                              tier: plan.tier,
-                              billing: "annual",
-                            }),
-                          });
-                          const { url } = await res.json();
-                          if (url) window.location.href = url;
-                        }}
-                      >
-                        Annual
-                      </Button>
-                    </div>
-                  )}
-                </div>
-              );
-            })}
-          </div>
+          <PlanCards profile={profile} />
 
           {/* Manage existing billing */}
           {profile?.stripe_customer_id && (
@@ -320,8 +242,12 @@ function SettingsContent() {
                   const res = await fetch("/api/stripe/portal", {
                     method: "POST",
                   });
-                  const { url } = await res.json();
-                  if (url) window.location.href = url;
+                  const data = await res.json();
+                  if (data.url) {
+                    window.location.href = data.url;
+                  } else {
+                    alert("Billing portal error: " + (data.error ?? "Unknown error"));
+                  }
                 }}
               >
                 Manage Billing & Invoices
@@ -371,7 +297,300 @@ function SettingsContent() {
           subscriptionTier={profile.subscription_tier ?? "starter"}
         />
       )}
+
+      <DataPrivacyCard
+        profile={profile}
+        onToggle={(val) =>
+          setProfile((p) => (p ? { ...p, data_sharing_enabled: val } : p))
+        }
+      />
+
+      <TeamAccessCard profile={profile} />
     </div>
+  );
+}
+
+function PlanCards({ profile }: { profile: Profile | null }) {
+  const [checkoutLoading, setCheckoutLoading] = useState<string | null>(null);
+  const [checkoutError, setCheckoutError] = useState<string | null>(null);
+
+  async function handleCheckout(tier: string, billing: string) {
+    const key = `${tier}-${billing}`;
+    setCheckoutLoading(key);
+    setCheckoutError(null);
+    try {
+      const res = await fetch("/api/stripe/checkout", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ tier, billing }),
+      });
+      const data = await res.json();
+      if (data.url) {
+        window.location.href = data.url;
+      } else {
+        setCheckoutError(data.error ?? "Something went wrong. Please try again.");
+      }
+    } catch {
+      setCheckoutError("Network error — please check your connection and try again.");
+    } finally {
+      setCheckoutLoading(null);
+    }
+  }
+
+  const plans = [
+    {
+      tier: "starter",
+      label: "Starter",
+      monthly: "$19/mo",
+      annual: "$182/yr",
+      annualSave: "save $46",
+      features: ["Event Scheduling & Calendar", "Fee Calculator", "Revenue Tracking", "Public Schedule", "Team Share Link"],
+    },
+    {
+      tier: "pro",
+      label: "Pro",
+      monthly: "$39/mo",
+      annual: "$374/yr",
+      annualSave: "save $94",
+      features: ["Everything in Starter", "Weather-Adjusted Forecasts", "CSV Import", "POS Integration", "Event Performance Analytics"],
+    },
+    {
+      tier: "premium",
+      label: "Premium",
+      monthly: "$69/mo",
+      annual: "$662/yr",
+      annualSave: "save $166",
+      features: ["Everything in Pro", "Advanced Analytics", "Monthly Reports", "Organizer Scoring", "Follow My Truck", "Booking Widget"],
+    },
+  ];
+
+  return (
+    <div className="space-y-3">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+        {plans.map((plan) => {
+          const isCurrent = profile?.subscription_tier === plan.tier;
+          return (
+            <div
+              key={plan.tier}
+              className={`rounded-lg border p-4 space-y-3 ${
+                isCurrent
+                  ? "border-primary bg-primary/5 ring-1 ring-primary"
+                  : "border-border"
+              }`}
+            >
+              <div>
+                <h3 className="font-semibold text-lg">{plan.label}</h3>
+                <p className="text-sm text-muted-foreground">
+                  {plan.monthly}{" "}
+                  <span className="text-xs">or {plan.annual}</span>
+                </p>
+                <p className="text-xs text-green-600">{plan.annualSave} annually</p>
+              </div>
+              <ul className="text-xs text-muted-foreground space-y-1">
+                {plan.features.map((f) => (
+                  <li key={f} className="flex items-start gap-1">
+                    <span className="text-green-600 mt-0.5">&#10003;</span>
+                    {f}
+                  </li>
+                ))}
+              </ul>
+              {isCurrent ? (
+                <Button size="sm" disabled className="w-full">
+                  Current Plan
+                </Button>
+              ) : (
+                <div className="flex gap-2">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="flex-1"
+                    disabled={checkoutLoading !== null}
+                    onClick={() => handleCheckout(plan.tier, "monthly")}
+                  >
+                    {checkoutLoading === `${plan.tier}-monthly` ? "Loading..." : "Monthly"}
+                  </Button>
+                  <Button
+                    size="sm"
+                    className="flex-1"
+                    disabled={checkoutLoading !== null}
+                    onClick={() => handleCheckout(plan.tier, "annual")}
+                  >
+                    {checkoutLoading === `${plan.tier}-annual` ? "Loading..." : "Annual"}
+                  </Button>
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+      {checkoutError && (
+        <div className="rounded-md border border-destructive/50 bg-destructive/10 px-4 py-3 text-sm text-destructive">
+          <span className="font-medium">Checkout error:</span> {checkoutError}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function DataPrivacyCard({
+  profile,
+  onToggle,
+}: {
+  profile: Profile | null;
+  onToggle: (val: boolean) => void;
+}) {
+  const [saving, setSaving] = useState(false);
+  const supabase = createClient();
+
+  const enabled = profile?.data_sharing_enabled ?? true;
+
+  async function handleToggle() {
+    if (!profile) return;
+    const next = !enabled;
+    setSaving(true);
+    await supabase
+      .from("profiles")
+      .update({ data_sharing_enabled: next })
+      .eq("id", profile.id);
+    onToggle(next);
+    setSaving(false);
+  }
+
+  return (
+    <Card className="max-w-2xl" id="data-privacy">
+      <CardHeader>
+        <CardTitle>Data &amp; Privacy</CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <div className="flex items-start justify-between gap-6">
+          <div className="space-y-1">
+            <p className="text-sm font-medium">Internal model improvement</p>
+            <p className="text-sm text-muted-foreground">
+              Allow TruckCast to use your event data internally to improve forecast accuracy
+              for all users. Your data is never sold or shared externally.{" "}
+              <a href="/privacy#model-improvement" className="text-primary hover:underline">
+                Learn more
+              </a>
+            </p>
+          </div>
+          <Button
+            variant={enabled ? "default" : "outline"}
+            size="sm"
+            onClick={handleToggle}
+            disabled={saving}
+            className="shrink-0"
+          >
+            {saving ? "Saving..." : enabled ? "Enabled" : "Opted out"}
+          </Button>
+        </div>
+        {!enabled && (
+          <p className="text-xs text-muted-foreground rounded border border-dashed p-3">
+            You&apos;ve opted out. Your events are excluded from internal analysis.
+            Core TruckCast functionality is unaffected.
+          </p>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+function TeamAccessCard({ profile }: { profile: Profile | null }) {
+  const [token, setToken] = useState<string | null | undefined>(undefined);
+  const [loading, setLoading] = useState(true);
+  const [working, setWorking] = useState(false);
+  const [copied, setCopied] = useState(false);
+
+  useEffect(() => {
+    async function loadToken() {
+      try {
+        const res = await fetch("/api/team/token");
+        const data = await res.json();
+        setToken(data.token ?? null);
+      } catch {
+        setToken(null);
+      } finally {
+        setLoading(false);
+      }
+    }
+    if (profile) loadToken();
+  }, [profile]);
+
+  const shareUrl =
+    typeof window !== "undefined" && token
+      ? `${window.location.origin}/team/${token}`
+      : token
+        ? `/team/${token}`
+        : null;
+
+  async function handleGenerate() {
+    setWorking(true);
+    try {
+      const res = await fetch("/api/team/token", { method: "POST" });
+      const data = await res.json();
+      setToken(data.token ?? null);
+    } finally {
+      setWorking(false);
+    }
+  }
+
+  async function handleRevoke() {
+    if (!confirm("This will invalidate the current link for anyone using it. Are you sure?")) return;
+    setWorking(true);
+    try {
+      await fetch("/api/team/token", { method: "DELETE" });
+      const res = await fetch("/api/team/token", { method: "POST" });
+      const data = await res.json();
+      setToken(data.token ?? null);
+    } finally {
+      setWorking(false);
+    }
+  }
+
+  function handleCopy() {
+    if (!shareUrl) return;
+    navigator.clipboard.writeText(shareUrl);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  }
+
+  return (
+    <Card className="max-w-2xl">
+      <CardHeader>
+        <CardTitle>Team Access</CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        <p className="text-sm text-muted-foreground">
+          Share this with employees and managers. They can view the schedule without logging in.
+          No financial data is visible.
+        </p>
+        {loading ? (
+          <p className="text-sm text-muted-foreground">Loading...</p>
+        ) : token && shareUrl ? (
+          <div className="space-y-2">
+            <p className="text-sm text-muted-foreground">Your team share link:</p>
+            <code className="text-sm bg-muted p-2 rounded block break-all">{shareUrl}</code>
+            <div className="flex items-center gap-2">
+              <Button variant="outline" size="sm" onClick={handleCopy}>
+                {copied ? "Copied!" : "Copy Link"}
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="text-destructive hover:text-destructive"
+                onClick={handleRevoke}
+                disabled={working}
+              >
+                {working ? "Working..." : "Revoke & Regenerate"}
+              </Button>
+            </div>
+          </div>
+        ) : (
+          <Button size="sm" onClick={handleGenerate} disabled={working}>
+            {working ? "Generating..." : "Generate Link"}
+          </Button>
+        )}
+      </CardContent>
+    </Card>
   );
 }
 

@@ -201,8 +201,9 @@ function calculateConfidenceScore(
   consistency: number,
   venueFamiliar: boolean
 ): number {
-  // Data depth score: 0-0.3 (logarithmic, caps around 20 events)
-  const depthScore = Math.min(0.3, 0.3 * (Math.log2(dataPoints + 1) / Math.log2(21)));
+  // Data depth score: 0-0.3. Reaches maximum at 10+ events.
+  // log2(11)/log2(11) = 1.0, so 10 events yields full 0.3.
+  const depthScore = Math.min(0.3, 0.3 * (Math.log2(dataPoints + 1) / Math.log2(11)));
 
   // Recency score: 0-0.25 (proportion of events in last 6 months)
   const recentCount = events.filter((e) => {

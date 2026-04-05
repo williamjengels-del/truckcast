@@ -38,7 +38,7 @@ export function DashboardCharts({
   const hasTypeData = typeData.length > 0;
 
   return (
-    <div className="grid gap-4 lg:grid-cols-2">
+    <div className="grid gap-4 md:grid-cols-2">
       <Card>
         <CardHeader>
           <CardTitle>Monthly Revenue</CardTitle>
@@ -50,7 +50,11 @@ export function DashboardCharts({
                 <XAxis dataKey="month" fontSize={12} />
                 <YAxis
                   fontSize={12}
-                  tickFormatter={(v: number) => `$${(v / 1000).toFixed(0)}k`}
+                  tickFormatter={(v: number) =>
+                    v >= 1000
+                      ? `$${(v / 1000).toFixed(v >= 10000 ? 0 : 1)}K`
+                      : `$${v.toFixed(0)}`
+                  }
                 />
                 <Tooltip
                   formatter={(value) => [

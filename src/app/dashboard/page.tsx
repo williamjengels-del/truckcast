@@ -1,5 +1,10 @@
+import type { Metadata } from "next";
+export const metadata: Metadata = { title: "Dashboard" };
+
+import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 import {
   DollarSign,
   CalendarCheck,
@@ -7,8 +12,10 @@ import {
   CalendarDays,
   Target,
   BarChart3,
+  Plus,
 } from "lucide-react";
 import { DashboardCharts } from "./dashboard-charts";
+import { SetupProgress } from "@/components/setup-progress";
 import type { Event } from "@/lib/database.types";
 
 function formatCurrency(val: number): string {
@@ -26,22 +33,36 @@ export default async function DashboardPage() {
 
   let profile = null;
   let events: Event[] = [];
+  let posConnected = false;
 
   if (user) {
-    const [profileRes, eventsRes] = await Promise.all([
+    const [profileRes, eventsRes, posRes] = await Promise.all([
       supabase.from("profiles").select("*").eq("id", user.id).single(),
       supabase
         .from("events")
         .select("*")
         .eq("user_id", user.id)
         .order("event_date", { ascending: false }),
+      supabase
+        .from("pos_connections")
+        .select("id")
+        .eq("user_id", user.id)
+        .limit(1),
     ]);
     profile = profileRes.data;
     events = (eventsRes.data ?? []) as Event[];
+    posConnected = (posRes.data ?? []).length > 0;
   }
 
   const today = new Date().toISOString().split("T")[0];
   const currentYear = new Date().getFullYear();
+
+  // Setup progress checks
+  const hasEvents = events.length > 0;
+  const hasSales = events.some(
+    (e) => e.event_date <= today && e.net_sales !== null && e.net_sales > 0
+  );
+  const has10Events = events.length >= 10;
 
   // KPI calculations
   const bookedEvents = events.filter((e) => e.booked);
@@ -151,39 +172,80 @@ export default async function DashboardPage() {
     },
   ];
 
+  const isNewUser = events.length === 0;
+
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold">
-          {profile?.business_name
-            ? `${profile.business_name} Dashboard`
-            : "Dashboard"}
-        </h1>
-        <p className="text-muted-foreground">
-          Your event forecasting overview
-        </p>
+      {profile?.onboarding_completed && (
+        <SetupProgress
+          hasEvents={hasEvents}
+          hasSales={hasSales}
+          hasPOS={posConnected}
+          has10Events={has10Events}
+        />
+      )}
+
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold">
+            {profile?.business_name
+              ? `${profile.business_name} Dashboard`
+              : "Dashboard"}
+          </h1>
+          <p className="text-muted-foreground">
+            Your event forecasting overview
+          </p>
+        </div>
+        <Link href="/dashboard/events?new=true">
+          <Button className="gap-2">
+            <Plus className="h-4 w-4" />
+            Add Event
+          </Button>
+        </Link>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-        {kpis.map((kpi) => (
-          <Card key={kpi.label}>
-            <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-sm font-medium text-muted-foreground">
-                {kpi.label}
-              </CardTitle>
-              <kpi.icon className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{kpi.value}</div>
-              <p className="text-xs text-muted-foreground mt-1">
-                {kpi.description}
+      {isNewUser ? (
+        <Card>
+          <CardContent className="py-16 text-center space-y-4">
+            <CalendarDays className="mx-auto h-12 w-12 text-muted-foreground/40" />
+            <div>
+              <h2 className="text-xl font-semibold mb-2">Welcome to TruckCast!</h2>
+              <p className="text-muted-foreground max-w-sm mx-auto">
+                Your dashboard will populate as you add events. Start by adding your first event to begin tracking revenue and generating forecasts.
               </p>
-            </CardContent>
-          </Card>
-        ))}
-      </div>
+            </div>
+            <Link href="/dashboard/events?new=true">
+              <Button size="lg" className="gap-2 mt-2">
+                <Plus className="h-4 w-4" />
+                Add Your First Event
+              </Button>
+            </Link>
+          </CardContent>
+        </Card>
+      ) : (
+        <>
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {kpis.map((kpi) => (
+              <Card key={kpi.label}>
+                <CardHeader className="flex flex-row items-center justify-between pb-2">
+                  <CardTitle className="text-sm font-medium text-muted-foreground">
+                    {kpi.label}
+                  </CardTitle>
+                  <kpi.icon className="h-4 w-4 text-muted-foreground" />
+                </CardHeader>
+                <CardContent>
+                  <div className="text-2xl font-bold">{kpi.value}</div>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    {kpi.description}
+                  </p>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
 
-      <DashboardCharts monthlyData={monthlyData} typeData={typeData} />
+          <DashboardCharts monthlyData={monthlyData} typeData={typeData} />
+        </>
+      )}
     </div>
   );
 }

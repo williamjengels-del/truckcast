@@ -1,6 +1,9 @@
+import type { Metadata } from "next";
+export const metadata: Metadata = { title: "Events" };
+
 import { createClient } from "@/lib/supabase/server";
 import { EventsClient } from "./events-client";
-import type { Event } from "@/lib/database.types";
+import type { Event, Profile } from "@/lib/database.types";
 
 export default async function EventsPage() {
   const supabase = await createClient();
@@ -9,14 +12,30 @@ export default async function EventsPage() {
   } = await supabase.auth.getUser();
 
   let events: Event[] = [];
+  let profile: Profile | null = null;
   if (user) {
-    const { data } = await supabase
-      .from("events")
-      .select("*")
-      .eq("user_id", user.id)
-      .order("event_date", { ascending: false });
-    events = (data ?? []) as Event[];
+    const [eventsResult, profileResult] = await Promise.all([
+      supabase
+        .from("events")
+        .select("*")
+        .eq("user_id", user.id)
+        .order("event_date", { ascending: false }),
+      supabase
+        .from("profiles")
+        .select("*")
+        .eq("id", user.id)
+        .single(),
+    ]);
+    events = (eventsResult.data ?? []) as Event[];
+    profile = (profileResult.data ?? null) as Profile | null;
   }
 
-  return <EventsClient initialEvents={events} />;
+  return (
+    <EventsClient
+      initialEvents={events}
+      userId={user?.id ?? ""}
+      businessName={profile?.business_name ?? ""}
+      userCity={profile?.city ?? ""}
+    />
+  );
 }

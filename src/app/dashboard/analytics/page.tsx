@@ -1,3 +1,6 @@
+import type { Metadata } from "next";
+export const metadata: Metadata = { title: "Analytics" };
+
 import { createClient } from "@/lib/supabase/server";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
@@ -7,6 +10,7 @@ import {
   Star,
   Tag,
 } from "lucide-react";
+// TrendingUp used in KPI card
 import { AnalyticsControls } from "./analytics-controls";
 import { AnalyticsCharts } from "./analytics-charts";
 import type { Event } from "@/lib/database.types";
@@ -278,42 +282,6 @@ export default async function AnalyticsPage({ searchParams }: PageProps) {
   let events: Event[] = [];
 
   if (user) {
-    // Check subscription tier — Analytics is Premium only
-    const { data: profile } = await supabase
-      .from("profiles")
-      .select("subscription_tier")
-      .eq("id", user.id)
-      .single();
-
-    if (profile?.subscription_tier !== "premium") {
-      return (
-        <div className="space-y-6">
-          <div>
-            <h1 className="text-2xl font-bold">Analytics</h1>
-            <p className="text-muted-foreground">
-              Deep dive into your historical performance
-            </p>
-          </div>
-          <Card>
-            <CardContent className="py-12 text-center space-y-3">
-              <TrendingUp className="mx-auto h-10 w-10 text-muted-foreground" />
-              <h2 className="text-lg font-semibold">Premium Feature</h2>
-              <p className="text-sm text-muted-foreground max-w-md mx-auto">
-                Analytics with year-over-year comparisons, trend analysis, and deep
-                performance insights is available on the Premium plan.
-              </p>
-              <a
-                href="/dashboard/settings"
-                className="inline-block mt-2 text-sm font-medium text-primary underline"
-              >
-                Upgrade to Premium
-              </a>
-            </CardContent>
-          </Card>
-        </div>
-      );
-    }
-
     const { data } = await supabase
       .from("events")
       .select("*")

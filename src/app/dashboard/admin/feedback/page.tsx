@@ -1,6 +1,7 @@
 import { createClient as createServiceClient } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
+import Link from "next/link";
 import {
   Table,
   TableBody,
@@ -10,6 +11,14 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+
+const adminNavItems = [
+  { href: "/dashboard/admin", label: "Overview" },
+  { href: "/dashboard/admin/data", label: "Users" },
+  { href: "/dashboard/admin/beta", label: "Invites" },
+  { href: "/dashboard/admin/feedback", label: "Feedback", active: true },
+  { href: "/dashboard/admin/content", label: "Content" },
+];
 
 interface FeedbackRow {
   id: string;
@@ -27,8 +36,8 @@ export default async function AdminFeedbackPage() {
     data: { user },
   } = await supabase.auth.getUser();
 
-  if (!user) {
-    redirect("/login");
+  if (!user || user.email !== "williamjengels@gmail.com") {
+    redirect("/dashboard");
   }
 
   // Use service role client to bypass RLS
@@ -62,6 +71,23 @@ export default async function AdminFeedbackPage() {
         <p className="text-sm text-muted-foreground">
           {rows.length} feedback {rows.length === 1 ? "entry" : "entries"}
         </p>
+      </div>
+
+      {/* Admin nav strip */}
+      <div className="flex gap-1 border-b pb-0 -mb-2">
+        {adminNavItems.map((item) => (
+          <Link
+            key={item.href}
+            href={item.href}
+            className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
+              item.active
+                ? "border-primary text-foreground"
+                : "border-transparent text-muted-foreground hover:text-foreground hover:border-muted-foreground"
+            }`}
+          >
+            {item.label}
+          </Link>
+        ))}
       </div>
 
       {rows.length === 0 ? (

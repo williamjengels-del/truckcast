@@ -1,36 +1,19 @@
-import { createClient } from "@/lib/supabase/server";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
-import { Badge } from "@/components/ui/badge";
-import type { Event, EventPerformance } from "@/lib/database.types";
-import {
-  EventBreakdownTable,
-  type EventBreakdownRow,
-} from "./event-breakdown-table";
-import {
-  SeasonalTrendsCharts,
-  FeeImpactChart,
-  type MonthlyTrendData,
-  type QuarterData,
-  type WeekendVsWeekdayData,
-  type FeeImpactData,
-} from "./reports-charts";
+import type { Metadata } from "next";
+export const metadata: Metadata = { title: "Reports" };
 
-function formatCurrency(value: number): string {
-  return new Intl.NumberFormat("en-US", {
-    style: "currency",
-    currency: "USD",
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 0,
-  }).format(value);
-}
+import { createClient } from "@/lib/supabase/server";
+import type { Event, EventPerformance } from "@/lib/database.types";
+import { type EventBreakdownRow } from "./event-breakdown-table";
+import { ReportsInteractive } from "./reports-interactive";
+import type {
+  MonthlySummary,
+  EventTypeBreakdown,
+  DayOfWeekSummary,
+  YoYData,
+  Top10Row,
+  LocationSummary,
+  CompareEventRow,
+} from "./reports-interactive";
 
 function getMonthKey(dateStr: string): string {
   const d = new Date(dateStr + "T00:00:00");
@@ -41,52 +24,6 @@ function getMonthLabel(key: string): string {
   const [year, month] = key.split("-");
   const d = new Date(Number(year), Number(month) - 1, 1);
   return d.toLocaleDateString("en-US", { year: "numeric", month: "long" });
-}
-
-function getDayOfWeek(dateStr: string): string {
-  const d = new Date(dateStr + "T00:00:00");
-  return d.toLocaleDateString("en-US", { weekday: "long" });
-}
-
-function EmptyState({ message }: { message: string }) {
-  return (
-    <div className="h-32 flex items-center justify-center text-muted-foreground">
-      {message}
-    </div>
-  );
-}
-
-interface MonthlySummary {
-  month: string;
-  eventCount: number;
-  totalRevenue: number;
-  avgRevenue: number;
-  bestEvent: string;
-  bestRevenue: number;
-  worstEvent: string;
-  worstRevenue: number;
-}
-
-interface EventTypeBreakdown {
-  eventType: string;
-  count: number;
-  totalRevenue: number;
-  avgRevenue: number;
-}
-
-interface DayOfWeekSummary {
-  day: string;
-  dayIndex: number;
-  count: number;
-  totalRevenue: number;
-  avgRevenue: number;
-}
-
-interface YoYData {
-  year: number;
-  eventCount: number;
-  totalRevenue: number;
-  avgRevenue: number;
 }
 
 export default async function ReportsPage() {
@@ -143,6 +80,7 @@ export default async function ReportsPage() {
       const totalRevenue = data.events.reduce((s, ev) => s + ev.revenue, 0);
       return {
         month,
+        monthLabel: getMonthLabel(month),
         eventCount: data.events.length,
         totalRevenue,
         avgRevenue: totalRevenue / data.events.length,
@@ -178,13 +116,7 @@ export default async function ReportsPage() {
 
   // --- Day of Week Analysis ---
   const dayNames = [
-    "Sunday",
-    "Monday",
-    "Tuesday",
-    "Wednesday",
-    "Thursday",
-    "Friday",
-    "Saturday",
+    "Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday",
   ];
   const dayMap = new Map<number, { count: number; totalRevenue: number }>();
   for (const e of completedEvents) {
@@ -209,10 +141,7 @@ export default async function ReportsPage() {
     .sort((a, b) => b.avgRevenue - a.avgRevenue);
 
   // --- Year over Year ---
-  const yearMap = new Map<
-    number,
-    { count: number; totalRevenue: number }
-  >();
+  const yearMap = new Map<number, { count: number; totalRevenue: number }>();
   for (const e of completedEvents) {
     const d = new Date(e.event_date + "T00:00:00");
     const year = d.getFullYear();
@@ -233,10 +162,16 @@ export default async function ReportsPage() {
     }))
     .sort((a, b) => b.year - a.year);
 
-  const hasMultipleYears = yoyData.length > 1;
-
   // --- Top 10 Events (from event_performance) ---
-  const top10 = performances.slice(0, 10);
+  const top10: Top10Row[] = performances.slice(0, 10).map((p) => ({
+    id: p.id,
+    event_name: p.event_name,
+    times_booked: p.times_booked,
+    avg_sales: p.avg_sales,
+    total_sales: p.total_sales,
+    trend: p.trend as string | null,
+    confidence: p.confidence as string | null,
+  }));
 
   // --- Event Performance Breakdown ---
   const eventBreakdownRows: EventBreakdownRow[] = completedEvents.map((e) => {
@@ -268,12 +203,6 @@ export default async function ReportsPage() {
   });
 
   // --- Venue / Location Analysis ---
-  interface LocationSummary {
-    city: string;
-    totalRevenue: number;
-    eventCount: number;
-    avgRevenue: number;
-  }
   const locationMap = new Map<
     string,
     { totalRevenue: number; eventCount: number }
@@ -287,9 +216,7 @@ export default async function ReportsPage() {
     entry.totalRevenue += e.net_sales!;
     entry.eventCount += 1;
   }
-  const locationSummaries: LocationSummary[] = Array.from(
-    locationMap.entries()
-  )
+  const locationSummaries: LocationSummary[] = Array.from(locationMap.entries())
     .map(([city, data]) => ({
       city,
       totalRevenue: data.totalRevenue,
@@ -298,160 +225,101 @@ export default async function ReportsPage() {
     }))
     .sort((a, b) => b.totalRevenue - a.totalRevenue);
 
-  const bestLocation =
-    locationSummaries.length > 0 ? locationSummaries[0] : null;
-  const worstLocation =
-    locationSummaries.length > 1
-      ? locationSummaries[locationSummaries.length - 1]
-      : null;
-
-  // --- Seasonal Trends ---
-  const monthNames = [
-    "Jan",
-    "Feb",
-    "Mar",
-    "Apr",
-    "May",
-    "Jun",
-    "Jul",
-    "Aug",
-    "Sep",
-    "Oct",
-    "Nov",
-    "Dec",
-  ];
-  const monthAggMap = new Map<
-    number,
-    { totalRevenue: number; eventCount: number }
-  >();
-  for (const e of completedEvents) {
-    const d = new Date(e.event_date + "T00:00:00");
-    const m = d.getMonth();
-    if (!monthAggMap.has(m)) {
-      monthAggMap.set(m, { totalRevenue: 0, eventCount: 0 });
-    }
-    const entry = monthAggMap.get(m)!;
-    entry.totalRevenue += e.net_sales!;
-    entry.eventCount += 1;
-  }
-  const monthlyTrend: MonthlyTrendData[] = Array.from(monthAggMap.entries())
-    .sort(([a], [b]) => a - b)
-    .map(([m, data]) => ({
-      month: String(m),
-      monthLabel: monthNames[m],
-      revenue: data.totalRevenue,
-      events: data.eventCount,
-      avgRevenue: Math.round(data.totalRevenue / data.eventCount),
-    }));
-
-  // Quarter data
-  const quarterAggMap = new Map<
+  // --- Compare Events Data ---
+  // Build per-event name aggregates for comparison tool
+  const compareMap = new Map<
     string,
-    { totalRevenue: number; eventCount: number }
-  >();
-  for (const e of completedEvents) {
-    const d = new Date(e.event_date + "T00:00:00");
-    const q = `Q${Math.floor(d.getMonth() / 3) + 1}`;
-    if (!quarterAggMap.has(q)) {
-      quarterAggMap.set(q, { totalRevenue: 0, eventCount: 0 });
+    {
+      times_booked: number;
+      total_sales: number;
+      max_sales: number;
+      min_sales: number;
+      confidence: string | null;
+      trend: string | null;
+      consistency_score: number | null;
+      forecast_next: number | null;
+      occurrences: { net_sales: number; anomaly_flag: string | null }[];
     }
-    const entry = quarterAggMap.get(q)!;
-    entry.totalRevenue += e.net_sales!;
-    entry.eventCount += 1;
-  }
-  const quarterData: QuarterData[] = ["Q1", "Q2", "Q3", "Q4"]
-    .filter((q) => quarterAggMap.has(q))
-    .map((q) => {
-      const data = quarterAggMap.get(q)!;
-      return {
-        quarter: q,
-        revenue: data.totalRevenue,
-        events: data.eventCount,
-        avgRevenue: Math.round(data.totalRevenue / data.eventCount),
-      };
+  >();
+
+  // First use event_performance data as authoritative source
+  for (const p of performances) {
+    compareMap.set(p.event_name, {
+      times_booked: p.times_booked,
+      total_sales: p.total_sales,
+      max_sales: p.max_sales,
+      min_sales: p.min_sales,
+      confidence: p.confidence as string | null,
+      trend: p.trend as string | null,
+      consistency_score: p.consistency_score,
+      forecast_next: p.forecast_next,
+      occurrences: [],
     });
-
-  // Weekend vs weekday
-  let weekendStats = { totalRevenue: 0, eventCount: 0 };
-  let weekdayStats = { totalRevenue: 0, eventCount: 0 };
-  for (const e of completedEvents) {
-    const d = new Date(e.event_date + "T00:00:00");
-    const day = d.getDay();
-    if (day === 0 || day === 5 || day === 6) {
-      weekendStats.totalRevenue += e.net_sales!;
-      weekendStats.eventCount += 1;
-    } else {
-      weekdayStats.totalRevenue += e.net_sales!;
-      weekdayStats.eventCount += 1;
-    }
   }
-  const weekendVsWeekday: WeekendVsWeekdayData[] = [
-    {
-      label: "Weekend (Fri-Sun)",
-      revenue: weekendStats.totalRevenue,
-      events: weekendStats.eventCount,
-      avgRevenue:
-        weekendStats.eventCount > 0
-          ? Math.round(weekendStats.totalRevenue / weekendStats.eventCount)
-          : 0,
-    },
-    {
-      label: "Weekday (Mon-Thu)",
-      revenue: weekdayStats.totalRevenue,
-      events: weekdayStats.eventCount,
-      avgRevenue:
-        weekdayStats.eventCount > 0
-          ? Math.round(weekdayStats.totalRevenue / weekdayStats.eventCount)
-          : 0,
-    },
-  ];
 
-  // --- Fee Impact Analysis ---
-  const feeAggMap = new Map<
-    string,
-    { totalRevenue: number; totalNetSales: number; totalFees: number; eventCount: number }
-  >();
+  // Populate occurrences from completed events
   for (const e of completedEvents) {
-    const ft = e.fee_type;
-    if (!feeAggMap.has(ft)) {
-      feeAggMap.set(ft, {
-        totalRevenue: 0,
-        totalNetSales: 0,
-        totalFees: 0,
-        eventCount: 0,
+    if (compareMap.has(e.event_name)) {
+      compareMap.get(e.event_name)!.occurrences.push({
+        net_sales: e.net_sales!,
+        anomaly_flag: e.anomaly_flag ?? null,
       });
     }
-    const entry = feeAggMap.get(ft)!;
-    entry.totalRevenue += e.net_sales!;
-    entry.totalNetSales += e.net_after_fees ?? e.net_sales!;
-    entry.totalFees +=
-      e.net_sales !== null && e.net_after_fees !== null
-        ? e.net_sales - e.net_after_fees
-        : 0;
-    entry.eventCount += 1;
   }
 
-  const feeTypeLabels: Record<string, string> = {
-    none: "No Fee",
-    flat_fee: "Flat Fee",
-    percentage: "Percentage",
-    commission_with_minimum: "Commission + Min",
-    pre_settled: "Pre-Settled",
-  };
-
-  const feeImpact: FeeImpactData[] = Array.from(feeAggMap.entries())
-    .map(([feeType, data]) => ({
-      feeType,
-      label: feeTypeLabels[feeType] ?? feeType,
-      totalRevenue: data.totalRevenue,
-      avgNetSales: Math.round(data.totalNetSales / data.eventCount),
-      totalFees: Math.round(data.totalFees),
-      events: data.eventCount,
+  const compareEventRows: CompareEventRow[] = Array.from(compareMap.entries())
+    .map(([event_name, data]) => ({
+      event_name,
+      times_booked: data.times_booked,
+      avg_sales: data.times_booked > 0 ? data.total_sales / data.times_booked : 0,
+      max_sales: data.max_sales,
+      min_sales: data.min_sales,
+      total_sales: data.total_sales,
+      confidence: data.confidence,
+      trend: data.trend,
+      consistency_score: data.consistency_score,
+      forecast_next: data.forecast_next,
+      occurrences: data.occurrences.sort((a, b) => a.net_sales - b.net_sales),
     }))
-    .sort((a, b) => b.totalRevenue - a.totalRevenue);
+    .sort((a, b) => b.avg_sales - a.avg_sales);
+
+  // --- Summary Stats ---
+  const totalRevenue = completedEvents.reduce(
+    (s, e) => s + (e.net_sales ?? 0),
+    0
+  );
+  const eventsCompleted = completedEvents.length;
+  const avgPerEvent = eventsCompleted > 0 ? totalRevenue / eventsCompleted : 0;
+
+  // Best single event (one occurrence)
+  let bestEventName = "";
+  let bestEventRevenue = 0;
+  for (const e of completedEvents) {
+    if (e.net_sales! > bestEventRevenue) {
+      bestEventRevenue = e.net_sales!;
+      bestEventName = e.event_name;
+    }
+  }
+
+  // Forecast accuracy
+  const eventsWithBoth = completedEvents.filter(
+    (e) => e.forecast_sales !== null && e.forecast_sales > 0
+  );
+  let forecastAccuracy: string | null = null;
+  if (eventsWithBoth.length >= 3) {
+    const mape =
+      eventsWithBoth.reduce((sum, e) => {
+        const actual = e.net_sales ?? 0;
+        const forecast = e.forecast_sales ?? 0;
+        return sum + Math.abs(actual - forecast) / Math.max(actual, 1);
+      }, 0) / eventsWithBoth.length;
+    forecastAccuracy = `${Math.round((1 - mape) * 100)}%`;
+  }
+
+  const overallAvg = avgPerEvent;
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       <div>
         <h1 className="text-2xl font-bold">Reports</h1>
         <p className="text-muted-foreground">
@@ -459,397 +327,23 @@ export default async function ReportsPage() {
         </p>
       </div>
 
-      {/* Monthly Summary */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Monthly Summary</CardTitle>
-        </CardHeader>
-        <CardContent>
-          {monthlySummaries.length === 0 ? (
-            <EmptyState message="Not enough data yet. Complete some events with sales to see monthly summaries." />
-          ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Month</TableHead>
-                  <TableHead className="text-right">Events</TableHead>
-                  <TableHead className="text-right">Total Revenue</TableHead>
-                  <TableHead className="text-right">Avg / Event</TableHead>
-                  <TableHead>Best Event</TableHead>
-                  <TableHead>Worst Event</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {monthlySummaries.map((row) => (
-                  <TableRow key={row.month}>
-                    <TableCell className="font-medium">
-                      {getMonthLabel(row.month)}
-                    </TableCell>
-                    <TableCell className="text-right">
-                      {row.eventCount}
-                    </TableCell>
-                    <TableCell className="text-right">
-                      {formatCurrency(row.totalRevenue)}
-                    </TableCell>
-                    <TableCell className="text-right">
-                      {formatCurrency(row.avgRevenue)}
-                    </TableCell>
-                    <TableCell>
-                      {row.bestEvent}{" "}
-                      <span className="text-muted-foreground text-xs">
-                        ({formatCurrency(row.bestRevenue)})
-                      </span>
-                    </TableCell>
-                    <TableCell>
-                      {row.worstEvent}{" "}
-                      <span className="text-muted-foreground text-xs">
-                        ({formatCurrency(row.worstRevenue)})
-                      </span>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          )}
-        </CardContent>
-      </Card>
-
-      {/* Event Type Breakdown */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Event Type Breakdown</CardTitle>
-        </CardHeader>
-        <CardContent>
-          {eventTypeBreakdown.length === 0 ? (
-            <EmptyState message="Not enough data yet. Log events with sales and event types to see this breakdown." />
-          ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Event Type</TableHead>
-                  <TableHead className="text-right">Events</TableHead>
-                  <TableHead className="text-right">Total Revenue</TableHead>
-                  <TableHead className="text-right">Avg Revenue</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {eventTypeBreakdown.map((row) => (
-                  <TableRow key={row.eventType}>
-                    <TableCell>
-                      <Badge variant="secondary">{row.eventType}</Badge>
-                    </TableCell>
-                    <TableCell className="text-right">{row.count}</TableCell>
-                    <TableCell className="text-right">
-                      {formatCurrency(row.totalRevenue)}
-                    </TableCell>
-                    <TableCell className="text-right">
-                      {formatCurrency(row.avgRevenue)}
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          )}
-        </CardContent>
-      </Card>
-
-      {/* Day of Week Analysis */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Day of Week Analysis</CardTitle>
-        </CardHeader>
-        <CardContent>
-          {dayOfWeekSummaries.length === 0 ? (
-            <EmptyState message="Not enough data yet. Complete events with sales to see which days perform best." />
-          ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Day</TableHead>
-                  <TableHead className="text-right">Events</TableHead>
-                  <TableHead className="text-right">Total Revenue</TableHead>
-                  <TableHead className="text-right">Avg Revenue</TableHead>
-                  <TableHead>Performance</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {dayOfWeekSummaries.map((row, idx) => (
-                  <TableRow key={row.day}>
-                    <TableCell className="font-medium">{row.day}</TableCell>
-                    <TableCell className="text-right">{row.count}</TableCell>
-                    <TableCell className="text-right">
-                      {formatCurrency(row.totalRevenue)}
-                    </TableCell>
-                    <TableCell className="text-right">
-                      {formatCurrency(row.avgRevenue)}
-                    </TableCell>
-                    <TableCell>
-                      {idx === 0 ? (
-                        <Badge className="bg-green-600 hover:bg-green-700">
-                          Best
-                        </Badge>
-                      ) : idx === dayOfWeekSummaries.length - 1 &&
-                        dayOfWeekSummaries.length > 1 ? (
-                        <Badge variant="destructive">Lowest</Badge>
-                      ) : null}
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          )}
-        </CardContent>
-      </Card>
-
-      {/* Year over Year */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Year over Year</CardTitle>
-        </CardHeader>
-        <CardContent>
-          {!hasMultipleYears ? (
-            <EmptyState message="Not enough data yet. Year-over-year comparison requires events from multiple years." />
-          ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Year</TableHead>
-                  <TableHead className="text-right">Events</TableHead>
-                  <TableHead className="text-right">Total Revenue</TableHead>
-                  <TableHead className="text-right">Avg / Event</TableHead>
-                  <TableHead className="text-right">YoY Change</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {yoyData.map((row, idx) => {
-                  const prevYear = yoyData[idx + 1];
-                  let yoyChange: number | null = null;
-                  if (prevYear) {
-                    yoyChange =
-                      ((row.totalRevenue - prevYear.totalRevenue) /
-                        prevYear.totalRevenue) *
-                      100;
-                  }
-                  return (
-                    <TableRow key={row.year}>
-                      <TableCell className="font-medium">{row.year}</TableCell>
-                      <TableCell className="text-right">
-                        {row.eventCount}
-                      </TableCell>
-                      <TableCell className="text-right">
-                        {formatCurrency(row.totalRevenue)}
-                      </TableCell>
-                      <TableCell className="text-right">
-                        {formatCurrency(row.avgRevenue)}
-                      </TableCell>
-                      <TableCell className="text-right">
-                        {yoyChange !== null ? (
-                          <span
-                            className={
-                              yoyChange >= 0
-                                ? "text-green-600"
-                                : "text-red-600"
-                            }
-                          >
-                            {yoyChange >= 0 ? "+" : ""}
-                            {yoyChange.toFixed(1)}%
-                          </span>
-                        ) : (
-                          <span className="text-muted-foreground">--</span>
-                        )}
-                      </TableCell>
-                    </TableRow>
-                  );
-                })}
-              </TableBody>
-            </Table>
-          )}
-        </CardContent>
-      </Card>
-
-      {/* Top 10 Events */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Top 10 Events</CardTitle>
-        </CardHeader>
-        <CardContent>
-          {top10.length === 0 ? (
-            <EmptyState message="Not enough data yet. Event performance data will appear after you complete events." />
-          ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead className="w-8">#</TableHead>
-                  <TableHead>Event Name</TableHead>
-                  <TableHead className="text-right">Times Booked</TableHead>
-                  <TableHead className="text-right">Avg Revenue</TableHead>
-                  <TableHead className="text-right">Total Revenue</TableHead>
-                  <TableHead>Trend</TableHead>
-                  <TableHead>Confidence</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {top10.map((perf, idx) => (
-                  <TableRow key={perf.id}>
-                    <TableCell className="text-muted-foreground">
-                      {idx + 1}
-                    </TableCell>
-                    <TableCell className="font-medium">
-                      {perf.event_name}
-                    </TableCell>
-                    <TableCell className="text-right">
-                      {perf.times_booked}
-                    </TableCell>
-                    <TableCell className="text-right">
-                      {formatCurrency(perf.avg_sales)}
-                    </TableCell>
-                    <TableCell className="text-right">
-                      {formatCurrency(perf.total_sales)}
-                    </TableCell>
-                    <TableCell>
-                      <Badge
-                        variant={
-                          perf.trend === "Growing"
-                            ? "default"
-                            : perf.trend === "Declining"
-                              ? "destructive"
-                              : "secondary"
-                        }
-                      >
-                        {perf.trend}
-                      </Badge>
-                    </TableCell>
-                    <TableCell>
-                      <Badge
-                        variant={
-                          perf.confidence === "HIGH"
-                            ? "default"
-                            : perf.confidence === "LOW"
-                              ? "destructive"
-                              : "secondary"
-                        }
-                      >
-                        {perf.confidence}
-                      </Badge>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          )}
-        </CardContent>
-      </Card>
-
-      {/* Event Performance Breakdown */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Event Performance Breakdown</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <EventBreakdownTable rows={eventBreakdownRows} />
-        </CardContent>
-      </Card>
-
-      {/* Venue / Location Analysis */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Venue / Location Analysis</CardTitle>
-        </CardHeader>
-        <CardContent>
-          {locationSummaries.length === 0 ? (
-            <EmptyState message="Not enough data yet. Complete events with city information to see location analysis." />
-          ) : (
-            <div className="space-y-4">
-              {(bestLocation || worstLocation) && (
-                <div className="flex flex-wrap gap-3">
-                  {bestLocation && (
-                    <div className="rounded-lg border border-green-200 bg-green-50 dark:bg-green-950/30 dark:border-green-900 p-3 flex-1 min-w-[200px]">
-                      <p className="text-xs text-muted-foreground">
-                        Best Performing Location
-                      </p>
-                      <p className="text-lg font-semibold">
-                        {bestLocation.city}
-                      </p>
-                      <p className="text-sm text-muted-foreground">
-                        {formatCurrency(bestLocation.totalRevenue)} total
-                        &middot; {formatCurrency(bestLocation.avgRevenue)} avg
-                        &middot; {bestLocation.eventCount} event
-                        {bestLocation.eventCount !== 1 ? "s" : ""}
-                      </p>
-                    </div>
-                  )}
-                  {worstLocation && (
-                    <div className="rounded-lg border border-red-200 bg-red-50 dark:bg-red-950/30 dark:border-red-900 p-3 flex-1 min-w-[200px]">
-                      <p className="text-xs text-muted-foreground">
-                        Lowest Performing Location
-                      </p>
-                      <p className="text-lg font-semibold">
-                        {worstLocation.city}
-                      </p>
-                      <p className="text-sm text-muted-foreground">
-                        {formatCurrency(worstLocation.totalRevenue)} total
-                        &middot; {formatCurrency(worstLocation.avgRevenue)} avg
-                        &middot; {worstLocation.eventCount} event
-                        {worstLocation.eventCount !== 1 ? "s" : ""}
-                      </p>
-                    </div>
-                  )}
-                </div>
-              )}
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>City</TableHead>
-                    <TableHead className="text-right">Events</TableHead>
-                    <TableHead className="text-right">Total Revenue</TableHead>
-                    <TableHead className="text-right">Avg / Event</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {locationSummaries.map((loc) => (
-                    <TableRow key={loc.city}>
-                      <TableCell className="font-medium">{loc.city}</TableCell>
-                      <TableCell className="text-right">
-                        {loc.eventCount}
-                      </TableCell>
-                      <TableCell className="text-right">
-                        {formatCurrency(loc.totalRevenue)}
-                      </TableCell>
-                      <TableCell className="text-right">
-                        {formatCurrency(loc.avgRevenue)}
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </div>
-          )}
-        </CardContent>
-      </Card>
-
-      {/* Seasonal Trends */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Seasonal Trends</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <SeasonalTrendsCharts
-            monthlyTrend={monthlyTrend}
-            quarterData={quarterData}
-            weekendVsWeekday={weekendVsWeekday}
-          />
-        </CardContent>
-      </Card>
-
-      {/* Fee Impact Analysis */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Fee Impact Analysis</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <FeeImpactChart feeImpact={feeImpact} />
-        </CardContent>
-      </Card>
+      <ReportsInteractive
+        monthlySummaries={monthlySummaries}
+        eventTypeBreakdown={eventTypeBreakdown}
+        dayOfWeekSummaries={dayOfWeekSummaries}
+        yoyData={yoyData}
+        top10={top10}
+        eventBreakdownRows={eventBreakdownRows}
+        locationSummaries={locationSummaries}
+        compareEventRows={compareEventRows}
+        totalRevenue={totalRevenue}
+        eventsCompleted={eventsCompleted}
+        avgPerEvent={avgPerEvent}
+        bestEventName={bestEventName}
+        bestEventRevenue={bestEventRevenue}
+        forecastAccuracy={forecastAccuracy}
+        overallAvg={overallAvg}
+      />
     </div>
   );
 }

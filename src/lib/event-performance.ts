@@ -94,16 +94,24 @@ export function calculateEventPerformance(
   }
 
   // Step 6: Confidence
+  // Based primarily on non-disrupted events. High disruption rate applies a small penalty.
+  // Thresholds: HIGH >= 0.6, MEDIUM >= 0.35, LOW < 0.35 (matches forecast-engine thresholds).
+  const disruptionRate = timesBooked > 0 ? (timesBooked - statsEvents.length) / timesBooked : 0;
+  const disruptionPenalty = disruptionRate > 0.5 ? 1 : disruptionRate > 0.25 ? 0 : 0;
   let confidence: ConfidenceLevel = "LOW";
-  if (statsEvents.length >= 5 && consistencyScore >= 0.7) {
-    confidence = "HIGH";
+  if (statsEvents.length >= 10 && consistencyScore >= 0.6) {
+    confidence = disruptionPenalty ? "MEDIUM" : "HIGH";
+  } else if (statsEvents.length >= 5 && consistencyScore >= 0.7) {
+    confidence = disruptionPenalty ? "MEDIUM" : "HIGH";
   } else if (statsEvents.length >= 2 && consistencyScore >= 0.5) {
     confidence = "MEDIUM";
   }
 
   // Step 7: Trend
+  // Requires at least 2 non-disrupted data points AND at least 2 distinct years
+  // to avoid a misleading trend call from a single event per year.
   let trend: TrendType = "New/Insufficient Data";
-  if (years.length >= 2) {
+  if (years.length >= 2 && statsEvents.length >= 2) {
     if (yoyGrowth !== null && yoyGrowth > 0.1) {
       trend = "Growing";
     } else if (yoyGrowth !== null && yoyGrowth < -0.1) {

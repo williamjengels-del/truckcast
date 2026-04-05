@@ -38,6 +38,8 @@ export async function updateSession(request: NextRequest) {
   const isAuthRoute =
     request.nextUrl.pathname.startsWith("/login") ||
     request.nextUrl.pathname.startsWith("/signup");
+  const isOnboardingRoute = request.nextUrl.pathname === "/dashboard/onboarding";
+  const isDashboardHome = request.nextUrl.pathname === "/dashboard";
 
   if (!user && isProtectedRoute) {
     const url = request.nextUrl.clone();
@@ -50,6 +52,22 @@ export async function updateSession(request: NextRequest) {
     const url = request.nextUrl.clone();
     url.pathname = "/dashboard";
     return NextResponse.redirect(url);
+  }
+
+  // Redirect new users (onboarding_completed = false) to onboarding
+  // Only redirect to onboarding from the dashboard home page, not from every route
+  if (user && isDashboardHome && !isOnboardingRoute) {
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("onboarding_completed")
+      .eq("id", user.id)
+      .single();
+
+    if (profile && profile.onboarding_completed === false) {
+      const url = request.nextUrl.clone();
+      url.pathname = "/dashboard/onboarding";
+      return NextResponse.redirect(url);
+    }
   }
 
   return supabaseResponse;

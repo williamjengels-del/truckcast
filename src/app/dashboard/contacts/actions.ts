@@ -9,6 +9,7 @@ export type ContactFormData = {
   phone?: string;
   organization?: string;
   notes?: string;
+  linked_event_names?: string[];
 };
 
 export async function createContact(formData: ContactFormData) {
@@ -26,6 +27,7 @@ export async function createContact(formData: ContactFormData) {
     phone: formData.phone || null,
     organization: formData.organization || null,
     notes: formData.notes || null,
+    linked_event_names: formData.linked_event_names ?? [],
   });
 
   if (error) throw new Error(error.message);

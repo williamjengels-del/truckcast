@@ -74,7 +74,7 @@ export function FeedbackDialog() {
         <MessageSquarePlus className="size-4" />
         Feedback
       </DialogTrigger>
-      <DialogContent>
+      <DialogContent className="w-[95vw] max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Send Feedback</DialogTitle>
           <DialogDescription>

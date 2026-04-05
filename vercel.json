@@ -1,0 +1,8 @@
+{
+  "crons": [
+    {
+      "path": "/api/pos/square/auto-sync",
+      "schedule": "0 14 * * *"
+    }
+  ]
+}

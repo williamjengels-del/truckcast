@@ -32,7 +32,8 @@ import {
   FileUp,
   CheckCircle2,
   AlertCircle,
-  X,
+  Star,
+  RefreshCw,
 } from "lucide-react";
 import {
   createContact,
@@ -170,13 +171,20 @@ function parseCSV(text: string): CsvImportRow[] {
 
 interface ContactsClientProps {
   initialContacts: Contact[];
+  isPremium: boolean;
+  availableEventNames: string[];
 }
 
-export function ContactsClient({ initialContacts }: ContactsClientProps) {
+export function ContactsClient({
+  initialContacts,
+  isPremium,
+  availableEventNames,
+}: ContactsClientProps) {
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState<Contact | null>(null);
   const [search, setSearch] = useState("");
   const [showImport, setShowImport] = useState(false);
+  const [recalculating, setRecalculating] = useState(false);
   const router = useRouter();
 
   const filtered = initialContacts.filter(
@@ -204,6 +212,13 @@ export function ContactsClient({ initialContacts }: ContactsClientProps) {
     router.refresh();
   }
 
+  async function handleRecalculateScores() {
+    setRecalculating(true);
+    await fetch("/api/organizer-scoring", { method: "POST" });
+    setRecalculating(false);
+    router.refresh();
+  }
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -214,6 +229,17 @@ export function ContactsClient({ initialContacts }: ContactsClientProps) {
           </p>
         </div>
         <div className="flex gap-2">
+          {isPremium && (
+            <Button
+              variant="outline"
+              className="gap-2"
+              onClick={handleRecalculateScores}
+              disabled={recalculating}
+            >
+              <RefreshCw className={`h-4 w-4 ${recalculating ? "animate-spin" : ""}`} />
+              {recalculating ? "Calculating..." : "Recalculate Scores"}
+            </Button>
+          )}
           <Button
             variant="outline"
             className="gap-2"
@@ -258,6 +284,7 @@ export function ContactsClient({ initialContacts }: ContactsClientProps) {
                   <TableHead>Organization</TableHead>
                   <TableHead>Email</TableHead>
                   <TableHead>Phone</TableHead>
+                  {isPremium && <TableHead>Quality Score</TableHead>}
                   <TableHead>Notes</TableHead>
                   <TableHead></TableHead>
                 </TableRow>
@@ -292,6 +319,11 @@ export function ContactsClient({ initialContacts }: ContactsClientProps) {
                         "—"
                       )}
                     </TableCell>
+                    {isPremium && (
+                      <TableCell>
+                        <QualityScoreBadge score={c.quality_score} linkedCount={c.linked_event_names?.length ?? 0} />
+                      </TableCell>
+                    )}
                     <TableCell className="text-sm text-muted-foreground max-w-48 truncate">
                       {c.notes ?? "—"}
                     </TableCell>
@@ -347,6 +379,8 @@ export function ContactsClient({ initialContacts }: ContactsClientProps) {
         onSubmit={editing ? handleUpdate : handleCreate}
         initialData={editing}
         title={editing ? "Edit Contact" : "Add Contact"}
+        isPremium={isPremium}
+        availableEventNames={availableEventNames}
       />
     </div>
   );
@@ -658,20 +692,65 @@ function CsvImportDialog({
   );
 }
 
+function QualityScoreBadge({
+  score,
+  linkedCount,
+}: {
+  score: number | null;
+  linkedCount: number;
+}) {
+  if (linkedCount === 0) {
+    return <span className="text-xs text-muted-foreground">No events linked</span>;
+  }
+  if (score === null) {
+    return <span className="text-xs text-muted-foreground">Not scored yet</span>;
+  }
+  const color =
+    score >= 7
+      ? "text-green-700 dark:text-green-400"
+      : score >= 4
+        ? "text-amber-700 dark:text-amber-400"
+        : "text-red-700 dark:text-red-400";
+  return (
+    <span className={`flex items-center gap-1 font-medium text-sm ${color}`}>
+      <Star className="h-3.5 w-3.5" />
+      {score.toFixed(1)}
+    </span>
+  );
+}
+
 function ContactFormDialog({
   open,
   onOpenChange,
   onSubmit,
   initialData,
   title,
+  isPremium,
+  availableEventNames,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onSubmit: (data: ContactFormData) => Promise<void>;
   initialData?: Contact | null;
   title: string;
+  isPremium: boolean;
+  availableEventNames: string[];
 }) {
   const [loading, setLoading] = useState(false);
+  const [linkedEvents, setLinkedEvents] = useState<string[]>(
+    initialData?.linked_event_names ?? []
+  );
+
+  // Reset linked events when dialog opens with different contact
+  useState(() => {
+    setLinkedEvents(initialData?.linked_event_names ?? []);
+  });
+
+  function toggleEvent(name: string) {
+    setLinkedEvents((prev) =>
+      prev.includes(name) ? prev.filter((n) => n !== name) : [...prev, name]
+    );
+  }
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -683,13 +762,14 @@ function ContactFormDialog({
       phone: (form.get("phone") as string) || undefined,
       organization: (form.get("organization") as string) || undefined,
       notes: (form.get("notes") as string) || undefined,
+      linked_event_names: linkedEvents,
     });
     setLoading(false);
   }
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent>
+      <DialogContent className="max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>{title}</DialogTitle>
         </DialogHeader>
@@ -739,6 +819,34 @@ function ContactFormDialog({
               rows={3}
             />
           </div>
+
+          {isPremium && availableEventNames.length > 0 && (
+            <div className="space-y-2">
+              <Label>
+                Linked Events{" "}
+                <span className="text-xs text-muted-foreground font-normal">
+                  (used for quality scoring)
+                </span>
+              </Label>
+              <div className="border rounded-md max-h-40 overflow-y-auto p-2 space-y-1">
+                {availableEventNames.map((name) => (
+                  <label
+                    key={name}
+                    className="flex items-center gap-2 text-sm cursor-pointer hover:bg-muted px-1 py-0.5 rounded"
+                  >
+                    <input
+                      type="checkbox"
+                      checked={linkedEvents.includes(name)}
+                      onChange={() => toggleEvent(name)}
+                      className="rounded"
+                    />
+                    {name}
+                  </label>
+                ))}
+              </div>
+            </div>
+          )}
+
           <div className="flex justify-end gap-3">
             <Button
               type="button"

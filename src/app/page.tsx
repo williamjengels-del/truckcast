@@ -1,4 +1,6 @@
+import type { Metadata } from "next";
 import Link from "next/link";
+import { createClient as createServiceClient } from "@supabase/supabase-js";
 import { Button } from "@/components/ui/button";
 import {
   TruckIcon,
@@ -8,9 +10,67 @@ import {
   DollarSign,
   ArrowRight,
   CheckCircle,
+  Star,
+  ClipboardList,
+  LineChart,
 } from "lucide-react";
 
-export default function LandingPage() {
+export const metadata: Metadata = {
+  title: "TruckCast — The Home Base for Your Food Truck Calendar",
+  description:
+    "Track every event, know your schedule at a glance — and the only tool that tells you which bookings are actually worth taking. Built for food truck operators.",
+};
+
+const FALLBACK_TESTIMONIALS = [
+  {
+    id: "fallback-1",
+    content:
+      "I used to guess whether to book an event based on gut feel. Now I pull up TruckCast and I know within a few hundred dollars what I'll make. That's a game changer when you're deciding between two events on the same day.",
+    author_name: "Julian Engels",
+    author_title: "Owner, Wok-O Taco · St. Louis, MO",
+    rating: 5,
+  },
+  {
+    id: "fallback-2",
+    content:
+      "The weather adjustment feature alone is worth it. I had no idea how badly heat and rain were tanking my numbers — TruckCast showed me exactly which events to avoid in July.",
+    author_name: "Beta Tester",
+    author_title: "Food truck operator · Midwest",
+    rating: 5,
+  },
+  {
+    id: "fallback-3",
+    content:
+      "Finally something built for food trucks, not restaurant chains. The fee calculator saved me from a bad contract last month — the commission-with-minimum math would have eaten my profit.",
+    author_name: "Beta Tester",
+    author_title: "Food truck operator · Midwest",
+    rating: 5,
+  },
+];
+
+async function getTestimonials() {
+  try {
+    const serviceClient = createServiceClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.SUPABASE_SERVICE_ROLE_KEY!
+    );
+    const { data } = await serviceClient
+      .from("testimonials")
+      .select("id, author_name, author_title, content, rating")
+      .eq("is_active", true)
+      .order("display_order", { ascending: true });
+
+    if (data && data.length > 0) {
+      return data as typeof FALLBACK_TESTIMONIALS;
+    }
+  } catch {
+    // Fall through to hardcoded
+  }
+  return FALLBACK_TESTIMONIALS;
+}
+
+export default async function LandingPage() {
+  const testimonials = await getTestimonials();
   return (
     <div className="flex flex-col min-h-screen">
       {/* Nav */}
@@ -35,14 +95,13 @@ export default function LandingPage() {
       <section className="flex-1">
         <div className="container mx-auto px-4 py-20 text-center">
           <h1 className="text-4xl font-bold tracking-tight sm:text-5xl lg:text-6xl">
-            Know what every event is worth
+            The home base for your
             <br />
-            <span className="text-primary">before you book it.</span>
+            <span className="text-primary">food truck calendar.</span>
           </h1>
           <p className="mx-auto mt-6 max-w-2xl text-lg text-muted-foreground">
-            TruckCast uses your historical sales data, weather intelligence, and
-            event analytics to forecast revenue for every event on your calendar.
-            Stop guessing. Start optimizing.
+            Track every event, know your schedule at a glance — and the only
+            tool that tells you which bookings are actually worth taking.
           </p>
           <div className="mt-10 flex items-center justify-center gap-4">
             <Link href="/signup">
@@ -62,6 +121,12 @@ export default function LandingPage() {
             <div className="grid gap-8 md:grid-cols-2 lg:grid-cols-4">
               {[
                 {
+                  icon: CalendarDays,
+                  title: "Event Scheduling & Tracking",
+                  description:
+                    "Log every event with sales, fees, and notes. See your full calendar and track which events are worth rebooking.",
+                },
+                {
                   icon: BarChart3,
                   title: "Event Forecasting",
                   description:
@@ -72,12 +137,6 @@ export default function LandingPage() {
                   title: "Weather Intelligence",
                   description:
                     "Automatic weather-adjusted forecasts so you know the real expected revenue.",
-                },
-                {
-                  icon: CalendarDays,
-                  title: "Event Tracking",
-                  description:
-                    "Log every event with sales, fees, and notes. See which events are worth rebooking.",
                 },
                 {
                   icon: DollarSign,
@@ -103,6 +162,103 @@ export default function LandingPage() {
           </div>
         </div>
 
+        {/* Social Proof — validated numbers */}
+        <div className="container mx-auto px-4 py-16">
+          <div className="grid gap-6 md:grid-cols-3 max-w-3xl mx-auto text-center">
+            {[
+              { stat: "351+", label: "Events analyzed to build the model" },
+              { stat: "16%", label: "Aggregate forecast error in best year" },
+              { stat: "59%", label: "MAPE on high-confidence events" },
+            ].map((s) => (
+              <div key={s.label} className="space-y-1">
+                <p className="text-4xl font-bold text-primary">{s.stat}</p>
+                <p className="text-sm text-muted-foreground">{s.label}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Testimonials */}
+        <div className="border-t bg-muted/30">
+          <div className="container mx-auto px-4 py-20">
+            <h2 className="text-center text-3xl font-bold mb-4">
+              What food truckers are saying
+            </h2>
+            <p className="text-center text-muted-foreground mb-12">
+              Built by a food truck operator. Validated by real event data.
+            </p>
+            <div className="grid gap-6 md:grid-cols-3 max-w-5xl mx-auto">
+              {testimonials.map((t) => (
+                <div
+                  key={t.id}
+                  className="rounded-lg border bg-card p-6 flex flex-col gap-4"
+                >
+                  <div className="flex gap-0.5">
+                    {Array.from({ length: t.rating }).map((_, j) => (
+                      <Star key={j} className="h-4 w-4 fill-primary text-primary" />
+                    ))}
+                  </div>
+                  <p className="text-sm text-muted-foreground flex-1 italic">
+                    &ldquo;{t.content}&rdquo;
+                  </p>
+                  <div>
+                    <p className="font-semibold text-sm">{t.author_name}</p>
+                    {t.author_title && (
+                      <p className="text-xs text-muted-foreground">{t.author_title}</p>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        {/* How it works */}
+        <div className="container mx-auto px-4 py-20">
+          <h2 className="text-center text-3xl font-bold mb-4">How it works</h2>
+          <p className="text-center text-muted-foreground mb-12">
+            Up and running in minutes. Getting smarter with every event.
+          </p>
+          <div className="grid gap-8 md:grid-cols-3 max-w-4xl mx-auto">
+            {[
+              {
+                number: "1",
+                icon: CalendarDays,
+                title: "Add your events",
+                description:
+                  "Log upcoming and past events with the event name, type, location, and any organizer fees. Import from CSV or connect your POS.",
+              },
+              {
+                number: "2",
+                icon: ClipboardList,
+                title: "Log your sales",
+                description:
+                  "After each event, record your net sales. TruckCast automatically calculates performance, trends, and fee impact.",
+              },
+              {
+                number: "3",
+                icon: LineChart,
+                title: "Get smarter forecasts",
+                description:
+                  "TruckCast learns from your history to predict future revenue — adjusted for weather, day of week, and event type.",
+              },
+            ].map((step) => (
+              <div key={step.number} className="flex flex-col items-center text-center">
+                <div className="relative mb-4">
+                  <div className="w-14 h-14 rounded-full bg-primary/10 flex items-center justify-center">
+                    <step.icon className="h-7 w-7 text-primary" />
+                  </div>
+                  <span className="absolute -top-1 -right-1 w-5 h-5 rounded-full bg-primary text-primary-foreground text-xs font-bold flex items-center justify-center">
+                    {step.number}
+                  </span>
+                </div>
+                <h3 className="font-semibold text-lg mb-2">{step.title}</h3>
+                <p className="text-sm text-muted-foreground">{step.description}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+
         {/* Pricing Preview */}
         <div className="container mx-auto px-4 py-20">
           <h2 className="text-center text-3xl font-bold mb-4">
@@ -115,33 +271,40 @@ export default function LandingPage() {
             {[
               {
                 name: "Starter",
-                price: "$29",
+                price: "$19",
+                annualNote: "$182/yr (save $46)",
                 features: [
-                  "Manual event entry",
-                  "Fee calculator",
-                  "Performance tracking",
-                  "Basic dashboard",
+                  "Event Scheduling & Calendar",
+                  "Fee Calculator",
+                  "Revenue Tracking",
+                  "Public Schedule",
+                  "Team Share Link",
                 ],
               },
               {
                 name: "Pro",
-                price: "$79",
+                price: "$39",
+                annualNote: "$374/yr (save $94)",
                 popular: true,
                 features: [
                   "Everything in Starter",
-                  "POS integration (Square, Toast)",
-                  "Weather-adjusted forecasts",
-                  "Public schedule page",
+                  "Weather-Adjusted Forecasts",
+                  "CSV Import",
+                  "POS Integration",
+                  "Event Performance Analytics",
                 ],
               },
               {
                 name: "Premium",
-                price: "$149",
+                price: "$69",
+                annualNote: "$662/yr (save $166)",
                 features: [
                   "Everything in Pro",
-                  "Organizer quality scoring",
-                  "Risk-adjusted profitability",
-                  "Monthly reports",
+                  "Advanced Analytics",
+                  "Monthly Reports",
+                  "Organizer Scoring",
+                  "Follow My Truck",
+                  "Booking Widget",
                 ],
               },
             ].map((tier) => (
@@ -163,6 +326,9 @@ export default function LandingPage() {
                   <span className="text-3xl font-bold">{tier.price}</span>
                   <span className="text-muted-foreground">/mo</span>
                 </div>
+                {"annualNote" in tier && (
+                  <p className="text-xs text-muted-foreground mt-0.5">{tier.annualNote}</p>
+                )}
                 <ul className="mt-6 space-y-3">
                   {tier.features.map((f) => (
                     <li key={f} className="flex items-start gap-2 text-sm">
@@ -189,9 +355,13 @@ export default function LandingPage() {
 
       {/* Footer */}
       <footer className="border-t py-8">
-        <div className="container mx-auto px-4 text-center text-sm text-muted-foreground">
-          &copy; {new Date().getFullYear()} TruckCast. Built for food truck
-          operators, by a food truck operator.
+        <div className="container mx-auto px-4 text-center text-sm text-muted-foreground space-y-2">
+          <div className="flex items-center justify-center gap-6">
+            <Link href="/help" className="hover:text-foreground transition-colors">Help Center</Link>
+            <Link href="/signup" className="hover:text-foreground transition-colors">Get Started</Link>
+            <a href="mailto:support@truckcast.app" className="hover:text-foreground transition-colors">Contact</a>
+          </div>
+          <p>&copy; {new Date().getFullYear()} TruckCast. Built for food truck operators, by a food truck operator.</p>
         </div>
       </footer>
     </div>

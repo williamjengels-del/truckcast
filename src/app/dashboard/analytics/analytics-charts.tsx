@@ -86,6 +86,19 @@ export function AnalyticsCharts({
     (d) => d.revenue > 0 || (d.compareRevenue ?? 0) > 0
   );
 
+  // For year-over-year comparison charts, compute a shared global max so both
+  // periods use the same Y-axis scale — otherwise a low Year 1 would look as
+  // tall as a high Year 2, which is misleading.
+  const trendGlobalMax = compareEnabled
+    ? Math.max(...trendData.map((d) => Math.max(d.revenue, d.compareRevenue ?? 0)), 0)
+    : 0;
+  const dowGlobalMax = compareEnabled
+    ? Math.max(...dowData.map((d) => Math.max(d.revenue, d.compareRevenue ?? 0)), 0)
+    : 0;
+  const typeGlobalMax = compareEnabled
+    ? Math.max(...typeData.map((d) => Math.max(d.revenue, d.compareRevenue ?? 0)), 0)
+    : 0;
+
   return (
     <div className="grid gap-4 lg:grid-cols-2">
       {/* Revenue trend - full width */}
@@ -110,7 +123,7 @@ export function AnalyticsCharts({
                 <BarChart data={trendData}>
                   <CartesianGrid strokeDasharray="3 3" opacity={0.3} />
                   <XAxis dataKey="label" fontSize={12} />
-                  <YAxis fontSize={12} tickFormatter={formatDollar} />
+                  <YAxis fontSize={12} tickFormatter={formatDollar} domain={[0, trendGlobalMax > 0 ? trendGlobalMax : "auto"]} />
                   <Tooltip
                     formatter={(value) => [
                       tooltipDollar(Number(value)),
@@ -176,7 +189,7 @@ export function AnalyticsCharts({
             >
               <BarChart data={dowData}>
                 <XAxis dataKey="day" fontSize={12} />
-                <YAxis fontSize={12} tickFormatter={formatDollar} />
+                <YAxis fontSize={12} tickFormatter={formatDollar} domain={compareEnabled && dowGlobalMax > 0 ? [0, dowGlobalMax] : undefined} />
                 <Tooltip
                   formatter={(value) => [
                     tooltipDollar(Number(value)),
@@ -222,7 +235,7 @@ export function AnalyticsCharts({
               minHeight={0}
             >
               <BarChart data={typeData} layout="vertical">
-                <XAxis type="number" fontSize={12} tickFormatter={formatDollar} />
+                <XAxis type="number" fontSize={12} tickFormatter={formatDollar} domain={compareEnabled && typeGlobalMax > 0 ? [0, typeGlobalMax] : undefined} />
                 <YAxis
                   type="category"
                   dataKey="name"

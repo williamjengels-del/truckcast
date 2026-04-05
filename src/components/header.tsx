@@ -2,6 +2,7 @@ import { createClient } from "@/lib/supabase/server";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import Link from "next/link";
+import { MobileNav } from "@/components/mobile-nav";
 
 export async function Header() {
   const supabase = await createClient();
@@ -34,8 +35,8 @@ export async function Header() {
   };
 
   return (
-    <header className="flex h-14 items-center justify-between border-b bg-card px-6">
-      <div />
+    <header className="flex h-14 items-center justify-between border-b bg-card px-4 lg:px-6">
+      <MobileNav />
       <Link
         href="/dashboard/settings"
         className="flex items-center gap-3 rounded-md px-2 py-1 transition-colors hover:bg-muted"

@@ -58,6 +58,7 @@ export default async function PublicSchedulePage({ params }: Props) {
     )
     .eq("user_id", userId)
     .eq("booked", true)
+    .neq("is_private", true)
     .gte("event_date", today)
     .order("event_date", { ascending: true })
     .limit(50);

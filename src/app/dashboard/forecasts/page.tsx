@@ -1,3 +1,6 @@
+import type { Metadata } from "next";
+export const metadata: Metadata = { title: "Forecasts" };
+
 import { createClient } from "@/lib/supabase/server";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -13,6 +16,7 @@ import { CloudSun } from "lucide-react";
 import { calculateForecast, calibrateCoefficients } from "@/lib/forecast-engine";
 import { TIER_COLORS, WEATHER_COEFFICIENTS } from "@/lib/constants";
 import type { Event } from "@/lib/database.types";
+import { ForecastExplainer } from "./forecast-explainer";
 
 function formatCurrency(val: number | null): string {
   if (val === null || val === undefined) return "—";
@@ -83,6 +87,8 @@ export default async function ForecastsPage() {
           <div className="text-xl font-bold">{formatCurrency(totalForecast)}</div>
         </Card>
       </div>
+
+      <ForecastExplainer />
 
       <Card>
         <CardHeader>

@@ -31,6 +31,7 @@ import {
   ArrowLeft,
   Columns,
   Eye,
+  Download,
 } from "lucide-react";
 
 // ═══════════════════════════════════════════════════════════════════════
@@ -50,7 +51,13 @@ type FieldKey =
   | "fee_type"
   | "fee_rate"
   | "forecast_sales"
-  | "notes";
+  | "notes"
+  | "booked"
+  | "event_tier"
+  | "anomaly_flag"
+  | "weather_type"
+  | "expected_attendance"
+  | "sales_minimum";
 
 interface ParsedRow {
   event_name: string;
@@ -66,6 +73,12 @@ interface ParsedRow {
   fee_rate?: number;
   forecast_sales?: number;
   notes?: string;
+  booked?: boolean;
+  event_tier?: string;
+  anomaly_flag?: string;
+  weather_type?: string;
+  expected_attendance?: number;
+  sales_minimum?: number;
   valid: boolean;
   error?: string;
   multi_day_label?: string;
@@ -80,7 +93,17 @@ interface ColumnMapping {
   assignedField: FieldKey | "skip";
 }
 
-type Step = "upload" | "map" | "preview";
+type Step = "upload" | "map" | "preview" | "duplicates";
+
+type DuplicateAction = "skip" | "replace" | "keep_both";
+
+interface DuplicateMatch {
+  event_name: string;
+  event_date: string;
+  existing_event_id: string;
+  existing_net_sales: number | null;
+  action: DuplicateAction;
+}
 
 // ═══════════════════════════════════════════════════════════════════════
 // Field metadata for the mapping UI
@@ -99,7 +122,13 @@ const FIELD_OPTIONS: { value: FieldKey | "skip"; label: string; description: str
   { value: "event_type", label: "Event Type", description: "Festival, Corporate, etc." },
   { value: "fee_type", label: "Fee Type", description: "None, Flat Fee, Percentage, etc." },
   { value: "fee_rate", label: "Fee Rate", description: "Fee amount or percentage" },
+  { value: "sales_minimum", label: "Sales Minimum", description: "Minimum sales guarantee" },
   { value: "forecast_sales", label: "Forecast Sales", description: "Predicted / forecasted revenue" },
+  { value: "booked", label: "Booked", description: "Yes/No — is this event confirmed?" },
+  { value: "event_tier", label: "Event Tier", description: "A, B, C, or D" },
+  { value: "anomaly_flag", label: "Anomaly Flag", description: "normal, disrupted, or boosted" },
+  { value: "weather_type", label: "Weather", description: "Weather conditions at the event" },
+  { value: "expected_attendance", label: "Expected Attendance", description: "Estimated crowd size" },
   { value: "notes", label: "Notes", description: "Additional notes or comments" },
 ];
 
@@ -155,6 +184,12 @@ const COLUMN_ALIASES: Record<FieldKey, string[]> = {
     "notes", "note", "comments", "comment", "memo", "description",
     "details", "info",
   ],
+  booked: ["booked", "confirmed", "status"],
+  event_tier: ["tier", "event tier", "event_tier", "grade", "rating"],
+  anomaly_flag: ["anomaly", "anomaly_flag", "flag", "disrupted", "boosted"],
+  weather_type: ["weather", "weather_type", "conditions", "weather conditions"],
+  expected_attendance: ["attendance", "expected attendance", "expected_attendance", "crowd size", "expected crowd"],
+  sales_minimum: ["sales minimum", "sales_minimum", "minimum", "min guarantee", "guarantee"],
 };
 
 function normalizeHeader(h: string): string {
@@ -440,6 +475,40 @@ function parseWithMapping(
     const location = getValue("location", values).trim() || undefined;
     const notes = getValue("notes", values).trim() || undefined;
 
+    // ── Booked ──
+    const rawBooked = getValue("booked", values).trim().toLowerCase();
+    let booked: boolean | undefined = undefined;
+    if (rawBooked) {
+      if (["yes", "true", "1", "confirmed"].includes(rawBooked)) booked = true;
+      else if (["no", "false", "0", "tentative", "unconfirmed"].includes(rawBooked)) booked = false;
+    }
+
+    // ── Event tier ──
+    const rawTier = getValue("event_tier", values).trim().toUpperCase();
+    const eventTier = ["A", "B", "C", "D"].includes(rawTier) ? rawTier : undefined;
+
+    // ── Anomaly flag ──
+    const rawAnomaly = getValue("anomaly_flag", values).trim().toLowerCase();
+    let anomalyFlag: string | undefined = undefined;
+    if (rawAnomaly) {
+      if (["disrupted", "disruption", "bad"].includes(rawAnomaly)) anomalyFlag = "disrupted";
+      else if (["boosted", "exceptional", "great"].includes(rawAnomaly)) anomalyFlag = "boosted";
+      else if (rawAnomaly) anomalyFlag = "normal";
+    }
+
+    // ── Weather type ──
+    const weatherType = getValue("weather_type", values).trim() || undefined;
+
+    // ── Expected attendance ──
+    const rawAttendance = getValue("expected_attendance", values).trim();
+    const expectedAttendance = rawAttendance ? parseInt(rawAttendance.replace(/[,]/g, ""), 10) : undefined;
+    const validAttendance = expectedAttendance !== undefined && !isNaN(expectedAttendance) ? expectedAttendance : undefined;
+
+    // ── Sales minimum ──
+    const rawSalesMin = getValue("sales_minimum", values).trim();
+    const salesMinimum = rawSalesMin ? parseFloat(rawSalesMin.replace(/[$,]/g, "")) : undefined;
+    const validSalesMinimum = salesMinimum !== undefined && !isNaN(salesMinimum) ? salesMinimum : undefined;
+
     // ── Multi-day handling ──
     const isMultiDay =
       endDate && eventDate && endDate !== eventDate && daysBetween(eventDate, endDate) > 0;
@@ -463,6 +532,12 @@ function parseWithMapping(
           fee_rate: validFeeRate,
           forecast_sales: isLast ? validForecast : undefined,
           notes,
+          booked,
+          event_tier: eventTier,
+          anomaly_flag: anomalyFlag,
+          weather_type: weatherType,
+          expected_attendance: validAttendance,
+          sales_minimum: validSalesMinimum,
           valid: true,
           multi_day_label: `Day ${d + 1} of ${numDays + 1}`,
         });
@@ -481,6 +556,12 @@ function parseWithMapping(
         fee_rate: validFeeRate,
         forecast_sales: validForecast,
         notes,
+        booked,
+        event_tier: eventTier,
+        anomaly_flag: anomalyFlag,
+        weather_type: weatherType,
+        expected_attendance: validAttendance,
+        sales_minimum: validSalesMinimum,
         valid: true,
       });
     }
@@ -505,6 +586,8 @@ export default function ImportPage() {
   const [importCount, setImportCount] = useState(0);
   const [importError, setImportError] = useState<string | null>(null);
   const [importProgress, setImportProgress] = useState<string | null>(null);
+  const [duplicates, setDuplicates] = useState<DuplicateMatch[]>([]);
+  const [checkingDuplicates, setCheckingDuplicates] = useState(false);
 
   const router = useRouter();
   const supabase = createClient();
@@ -586,9 +669,67 @@ export default function ImportPage() {
   const invalidCount = parsedRows.filter((r) => !r.valid).length;
   const multiDayCount = parsedRows.filter((r) => r.multi_day_label).length;
 
+  // ── Duplicate check ──
+
+  async function handleCheckDuplicates() {
+    const validRows = parsedRows.filter((r) => r.valid);
+    if (validRows.length === 0) return;
+
+    setCheckingDuplicates(true);
+    try {
+      const res = await fetch("/api/events/check-duplicates", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          rows: validRows.map((r) => ({
+            event_name: r.event_name,
+            event_date: r.event_date,
+          })),
+        }),
+      });
+      const data = await res.json();
+      const found: DuplicateMatch[] = (data.duplicates ?? []).map(
+        (d: Omit<DuplicateMatch, "action">) => ({ ...d, action: "skip" as DuplicateAction })
+      );
+      if (found.length > 0) {
+        setDuplicates(found);
+        setStep("duplicates");
+      } else {
+        setDuplicates([]);
+        // No duplicates — go straight to import
+        await runImport([]);
+      }
+    } catch {
+      setImportError("Failed to check for duplicates. Proceeding with import.");
+      await runImport([]);
+    } finally {
+      setCheckingDuplicates(false);
+    }
+  }
+
+  function updateDuplicateAction(index: number, action: DuplicateAction) {
+    setDuplicates((prev) =>
+      prev.map((d, i) => (i === index ? { ...d, action } : d))
+    );
+  }
+
+  function setBulkAction(action: DuplicateAction) {
+    setDuplicates((prev) => prev.map((d) => ({ ...d, action })));
+  }
+
   // ── Import ──
 
   async function handleImport() {
+    await runImport(duplicates);
+  }
+
+  async function runImport(resolvedDuplicates: DuplicateMatch[]) {
+    // Build a map of duplicate actions keyed by event_name|event_date
+    const dupActionMap = new Map<string, DuplicateAction>();
+    for (const d of resolvedDuplicates) {
+      dupActionMap.set(`${d.event_name}|${d.event_date}`, d.action);
+    }
+
     const validRows = parsedRows.filter((r) => r.valid);
     if (validRows.length === 0) return;
 
@@ -603,7 +744,23 @@ export default function ImportPage() {
       return;
     }
 
-    const insertData = validRows.map((r) => ({
+    // Filter rows based on duplicate actions
+    const rowsToInsert = validRows.filter((r) => {
+      const action = dupActionMap.get(`${r.event_name}|${r.event_date}`);
+      if (!action) return true; // not a duplicate
+      return action !== "skip"; // keep if replace or keep_both
+    });
+
+    // For "replace" action, delete existing events first
+    const replaceIds = resolvedDuplicates
+      .filter((d) => d.action === "replace")
+      .map((d) => d.existing_event_id);
+
+    if (replaceIds.length > 0) {
+      await supabase.from("events").delete().in("id", replaceIds);
+    }
+
+    const insertData = rowsToInsert.map((r) => ({
       user_id: user.id,
       event_name: r.event_name,
       event_date: r.event_date,
@@ -616,9 +773,14 @@ export default function ImportPage() {
       location: r.location ?? null,
       fee_type: matchFeeType(r.fee_type ?? ""),
       fee_rate: r.fee_rate ?? 0,
+      sales_minimum: r.sales_minimum ?? 0,
       forecast_sales: r.forecast_sales ?? null,
       notes: r.notes ?? null,
-      booked: true,
+      booked: r.booked !== undefined ? r.booked : true,
+      event_tier: r.event_tier ?? null,
+      anomaly_flag: r.anomaly_flag ?? "normal",
+      event_weather: r.weather_type ?? null,
+      expected_attendance: r.expected_attendance ?? null,
       pos_source: "manual" as const,
     }));
 
@@ -661,6 +823,85 @@ export default function ImportPage() {
     setImporting(false);
   }
 
+  // ── CSV Template Download ──
+
+  function handleDownloadTemplate() {
+    const headers = [
+      "event_name",
+      "event_date",
+      "start_time",
+      "end_time",
+      "city",
+      "location",
+      "net_sales",
+      "event_type",
+      "event_tier",
+      "booked",
+      "fee_type",
+      "fee_rate",
+      "sales_minimum",
+      "anomaly_flag",
+      "weather",
+      "expected_attendance",
+      "notes",
+    ];
+    const examples = [
+      [
+        "Taste of St. Louis",
+        "2024-09-14",
+        "11:00",
+        "20:00",
+        "St. Louis",
+        "Kiener Plaza",
+        "3200",
+        "Festival",
+        "A",
+        "yes",
+        "percentage",
+        "10",
+        "",
+        "normal",
+        "Clear",
+        "5000",
+        "Great crowd this year",
+      ],
+      [
+        "Downtown Farmers Market",
+        "2024-08-03",
+        "08:00",
+        "13:00",
+        "St. Louis",
+        "Soulard Market",
+        "1450",
+        "Community/Neighborhood",
+        "B",
+        "yes",
+        "flat_fee",
+        "75",
+        "",
+        "normal",
+        "Overcast",
+        "800",
+        "",
+      ],
+    ];
+
+    const csvContent = [
+      headers.join(","),
+      ...examples.map((row) =>
+        row.map((v) => (v.includes(",") ? `"${v}"` : v)).join(",")
+      ),
+    ].join("\n");
+
+    const blob = new Blob([csvContent], { type: "text/csv" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "truckcast-import-template.csv";
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
   // ── Reset ──
 
   function handleReset() {
@@ -672,6 +913,7 @@ export default function ImportPage() {
     setImported(false);
     setImportError(null);
     setImportProgress(null);
+    setDuplicates([]);
   }
 
   // ═══════════════════════════════════════════════════════════════════
@@ -680,11 +922,17 @@ export default function ImportPage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold">Import Events</h1>
-        <p className="text-muted-foreground">
-          Upload a CSV file to import historical events
-        </p>
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold">Import Events</h1>
+          <p className="text-muted-foreground">
+            Upload a CSV file to import historical events
+          </p>
+        </div>
+        <Button variant="outline" size="sm" onClick={handleDownloadTemplate} className="shrink-0 gap-2">
+          <Download className="h-4 w-4" />
+          Download CSV Template
+        </Button>
       </div>
 
       {/* Step indicator */}
@@ -693,6 +941,7 @@ export default function ImportPage() {
           { key: "upload", label: "1. Upload", icon: Upload },
           { key: "map", label: "2. Map Columns", icon: Columns },
           { key: "preview", label: "3. Preview & Import", icon: Eye },
+          { key: "duplicates", label: "4. Duplicates", icon: AlertCircle },
         ].map(({ key, label, icon: Icon }, i) => (
           <div key={key} className="flex items-center gap-2">
             {i > 0 && <ArrowRight className="h-4 w-4 text-muted-foreground" />}
@@ -700,7 +949,7 @@ export default function ImportPage() {
               className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium ${
                 step === key
                   ? "bg-primary text-primary-foreground"
-                  : (key === "upload" || (key === "map" && step === "preview"))
+                  : (key === "upload" || (key === "map" && (step === "preview" || step === "duplicates")) || (key === "preview" && step === "duplicates"))
                     ? "bg-muted text-muted-foreground"
                     : "bg-muted/50 text-muted-foreground/60"
               }`}
@@ -863,6 +1112,119 @@ export default function ImportPage() {
         </Card>
       )}
 
+      {/* ── Step 4: Duplicates ── */}
+      {step === "duplicates" && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <AlertCircle className="h-5 w-5 text-amber-500" />
+              Duplicate Detection
+            </CardTitle>
+            <p className="text-sm text-muted-foreground">
+              We found {duplicates.length} potential duplicate{duplicates.length !== 1 ? "s" : ""} (same event name + date already in your account).
+              Choose how to handle each one, then click Import.
+            </p>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {/* Bulk actions */}
+            <div className="flex items-center gap-2">
+              <span className="text-sm text-muted-foreground">Bulk action:</span>
+              <Button size="sm" variant="outline" onClick={() => setBulkAction("skip")}>
+                Skip All Duplicates
+              </Button>
+              <Button size="sm" variant="outline" onClick={() => setBulkAction("replace")}>
+                Replace All
+              </Button>
+              <Button size="sm" variant="outline" onClick={() => setBulkAction("keep_both")}>
+                Keep All
+              </Button>
+            </div>
+
+            <div className="border rounded-lg overflow-hidden">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Event Name</TableHead>
+                    <TableHead>Date</TableHead>
+                    <TableHead>Existing Sales</TableHead>
+                    <TableHead>Action</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {duplicates.map((dup, i) => (
+                    <TableRow key={i}>
+                      <TableCell className="font-medium">{dup.event_name}</TableCell>
+                      <TableCell>{dup.event_date}</TableCell>
+                      <TableCell>
+                        {dup.existing_net_sales !== null
+                          ? `$${dup.existing_net_sales.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+                          : "No sales recorded"}
+                      </TableCell>
+                      <TableCell>
+                        <Select
+                          value={dup.action}
+                          onValueChange={(val) =>
+                            updateDuplicateAction(i, val as DuplicateAction)
+                          }
+                        >
+                          <SelectTrigger className="w-36">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="skip">Skip</SelectItem>
+                            <SelectItem value="replace">Replace</SelectItem>
+                            <SelectItem value="keep_both">Keep Both</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+
+            {importError && (
+              <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-800">
+                <AlertCircle className="h-4 w-4 inline mr-2" />
+                {importError}
+              </div>
+            )}
+
+            {importProgress && (
+              <div className="flex items-center gap-3 text-sm text-muted-foreground">
+                <div className="h-4 w-4 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+                {importProgress}
+              </div>
+            )}
+
+            {imported ? (
+              <div className="flex items-center gap-3">
+                <CheckCircle className="h-5 w-5 text-green-600" />
+                <span className="text-green-700 font-medium">
+                  Successfully imported {importCount} events!
+                </span>
+                <Button variant="outline" onClick={() => router.push("/dashboard/events")}>
+                  View Events
+                </Button>
+                <Button variant="ghost" onClick={handleReset}>
+                  Import More
+                </Button>
+              </div>
+            ) : (
+              <div className="flex items-center gap-3">
+                <Button variant="outline" onClick={() => setStep("preview")}>
+                  <ArrowLeft className="h-4 w-4 mr-2" />
+                  Back
+                </Button>
+                <Button onClick={handleImport} disabled={importing}>
+                  {importing ? "Importing..." : `Import ${validCount} Events`}
+                </Button>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
       {/* ── Step 3: Preview & Import ── */}
       {step === "preview" && (
         <Card>
@@ -1017,12 +1379,13 @@ export default function ImportPage() {
                   Adjust Mapping
                 </Button>
                 <Button
-                  onClick={handleImport}
-                  disabled={importing || validCount === 0}
+                  onClick={handleCheckDuplicates}
+                  disabled={checkingDuplicates || importing || validCount === 0}
                 >
-                  {importing
-                    ? "Importing..."
+                  {checkingDuplicates
+                    ? "Checking..."
                     : `Import ${validCount} Events`}
+                  <ArrowRight className="h-4 w-4 ml-2" />
                 </Button>
               </div>
             )}
