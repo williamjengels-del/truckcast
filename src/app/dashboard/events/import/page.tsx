@@ -703,6 +703,15 @@ export default function ImportPage() {
 
   const validCount = parsedRows.filter((r) => r.valid).length;
   const invalidCount = parsedRows.filter((r) => !r.valid).length;
+
+  // Count of events that will actually be imported given current duplicate actions
+  const dupActionMap = new Map(duplicates.map((d) => [`${d.event_name}|${d.event_date}`, d.action]));
+  const importableCount = parsedRows.filter((r) => {
+    if (!r.valid) return false;
+    const action = dupActionMap.get(`${r.event_name}|${r.event_date}`);
+    if (!action) return true; // not a duplicate
+    return action !== "skip";
+  }).length;
   const multiDayCount = parsedRows.filter((r) => r.multi_day_label).length;
 
   // ── Duplicate check ──
@@ -1252,8 +1261,8 @@ export default function ImportPage() {
                   <ArrowLeft className="h-4 w-4 mr-2" />
                   Back
                 </Button>
-                <Button onClick={handleImport} disabled={importing}>
-                  {importing ? "Importing..." : `Import ${validCount} Events`}
+                <Button onClick={handleImport} disabled={importing || importableCount === 0}>
+                  {importing ? "Importing..." : `Import ${importableCount} Events`}
                 </Button>
               </div>
             )}
