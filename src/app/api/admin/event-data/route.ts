@@ -29,6 +29,8 @@ export async function GET(req: NextRequest) {
   const pageSize = 50;
   const filterSharing = searchParams.get("sharing");
   const search = searchParams.get("q") ?? "";
+  const businessSearch = searchParams.get("business") ?? "";
+  const filterEventType = searchParams.get("event_type") ?? "";
   const sortField = (searchParams.get("sort") ?? "business") as SortField;
   const sortDir = (searchParams.get("dir") ?? "asc") as SortDir;
 
@@ -41,6 +43,9 @@ export async function GET(req: NextRequest) {
     profileQuery = profileQuery.eq("data_sharing_enabled", true);
   } else if (filterSharing === "opted_out") {
     profileQuery = profileQuery.eq("data_sharing_enabled", false);
+  }
+  if (businessSearch) {
+    profileQuery = profileQuery.ilike("business_name", `%${businessSearch}%`);
   }
 
   const { data: profiles } = await profileQuery;
@@ -60,6 +65,9 @@ export async function GET(req: NextRequest) {
 
   if (search) {
     eventsQuery = eventsQuery.ilike("event_name", `%${search}%`);
+  }
+  if (filterEventType) {
+    eventsQuery = eventsQuery.eq("event_type", filterEventType);
   }
 
   const { data: events } = await eventsQuery;

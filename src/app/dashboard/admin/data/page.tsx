@@ -57,7 +57,10 @@ export default function AdminDataPage() {
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState("");
   const [searchInput, setSearchInput] = useState("");
+  const [businessSearch, setBusinessSearch] = useState("");
+  const [businessSearchInput, setBusinessSearchInput] = useState("");
   const [filterSharing, setFilterSharing] = useState<string>("all");
+  const [filterEventType, setFilterEventType] = useState<string>("all");
   const [sortField, setSortField] = useState<string>("business");
   const [sortDir, setSortDir] = useState<string>("asc");
   const pageSize = 50;
@@ -88,6 +91,8 @@ export default function AdminDataPage() {
       dir: sortDir,
     });
     if (search) params.set("q", search);
+    if (businessSearch) params.set("business", businessSearch);
+    if (filterEventType !== "all") params.set("event_type", filterEventType);
 
     const res = await fetch(`/api/admin/event-data?${params}`);
     if (res.ok) {
@@ -97,7 +102,7 @@ export default function AdminDataPage() {
       setTotal(data.total ?? 0);
     }
     setLoading(false);
-  }, [page, search, filterSharing, sortField, sortDir]);
+  }, [page, search, businessSearch, filterSharing, filterEventType, sortField, sortDir]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -108,8 +113,21 @@ export default function AdminDataPage() {
   function handleSearch(e: React.FormEvent) {
     e.preventDefault();
     setSearch(searchInput);
+    setBusinessSearch(businessSearchInput);
     setPage(1);
   }
+
+  function handleClearFilters() {
+    setSearch("");
+    setSearchInput("");
+    setBusinessSearch("");
+    setBusinessSearchInput("");
+    setFilterSharing("all");
+    setFilterEventType("all");
+    setPage(1);
+  }
+
+  const hasActiveFilters = search || businessSearch || filterSharing !== "all" || filterEventType !== "all";
 
   return (
     <div className="space-y-6">
@@ -178,27 +196,66 @@ export default function AdminDataPage() {
       </div>
 
       {/* Filters */}
-      <div className="flex flex-wrap gap-3 items-center">
-        <form onSubmit={handleSearch} className="flex gap-2">
+      <form onSubmit={handleSearch} className="flex flex-wrap gap-3 items-end">
+        <div className="flex flex-col gap-1">
+          <label className="text-xs text-muted-foreground font-medium">Business name</label>
           <Input
-            placeholder="Search event name..."
+            placeholder="Search business..."
+            value={businessSearchInput}
+            onChange={(e) => setBusinessSearchInput(e.target.value)}
+            className="w-48"
+          />
+        </div>
+        <div className="flex flex-col gap-1">
+          <label className="text-xs text-muted-foreground font-medium">Event name</label>
+          <Input
+            placeholder="Search event..."
             value={searchInput}
             onChange={(e) => setSearchInput(e.target.value)}
-            className="w-56"
+            className="w-48"
           />
+        </div>
+        <div className="flex flex-col gap-1">
+          <label className="text-xs text-muted-foreground font-medium">Data sharing</label>
+          <Select value={filterSharing} onValueChange={(v) => { if (v) { setFilterSharing(v); setPage(1); } }}>
+            <SelectTrigger className="w-40">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All users</SelectItem>
+              <SelectItem value="opted_in">Sharing enabled</SelectItem>
+              <SelectItem value="opted_out">Opted out</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="flex flex-col gap-1">
+          <label className="text-xs text-muted-foreground font-medium">Event type</label>
+          <Select value={filterEventType} onValueChange={(v) => { if (v) { setFilterEventType(v); setPage(1); } }}>
+            <SelectTrigger className="w-44">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All types</SelectItem>
+              <SelectItem value="Festival">Festival</SelectItem>
+              <SelectItem value="Concert">Concert</SelectItem>
+              <SelectItem value="Corporate">Corporate</SelectItem>
+              <SelectItem value="Weekly Series">Weekly Series</SelectItem>
+              <SelectItem value="Private/Catering">Private/Catering</SelectItem>
+              <SelectItem value="Community/Neighborhood">Community</SelectItem>
+              <SelectItem value="Sports Event">Sports Event</SelectItem>
+              <SelectItem value="Fundraiser/Charity">Fundraiser</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="flex gap-2">
           <Button type="submit" size="sm" variant="outline">Search</Button>
-        </form>
-        <Select value={filterSharing} onValueChange={(v) => { if (v) { setFilterSharing(v); setPage(1); } }}>
-          <SelectTrigger className="w-40">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All users</SelectItem>
-            <SelectItem value="opted_in">Sharing enabled</SelectItem>
-            <SelectItem value="opted_out">Opted out</SelectItem>
-          </SelectContent>
-        </Select>
-      </div>
+          {hasActiveFilters && (
+            <Button type="button" size="sm" variant="ghost" onClick={handleClearFilters}>
+              Clear
+            </Button>
+          )}
+        </div>
+      </form>
 
       {/* Table */}
       <div className="rounded-lg border overflow-x-auto">
@@ -297,31 +354,38 @@ export default function AdminDataPage() {
       </div>
 
       {/* Pagination */}
-      {totalPages > 1 && (
-        <div className="flex items-center justify-between">
-          <p className="text-sm text-muted-foreground">
-            Page {page} of {totalPages} ({total.toLocaleString()} events)
-          </p>
-          <div className="flex gap-2">
+      <div className="flex items-center justify-between">
+        <p className="text-sm text-muted-foreground">
+          {total > 0
+            ? `Showing ${((page - 1) * pageSize) + 1}–${Math.min(page * pageSize, total)} of ${total.toLocaleString()} events`
+            : "No events found"}
+        </p>
+        {totalPages > 1 && (
+          <div className="flex items-center gap-2">
             <Button
               variant="outline"
               size="sm"
-              disabled={page <= 1}
+              disabled={page <= 1 || loading}
               onClick={() => setPage((p) => p - 1)}
             >
               <ChevronLeft className="h-4 w-4" />
+              Prev
             </Button>
+            <span className="text-sm text-muted-foreground px-1">
+              {page} / {totalPages}
+            </span>
             <Button
               variant="outline"
               size="sm"
-              disabled={page >= totalPages}
+              disabled={page >= totalPages || loading}
               onClick={() => setPage((p) => p + 1)}
             >
+              Next
               <ChevronRight className="h-4 w-4" />
             </Button>
           </div>
-        </div>
-      )}
+        )}
+      </div>
     </div>
   );
 }
