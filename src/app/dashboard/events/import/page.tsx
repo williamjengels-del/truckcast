@@ -387,6 +387,20 @@ function addDays(dateStr: string, days: number): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
 
+function normalizeWeather(raw: string): string {
+  const s = raw.trim().toLowerCase();
+  if (s === "rain before" || s === "rain before event") return "Rain Before Event";
+  if (s === "rain during" || s === "rain during event") return "Rain During Event";
+  if (s === "clear") return "Clear";
+  if (s === "overcast" || s === "cloudy") return "Overcast";
+  if (s === "hot") return "Hot";
+  if (s === "cold") return "Cold";
+  if (s === "storms" || s === "storm" || s === "thunderstorm") return "Storms";
+  if (s === "snow" || s === "snowy") return "Snow";
+  // Return as-is if unrecognized — DB will reject invalid enums but this covers Airtable variants
+  return raw.trim();
+}
+
 // ═══════════════════════════════════════════════════════════════════════
 // Parse rows using the user's column mapping
 // ═══════════════════════════════════════════════════════════════════════
@@ -518,7 +532,8 @@ function parseWithMapping(
     }
 
     // ── Weather type ──
-    const weatherType = getValue("weather_type", values).trim() || undefined;
+    const rawWeather = getValue("weather_type", values).trim();
+    const weatherType = rawWeather ? normalizeWeather(rawWeather) : undefined;
 
     // ── Expected attendance ──
     const rawAttendance = getValue("expected_attendance", values).trim();
