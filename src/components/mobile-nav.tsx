@@ -58,20 +58,28 @@ export function MobileNav() {
   const router = useRouter();
   const supabase = createClient();
   const [tier, setTier] = useState<SubscriptionTier | null>(null);
+  const [unloggedCount, setUnloggedCount] = useState(0);
 
   useEffect(() => {
-    async function loadTier() {
+    async function load() {
       const { data: { user } } = await supabase.auth.getUser();
-      if (user) {
-        const { data } = await supabase
-          .from("profiles")
-          .select("subscription_tier")
-          .eq("id", user.id)
-          .single();
-        if (data) setTier(data.subscription_tier);
-      }
+      if (!user) return;
+
+      const [profileRes, unloggedRes] = await Promise.all([
+        supabase.from("profiles").select("subscription_tier").eq("id", user.id).single(),
+        supabase
+          .from("events")
+          .select("id", { count: "exact", head: true })
+          .eq("user_id", user.id)
+          .eq("booked", true)
+          .lt("event_date", new Date().toISOString().split("T")[0])
+          .or("net_sales.is.null,net_sales.eq.0"),
+      ]);
+
+      if (profileRes.data) setTier(profileRes.data.subscription_tier);
+      setUnloggedCount(unloggedRes.count ?? 0);
     }
-    loadTier();
+    load();
   }, [supabase]);
 
   // Close sheet when route changes
@@ -118,8 +126,13 @@ export function MobileNav() {
                       : "text-muted-foreground hover:bg-muted hover:text-foreground"
                   )}
                 >
-                  <item.icon className="h-4 w-4" />
-                  {item.label}
+                  <item.icon className="h-4 w-4 shrink-0" />
+                  <span className="flex-1">{item.label}</span>
+                  {item.href === "/dashboard/events" && unloggedCount > 0 && (
+                    <span className="ml-auto flex h-5 min-w-5 items-center justify-center rounded-full bg-amber-500 px-1.5 text-[10px] font-bold text-white">
+                      {unloggedCount > 99 ? "99+" : unloggedCount}
+                    </span>
+                  )}
                 </Link>
               );
             })}

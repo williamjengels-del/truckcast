@@ -82,7 +82,8 @@ export default async function AdminOverviewPage() {
 
   const navItems = [
     { href: "/dashboard/admin", label: "Overview", active: true },
-    { href: "/dashboard/admin/data", label: "Users" },
+    { href: "/dashboard/admin/users", label: "Users" },
+    { href: "/dashboard/admin/data", label: "Event Data" },
     { href: "/dashboard/admin/beta", label: "Invites" },
     { href: "/dashboard/admin/feedback", label: "Feedback" },
     { href: "/dashboard/admin/content", label: "Content" },
@@ -177,9 +178,10 @@ export default async function AdminOverviewPage() {
       {/* Nav cards */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
         {[
-          { href: "/dashboard/admin/data", label: "User Data", description: "View all events across users" },
+          { href: "/dashboard/admin/users", label: "User Management", description: "View users, adjust subscription tiers" },
+          { href: "/dashboard/admin/data", label: "Event Data", description: "Browse all events across users" },
           { href: "/dashboard/admin/beta", label: "Beta Invites", description: "Generate and manage invite codes" },
-          { href: "/dashboard/admin/feedback", label: "Feedback", description: "Read user-submitted feedback" },
+          { href: "/dashboard/admin/feedback", label: "Feedback", description: "Read and delete user feedback" },
           { href: "/dashboard/admin/content", label: "Site Content", description: "Manage testimonials and stats" },
         ].map((card) => (
           <Link key={card.href} href={card.href}>

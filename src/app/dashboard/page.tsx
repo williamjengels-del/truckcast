@@ -13,6 +13,7 @@ import {
   Target,
   BarChart3,
   Plus,
+  ClipboardList,
 } from "lucide-react";
 import { DashboardCharts } from "./dashboard-charts";
 import { SetupProgress } from "@/components/setup-progress";
@@ -75,6 +76,11 @@ export default async function DashboardPage() {
   const ytdRevenue = ytdEvents.reduce((sum, e) => sum + (e.net_sales ?? 0), 0);
   const eventsCompleted = ytdEvents.length;
   const avgTicket = eventsCompleted > 0 ? ytdRevenue / eventsCompleted : 0;
+  // Unlogged past events — booked events in the past with no sales recorded
+  const unloggedEvents = bookedEvents
+    .filter((e) => e.event_date < today && (e.net_sales === null || e.net_sales === 0))
+    .sort((a, b) => b.event_date.localeCompare(a.event_date)); // most recent first
+
   const upcomingEvents = bookedEvents.filter((e) => e.event_date > today);
   const upcomingCount = upcomingEvents.length;
   const upcomingForecastSum = upcomingEvents.reduce(
@@ -183,6 +189,43 @@ export default async function DashboardPage() {
           hasPOS={posConnected}
           has10Events={has10Events}
         />
+      )}
+
+      {unloggedEvents.length > 0 && (
+        <div className="rounded-lg border border-amber-200 bg-amber-50 dark:border-amber-900/50 dark:bg-amber-950/20 p-4 space-y-3">
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex items-center gap-2">
+              <ClipboardList className="h-4 w-4 text-amber-600 dark:text-amber-500 shrink-0" />
+              <p className="text-sm font-medium text-amber-900 dark:text-amber-300">
+                {unloggedEvents.length} event{unloggedEvents.length !== 1 ? "s" : ""} need{unloggedEvents.length === 1 ? "s" : ""} sales logged
+              </p>
+            </div>
+            <Link href="/dashboard/events?tab=past">
+              <Button variant="outline" size="sm" className="text-xs border-amber-300 hover:bg-amber-100 dark:border-amber-800 dark:hover:bg-amber-900/30">
+                View all
+              </Button>
+            </Link>
+          </div>
+          <div className="space-y-1">
+            {unloggedEvents.slice(0, 4).map((e) => (
+              <div key={e.id} className="flex items-center justify-between text-sm">
+                <span className="text-amber-800 dark:text-amber-400 truncate mr-3">
+                  {new Date(e.event_date + "T00:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+                  {" · "}
+                  {e.event_name}
+                </span>
+                <Link href="/dashboard/events?tab=past" className="text-xs text-amber-700 dark:text-amber-500 hover:underline shrink-0 font-medium">
+                  Log sales →
+                </Link>
+              </div>
+            ))}
+            {unloggedEvents.length > 4 && (
+              <p className="text-xs text-amber-700 dark:text-amber-500 pt-1">
+                +{unloggedEvents.length - 4} more
+              </p>
+            )}
+          </div>
+        </div>
       )}
 
       <div className="flex items-center justify-between">

@@ -56,7 +56,11 @@ export async function GET() {
       return Response.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    // Use service role client to bypass RLS and read all feedback
+    // Restrict to admin only — feedback contains other users' personal data
+    if (user.email !== "williamjengels@gmail.com") {
+      return Response.json({ error: "Forbidden" }, { status: 403 });
+    }
+
     const serviceClient = createServiceClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
       process.env.SUPABASE_SERVICE_ROLE_KEY!
@@ -69,17 +73,37 @@ export async function GET() {
 
     if (error) {
       console.error("Feedback fetch error:", error);
-      return Response.json(
-        { error: "Failed to fetch feedback" },
-        { status: 500 }
-      );
+      return Response.json({ error: "Failed to fetch feedback" }, { status: 500 });
     }
 
     return Response.json({ feedback: data });
   } catch {
-    return Response.json(
-      { error: "Internal server error" },
-      { status: 500 }
+    return Response.json({ error: "Internal server error" }, { status: 500 });
+  }
+}
+
+export async function DELETE(request: Request) {
+  try {
+    const supabase = await createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+
+    if (!user || user.email !== "williamjengels@gmail.com") {
+      return Response.json({ error: "Forbidden" }, { status: 403 });
+    }
+
+    const { id } = await request.json();
+    if (!id) return Response.json({ error: "id required" }, { status: 400 });
+
+    const serviceClient = createServiceClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.SUPABASE_SERVICE_ROLE_KEY!
     );
+
+    const { error } = await serviceClient.from("feedback").delete().eq("id", id);
+    if (error) return Response.json({ error: error.message }, { status: 500 });
+
+    return Response.json({ success: true });
+  } catch {
+    return Response.json({ error: "Internal server error" }, { status: 500 });
   }
 }

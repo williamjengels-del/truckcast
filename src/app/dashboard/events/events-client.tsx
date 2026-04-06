@@ -37,6 +37,7 @@ import {
   Share2,
   Copy,
   Check,
+  Download,
 } from "lucide-react";
 import { EventForm } from "@/components/event-form";
 import { SalesEntryDialog } from "@/components/sales-entry-dialog";
@@ -68,7 +69,7 @@ type SortField =
   | "forecast_sales";
 type SortDirection = "asc" | "desc";
 type ViewMode = "list" | "split" | "calendar";
-type TabMode = "upcoming" | "pipeline" | "past";
+type TabMode = "all" | "upcoming" | "unbooked" | "past" | "flagged";
 
 interface WeatherForecast {
   tempHigh: number;
@@ -238,14 +239,19 @@ export function EventsClient({ initialEvents, userId = "", businessName = "", us
     ),
   ].sort((a, b) => b - a);
 
-  // Split into upcoming (booked) / pipeline (unbooked future) / past
+  // Split into all / upcoming (booked) / unbooked (future) / past / flagged
   const upcomingEvents = initialEvents.filter((e) => e.event_date >= today && e.booked);
-  const pipelineEvents = initialEvents.filter((e) => e.event_date >= today && !e.booked);
+  const unbookedEvents = initialEvents.filter((e) => e.event_date >= today && !e.booked);
   const pastEvents = initialEvents.filter((e) => e.event_date < today);
+  const flaggedEvents = initialEvents.filter(
+    (e) => e.event_date < today && e.booked && (e.net_sales === null || e.net_sales === 0)
+  );
 
   const activeEvents =
+    activeTab === "all" ? initialEvents :
     activeTab === "upcoming" ? upcomingEvents :
-    activeTab === "pipeline" ? pipelineEvents :
+    activeTab === "unbooked" ? unbookedEvents :
+    activeTab === "flagged" ? flaggedEvents :
     pastEvents;
 
   const filtered = activeEvents.filter((e) => {
@@ -258,8 +264,8 @@ export function EventsClient({ initialEvents, userId = "", businessName = "", us
     return matchesSearch && matchesYear;
   });
 
-  // Sort: upcoming/pipeline = ascending (soonest first), past = descending (most recent first)
-  const tabDefaultSort: SortDirection = activeTab === "past" ? "desc" : "asc";
+  // Sort: upcoming/unbooked = ascending (soonest first), all/past/flagged = descending (most recent first)
+  const tabDefaultSort: SortDirection = (activeTab === "past" || activeTab === "flagged" || activeTab === "all") ? "desc" : "asc";
 
   const sorted = [...filtered].sort((a, b) => {
     const dir = sortDirection === "asc" ? 1 : -1;
@@ -304,7 +310,7 @@ export function EventsClient({ initialEvents, userId = "", businessName = "", us
   function handleTabChange(tab: TabMode) {
     setActiveTab(tab);
     setSortField("event_date");
-    setSortDirection(tab === "past" ? "desc" : "asc");
+    setSortDirection((tab === "past" || tab === "flagged" || tab === "all") ? "desc" : "asc");
   }
 
   function handleSort(field: SortField) {
@@ -383,6 +389,44 @@ export function EventsClient({ initialEvents, userId = "", businessName = "", us
     if (weather) updateData.event_weather = weather;
     await updateEvent(eventId, updateData);
     router.refresh();
+  }
+
+  function exportCSV() {
+    const headers = [
+      "Event Name", "Date", "Type", "Tier", "Location", "City",
+      "Booked", "Net Sales", "After Fees", "Forecast", "Fee Type",
+      "Fee Rate", "Sales Minimum", "Weather", "Anomaly", "Notes",
+    ];
+    const rows = initialEvents.map((e) => [
+      e.event_name,
+      e.event_date,
+      e.event_type ?? "",
+      e.event_tier ?? "",
+      e.location ?? "",
+      e.city ?? "",
+      e.booked ? "Yes" : "No",
+      e.net_sales ?? "",
+      e.net_after_fees ?? "",
+      e.forecast_sales ?? "",
+      e.fee_type ?? "",
+      e.fee_rate ?? "",
+      e.sales_minimum ?? "",
+      e.event_weather ?? "",
+      e.anomaly_flag ?? "",
+      (e.notes ?? "").replace(/"/g, '""'),
+    ]);
+
+    const csv = [headers, ...rows]
+      .map((row) => row.map((cell) => `"${cell}"`).join(","))
+      .join("\n");
+
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `truckcast-events-${new Date().toISOString().split("T")[0]}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
   }
 
   function formatCurrency(val: number | null) {
@@ -774,10 +818,20 @@ export function EventsClient({ initialEvents, userId = "", businessName = "", us
   function ListView() {
     return (
       <>
-        {/* Upcoming / Pipeline / Past Tabs */}
-        <div className="flex gap-1 border-b">
+        {/* All / Upcoming / Unbooked / Past / Needs Attention Tabs */}
+        <div className="flex gap-1 border-b overflow-x-auto">
           <button
-            className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
+            className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${
+              activeTab === "all"
+                ? "border-primary text-foreground"
+                : "border-transparent text-muted-foreground hover:text-foreground"
+            }`}
+            onClick={() => handleTabChange("all")}
+          >
+            All ({initialEvents.length})
+          </button>
+          <button
+            className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${
               activeTab === "upcoming"
                 ? "border-primary text-foreground"
                 : "border-transparent text-muted-foreground hover:text-foreground"
@@ -787,17 +841,17 @@ export function EventsClient({ initialEvents, userId = "", businessName = "", us
             Upcoming ({upcomingEvents.length})
           </button>
           <button
-            className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
-              activeTab === "pipeline"
+            className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${
+              activeTab === "unbooked"
                 ? "border-primary text-foreground"
                 : "border-transparent text-muted-foreground hover:text-foreground"
             }`}
-            onClick={() => handleTabChange("pipeline")}
+            onClick={() => handleTabChange("unbooked")}
           >
-            Pipeline ({pipelineEvents.length})
+            Unbooked ({unbookedEvents.length})
           </button>
           <button
-            className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
+            className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${
               activeTab === "past"
                 ? "border-primary text-foreground"
                 : "border-transparent text-muted-foreground hover:text-foreground"
@@ -806,6 +860,21 @@ export function EventsClient({ initialEvents, userId = "", businessName = "", us
           >
             Past ({pastEvents.length})
           </button>
+          {flaggedEvents.length > 0 && (
+            <button
+              className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors flex items-center gap-1.5 whitespace-nowrap ${
+                activeTab === "flagged"
+                  ? "border-amber-500 text-amber-700 dark:text-amber-400"
+                  : "border-transparent text-amber-600 dark:text-amber-500 hover:text-amber-700"
+              }`}
+              onClick={() => handleTabChange("flagged")}
+            >
+              Needs Attention
+              <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-amber-500 px-1.5 text-[10px] font-bold text-white">
+                {flaggedEvents.length}
+              </span>
+            </button>
+          )}
         </div>
 
         {/* Filters */}
@@ -853,7 +922,7 @@ export function EventsClient({ initialEvents, userId = "", businessName = "", us
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <Calendar className="h-5 w-5" />
-              {activeTab === "upcoming" ? "Upcoming Events" : activeTab === "pipeline" ? "Pipeline Events" : "Past Events"}
+              {activeTab === "all" ? "All Events" : activeTab === "upcoming" ? "Upcoming Events" : activeTab === "unbooked" ? "Unbooked Events" : activeTab === "flagged" ? "Events Needing Sales Data" : "Past Events"}
             </CardTitle>
           </CardHeader>
           <CardContent>
@@ -945,12 +1014,21 @@ export function EventsClient({ initialEvents, userId = "", businessName = "", us
                 </TableHeader>
                 <TableBody>
                   {sorted.map((event) => (
-                    <TableRow key={event.id}>
+                    <TableRow
+                      key={event.id}
+                      className={
+                        activeTab === "all"
+                          ? event.booked
+                            ? "border-l-[3px] border-l-green-500 bg-green-50/40 dark:bg-green-950/10"
+                            : "border-l-[3px] border-l-slate-300 dark:border-l-slate-600 bg-slate-50/60 dark:bg-slate-900/20"
+                          : ""
+                      }
+                    >
                       <TableCell className="whitespace-nowrap text-sm">
                         {formatDate(event.event_date)}
                         {!event.booked && (
                           <Badge variant="outline" className="ml-2 text-xs">
-                            Tentative
+                            Unbooked
                           </Badge>
                         )}
                         {/* Weather badge for upcoming events within 14 days */}
@@ -1047,6 +1125,20 @@ export function EventsClient({ initialEvents, userId = "", businessName = "", us
           </p>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
+          {/* Export CSV button */}
+          {initialEvents.length > 0 && (
+            <Button
+              variant="outline"
+              size="sm"
+              className="gap-2"
+              onClick={exportCSV}
+              title="Export all events as CSV"
+            >
+              <Download className="h-4 w-4" />
+              <span className="hidden sm:inline">Export</span>
+            </Button>
+          )}
+
           {/* Share button */}
           <Button
             variant="outline"

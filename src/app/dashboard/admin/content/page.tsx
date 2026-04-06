@@ -13,7 +13,8 @@ import type { Testimonial } from "@/lib/database.types";
 
 const adminNavItems = [
   { href: "/dashboard/admin", label: "Overview" },
-  { href: "/dashboard/admin/data", label: "Users" },
+  { href: "/dashboard/admin/users", label: "Users" },
+  { href: "/dashboard/admin/data", label: "Event Data" },
   { href: "/dashboard/admin/beta", label: "Invites" },
   { href: "/dashboard/admin/feedback", label: "Feedback" },
   { href: "/dashboard/admin/content", label: "Content", active: true },

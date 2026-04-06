@@ -11,6 +11,9 @@ function getServiceClient() {
   );
 }
 
+type SortField = "business" | "city" | "event_date" | "net_sales";
+type SortDir = "asc" | "desc";
+
 export async function GET(req: NextRequest) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
@@ -24,11 +27,12 @@ export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
   const page = parseInt(searchParams.get("page") ?? "1");
   const pageSize = 50;
-  const from = (page - 1) * pageSize;
-  const filterSharing = searchParams.get("sharing"); // "all" | "opted_in" | "opted_out"
+  const filterSharing = searchParams.get("sharing");
   const search = searchParams.get("q") ?? "";
+  const sortField = (searchParams.get("sort") ?? "business") as SortField;
+  const sortDir = (searchParams.get("dir") ?? "asc") as SortDir;
 
-  // Fetch profiles to build user lookup (only data_sharing_enabled users unless filter says otherwise)
+  // Fetch profiles
   let profileQuery = service
     .from("profiles")
     .select("id, business_name, city, state, data_sharing_enabled");
@@ -48,33 +52,62 @@ export async function GET(req: NextRequest) {
   const userIds = profiles.map((p) => p.id);
   if (userIds.length === 0) return NextResponse.json({ events: [], total: 0, profiles: [] });
 
-  // Fetch events
+  // Fetch ALL matching events (no range — we sort after enrichment then paginate)
   let eventsQuery = service
     .from("events")
-    .select(
-      "id, user_id, event_name, event_date, event_type, location, city, net_sales, fee_type, fee_rate, weather_type, anomaly_flag, event_tier, notes",
-      { count: "exact" }
-    )
-    .in("user_id", userIds)
-    .order("event_date", { ascending: false })
-    .range(from, from + pageSize - 1);
+    .select("id, user_id, event_name, event_date, event_type, location, city, net_sales, fee_type, fee_rate, event_weather, anomaly_flag, event_tier, notes")
+    .in("user_id", userIds);
 
   if (search) {
     eventsQuery = eventsQuery.ilike("event_name", `%${search}%`);
   }
 
-  const { data: events, count } = await eventsQuery;
+  const { data: events } = await eventsQuery;
 
+  // Enrich with profile data
   const enriched = (events ?? []).map((e) => ({
     ...e,
+    weather_type: e.event_weather,
     business_name: profileMap[e.user_id]?.business_name ?? "Unknown",
     business_city: profileMap[e.user_id]?.city ?? null,
     data_sharing_enabled: profileMap[e.user_id]?.data_sharing_enabled ?? true,
   }));
 
+  // Sort — primary sort by chosen field, secondary always city then business then date
+  const dir = sortDir === "asc" ? 1 : -1;
+  enriched.sort((a, b) => {
+    const str = (v: string | null | undefined) => (v ?? "").toLowerCase();
+    const num = (v: number | null | undefined) => v ?? 0;
+
+    let primary = 0;
+    if (sortField === "business") {
+      primary = str(a.business_name).localeCompare(str(b.business_name));
+    } else if (sortField === "city") {
+      primary = str(a.city ?? a.business_city).localeCompare(str(b.city ?? b.business_city));
+    } else if (sortField === "event_date") {
+      primary = str(a.event_date).localeCompare(str(b.event_date));
+    } else if (sortField === "net_sales") {
+      primary = num(a.net_sales) - num(b.net_sales);
+    }
+
+    if (primary !== 0) return primary * dir;
+
+    // Secondary: city then business then date desc
+    const cityDiff = str(a.city ?? a.business_city).localeCompare(str(b.city ?? b.business_city));
+    if (cityDiff !== 0) return cityDiff;
+    const bizDiff = str(a.business_name).localeCompare(str(b.business_name));
+    if (bizDiff !== 0) return bizDiff;
+    return str(b.event_date).localeCompare(str(a.event_date));
+  });
+
+  // Paginate after sort
+  const total = enriched.length;
+  const from = (page - 1) * pageSize;
+  const paginated = enriched.slice(from, from + pageSize);
+
   return NextResponse.json({
-    events: enriched,
-    total: count ?? 0,
+    events: paginated,
+    total,
     profiles: profiles.map((p) => ({
       id: p.id,
       business_name: p.business_name,

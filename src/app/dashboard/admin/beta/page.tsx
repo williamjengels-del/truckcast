@@ -11,7 +11,8 @@ import { Copy, Plus, RefreshCw } from "lucide-react";
 
 const adminNavItems = [
   { href: "/dashboard/admin", label: "Overview" },
-  { href: "/dashboard/admin/data", label: "Users" },
+  { href: "/dashboard/admin/users", label: "Users" },
+  { href: "/dashboard/admin/data", label: "Event Data" },
   { href: "/dashboard/admin/beta", label: "Invites", active: true },
   { href: "/dashboard/admin/feedback", label: "Feedback" },
   { href: "/dashboard/admin/content", label: "Content" },

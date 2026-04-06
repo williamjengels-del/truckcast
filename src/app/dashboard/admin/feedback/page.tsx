@@ -2,19 +2,13 @@ import { createClient as createServiceClient } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 import Link from "next/link";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { FeedbackTable } from "./feedback-client";
 
 const adminNavItems = [
   { href: "/dashboard/admin", label: "Overview" },
-  { href: "/dashboard/admin/data", label: "Users" },
+  { href: "/dashboard/admin/users", label: "Users" },
+  { href: "/dashboard/admin/data", label: "Event Data" },
   { href: "/dashboard/admin/beta", label: "Invites" },
   { href: "/dashboard/admin/feedback", label: "Feedback", active: true },
   { href: "/dashboard/admin/content", label: "Content" },
@@ -90,55 +84,14 @@ export default async function AdminFeedbackPage() {
         ))}
       </div>
 
-      {rows.length === 0 ? (
-        <Card>
-          <CardContent className="py-8 text-center text-muted-foreground">
-            No feedback yet.
-          </CardContent>
-        </Card>
-      ) : (
-        <Card>
-          <CardHeader>
-            <CardTitle>All Feedback</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead className="w-48">Email</TableHead>
-                  <TableHead className="w-40">Page</TableHead>
-                  <TableHead>Message</TableHead>
-                  <TableHead className="w-40">Date</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {rows.map((row) => (
-                  <TableRow key={row.id}>
-                    <TableCell className="text-sm">
-                      {row.email || "Unknown"}
-                    </TableCell>
-                    <TableCell className="text-sm font-mono text-muted-foreground">
-                      {row.page || "-"}
-                    </TableCell>
-                    <TableCell className="text-sm whitespace-pre-wrap">
-                      {row.message}
-                    </TableCell>
-                    <TableCell className="text-sm text-muted-foreground">
-                      {new Date(row.created_at).toLocaleDateString("en-US", {
-                        month: "short",
-                        day: "numeric",
-                        year: "numeric",
-                        hour: "numeric",
-                        minute: "2-digit",
-                      })}
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </CardContent>
-        </Card>
-      )}
+      <Card>
+        <CardHeader>
+          <CardTitle>All Feedback</CardTitle>
+        </CardHeader>
+        <CardContent className="p-0">
+          <FeedbackTable initialRows={rows} />
+        </CardContent>
+      </Card>
     </div>
   );
 }

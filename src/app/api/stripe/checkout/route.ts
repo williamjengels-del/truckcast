@@ -15,6 +15,9 @@ export async function POST(request: Request) {
 
     const { tier, billing } = await request.json();
 
+    // Derive base URL from request origin so it always works in all environments
+    const origin = request.headers.get("origin") ?? process.env.NEXT_PUBLIC_APP_URL ?? "https://truckcast.co";
+
     if (!tier || !billing) {
       return NextResponse.json(
         { error: "Missing tier or billing period" },
@@ -70,8 +73,8 @@ export async function POST(request: Request) {
       customer: customerId,
       mode: "subscription",
       line_items: [{ price: priceId, quantity: 1 }],
-      success_url: `${process.env.NEXT_PUBLIC_APP_URL}/dashboard/settings?upgraded=true`,
-      cancel_url: `${process.env.NEXT_PUBLIC_APP_URL}/dashboard/settings`,
+      success_url: `${origin}/dashboard/settings?upgraded=true`,
+      cancel_url: `${origin}/dashboard/settings`,
       metadata: { user_id: user.id, tier },
     });
 

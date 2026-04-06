@@ -32,9 +32,28 @@ export async function PATCH(
   const { id } = await params;
   const body = await request.json();
 
+  // Whitelist allowed fields to prevent injection of arbitrary columns
+  const allowed = ["author_name", "author_title", "content", "rating", "display_order", "is_active"] as const;
+  type AllowedKey = typeof allowed[number];
+  const update: Partial<Record<AllowedKey, unknown>> = {};
+  for (const key of allowed) {
+    if (key in body) update[key] = body[key];
+  }
+
+  // Validate types
+  if (update.rating !== undefined && (typeof update.rating !== "number" || update.rating < 1 || update.rating > 5)) {
+    return NextResponse.json({ error: "rating must be 1–5" }, { status: 400 });
+  }
+  if (update.author_name !== undefined && (typeof update.author_name !== "string" || (update.author_name as string).length > 200)) {
+    return NextResponse.json({ error: "author_name too long" }, { status: 400 });
+  }
+  if (update.content !== undefined && (typeof update.content !== "string" || (update.content as string).length > 5000)) {
+    return NextResponse.json({ error: "content too long" }, { status: 400 });
+  }
+
   const { error } = await serviceClient
     .from("testimonials")
-    .update(body)
+    .update(update)
     .eq("id", id);
 
   if (error) {

@@ -13,11 +13,12 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { RefreshCw, ChevronLeft, ChevronRight } from "lucide-react";
+import { RefreshCw, ChevronLeft, ChevronRight, ChevronUp, ChevronDown, ChevronsUpDown } from "lucide-react";
 
 const adminNavItems = [
   { href: "/dashboard/admin", label: "Overview" },
-  { href: "/dashboard/admin/data", label: "Users", active: true },
+  { href: "/dashboard/admin/users", label: "Users" },
+  { href: "/dashboard/admin/data", label: "Event Data", active: true },
   { href: "/dashboard/admin/beta", label: "Invites" },
   { href: "/dashboard/admin/feedback", label: "Feedback" },
   { href: "/dashboard/admin/content", label: "Content" },
@@ -56,14 +57,35 @@ export default function AdminDataPage() {
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState("");
   const [searchInput, setSearchInput] = useState("");
-  const [filterSharing, setFilterSharing] = useState("all");
+  const [filterSharing, setFilterSharing] = useState<string>("all");
+  const [sortField, setSortField] = useState<string>("business");
+  const [sortDir, setSortDir] = useState<string>("asc");
   const pageSize = 50;
+
+  function handleSort(field: string) {
+    if (sortField === field) {
+      setSortDir((d) => (d === "asc" ? "desc" : "asc"));
+    } else {
+      setSortField(field);
+      setSortDir("asc");
+    }
+    setPage(1);
+  }
+
+  function SortIcon({ field }: { field: string }) {
+    if (sortField !== field) return <ChevronsUpDown className="h-3 w-3 ml-1 opacity-40" />;
+    return sortDir === "asc"
+      ? <ChevronUp className="h-3 w-3 ml-1 text-primary" />
+      : <ChevronDown className="h-3 w-3 ml-1 text-primary" />;
+  }
 
   const load = useCallback(async () => {
     setLoading(true);
     const params = new URLSearchParams({
       page: String(page),
       sharing: filterSharing,
+      sort: sortField,
+      dir: sortDir,
     });
     if (search) params.set("q", search);
 
@@ -75,7 +97,7 @@ export default function AdminDataPage() {
       setTotal(data.total ?? 0);
     }
     setLoading(false);
-  }, [page, search, filterSharing]);
+  }, [page, search, filterSharing, sortField, sortDir]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -93,8 +115,8 @@ export default function AdminDataPage() {
     <div className="space-y-6">
       <div className="flex items-start justify-between gap-4 flex-wrap">
         <div>
-          <h1 className="text-2xl font-bold">Event Data — All Users</h1>
-          <p className="text-muted-foreground text-sm">Internal model improvement dataset</p>
+          <h1 className="text-2xl font-bold">Event Data</h1>
+          <p className="text-muted-foreground text-sm">All events across all users — use the filter to narrow by data sharing status</p>
         </div>
         <Button variant="outline" size="sm" onClick={load} disabled={loading}>
           <RefreshCw className="h-4 w-4 mr-2" />
@@ -183,12 +205,28 @@ export default function AdminDataPage() {
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b bg-muted/50">
-              <th className="text-left p-3 font-medium">Business</th>
+              <th className="text-left p-3 font-medium">
+                <button onClick={() => handleSort("business")} className="flex items-center hover:text-foreground transition-colors">
+                  Business <SortIcon field="business" />
+                </button>
+              </th>
               <th className="text-left p-3 font-medium">Event</th>
-              <th className="text-left p-3 font-medium">Date</th>
+              <th className="text-left p-3 font-medium">
+                <button onClick={() => handleSort("event_date")} className="flex items-center hover:text-foreground transition-colors">
+                  Date <SortIcon field="event_date" />
+                </button>
+              </th>
               <th className="text-left p-3 font-medium">Type</th>
-              <th className="text-left p-3 font-medium">City</th>
-              <th className="text-right p-3 font-medium">Net Sales</th>
+              <th className="text-left p-3 font-medium">
+                <button onClick={() => handleSort("city")} className="flex items-center hover:text-foreground transition-colors">
+                  City <SortIcon field="city" />
+                </button>
+              </th>
+              <th className="text-right p-3 font-medium">
+                <button onClick={() => handleSort("net_sales")} className="flex items-center ml-auto hover:text-foreground transition-colors">
+                  Net Sales <SortIcon field="net_sales" />
+                </button>
+              </th>
               <th className="text-left p-3 font-medium">Weather</th>
               <th className="text-left p-3 font-medium">Sharing</th>
             </tr>

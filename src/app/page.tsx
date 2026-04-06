@@ -103,12 +103,13 @@ export default async function LandingPage() {
             Track every event, know your schedule at a glance — and the only
             tool that tells you which bookings are actually worth taking.
           </p>
-          <div className="mt-10 flex items-center justify-center gap-4">
+          <div className="mt-10 flex flex-col items-center justify-center gap-3">
             <Link href="/signup">
               <Button size="lg" className="gap-2">
                 Start Free Trial <ArrowRight className="h-4 w-4" />
               </Button>
             </Link>
+            <p className="text-sm text-muted-foreground">14 days free · No credit card required</p>
           </div>
         </div>
 

@@ -116,9 +116,9 @@ export default function SignupPage() {
             <TruckIcon className="h-8 w-8 text-primary" />
             <span className="text-2xl font-bold">TruckCast</span>
           </div>
-          <CardTitle>Create your account</CardTitle>
+          <CardTitle>Start your free trial</CardTitle>
           <CardDescription>
-            Start forecasting your food truck events
+            14 days free, no credit card required
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -187,7 +187,7 @@ export default function SignupPage() {
               <p className="text-sm text-destructive">{error}</p>
             )}
             <Button type="submit" className="w-full" disabled={loading}>
-              {loading ? "Creating account..." : "Create account"}
+              {loading ? "Creating account..." : "Start free trial"}
             </Button>
           </form>
 

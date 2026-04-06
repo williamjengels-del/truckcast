@@ -239,6 +239,27 @@ function parseDatetime(value: string): { date: string | null; time: string | nul
   const s = value.trim();
   if (!s) return { date: null, time: null };
 
+  // Airtable ISO UTC format: "2023-03-04T22:00:00.000Z" or "2023-03-05T03:00:00.000Z"
+  // Must be handled FIRST before other patterns, because Airtable stores all datetimes in UTC.
+  // We convert to local time (user's browser timezone) so that e.g. 03:00 UTC = 9 PM CDT correctly
+  // returns date=2023-03-04 and time=21:00, NOT the raw UTC date of 2023-03-05.
+  const isoUtcMatch = s.match(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:\d{2})$/);
+  if (isoUtcMatch) {
+    const d = new Date(s); // parsed as UTC
+    if (!isNaN(d.getTime())) {
+      const year = d.getFullYear();
+      const month = String(d.getMonth() + 1).padStart(2, "0");
+      const day = String(d.getDate()).padStart(2, "0");
+      const hours = String(d.getHours()).padStart(2, "0");
+      const minutes = String(d.getMinutes()).padStart(2, "0");
+      return {
+        date: `${year}-${month}-${day}`,
+        time: `${hours}:${minutes}`,
+      };
+    }
+  }
+
+  // Non-ISO formats: extract time portion from end of string, then parse date
   const timePatterns = [
     /(\d{1,2}:\d{2}(?::\d{2})?\s*[AaPp][Mm])\s*$/,
     /(\d{1,2}:\d{2}(?::\d{2})?)\s*$/,
@@ -776,7 +797,7 @@ export default function ImportPage() {
       sales_minimum: r.sales_minimum ?? 0,
       forecast_sales: r.forecast_sales ?? null,
       notes: r.notes ?? null,
-      booked: r.booked !== undefined ? r.booked : true,
+      booked: r.booked !== undefined ? r.booked : false,
       event_tier: r.event_tier ?? null,
       anomaly_flag: r.anomaly_flag ?? "normal",
       event_weather: r.weather_type ?? null,
