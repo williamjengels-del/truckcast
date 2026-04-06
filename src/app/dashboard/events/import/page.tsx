@@ -807,13 +807,21 @@ export default function ImportPage() {
       const replacingAll = replaceIds.length === allDuplicateIds.length;
 
       if (replacingAll) {
-        // Delete all user events at once — much more reliable than large .in() call
-        await supabase.from("events").delete().eq("user_id", user.id);
+        const { error: delError } = await supabase.from("events").delete().eq("user_id", user.id);
+        if (delError) {
+          setImportError(`Delete failed: ${delError.message}`);
+          setImporting(false);
+          return;
+        }
       } else {
-        // Batch deletes in chunks of 100 to stay within Supabase limits
         const CHUNK = 100;
         for (let i = 0; i < replaceIds.length; i += CHUNK) {
-          await supabase.from("events").delete().in("id", replaceIds.slice(i, i + CHUNK));
+          const { error: delError } = await supabase.from("events").delete().in("id", replaceIds.slice(i, i + CHUNK));
+          if (delError) {
+            setImportError(`Delete failed: ${delError.message}`);
+            setImporting(false);
+            return;
+          }
         }
       }
     }
@@ -841,6 +849,12 @@ export default function ImportPage() {
       expected_attendance: r.expected_attendance ?? null,
       pos_source: "manual" as const,
     }));
+
+    if (insertData.length === 0) {
+      setImportError(`Nothing to insert — rowsToInsert was empty. Valid rows: ${validRows.length}, duplicates: ${resolvedDuplicates.length}, actions: ${resolvedDuplicates.map(d => d.action).join(",").slice(0, 100)}`);
+      setImporting(false);
+      return;
+    }
 
     const BATCH_SIZE = 50;
     let totalInserted = 0;
