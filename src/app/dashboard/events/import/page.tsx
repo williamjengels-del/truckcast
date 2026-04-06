@@ -802,7 +802,20 @@ export default function ImportPage() {
       .map((d) => d.existing_event_id);
 
     if (replaceIds.length > 0) {
-      await supabase.from("events").delete().in("id", replaceIds);
+      // If replacing most/all events, delete all at once to avoid .in() size limits
+      const allDuplicateIds = resolvedDuplicates.map((d) => d.existing_event_id);
+      const replacingAll = replaceIds.length === allDuplicateIds.length;
+
+      if (replacingAll) {
+        // Delete all user events at once — much more reliable than large .in() call
+        await supabase.from("events").delete().eq("user_id", user.id);
+      } else {
+        // Batch deletes in chunks of 100 to stay within Supabase limits
+        const CHUNK = 100;
+        for (let i = 0; i < replaceIds.length; i += CHUNK) {
+          await supabase.from("events").delete().in("id", replaceIds.slice(i, i + CHUNK));
+        }
+      }
     }
 
     const insertData = rowsToInsert.map((r) => ({
