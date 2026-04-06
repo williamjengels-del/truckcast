@@ -1,24 +1,25 @@
 import { createClient } from "@/lib/supabase/server";
 import Link from "next/link";
-import { AlertTriangle, Sparkles, X } from "lucide-react";
+import { AlertTriangle, Sparkles } from "lucide-react";
 
 const TRIAL_DAYS = 14;
 
 export async function TrialBanner() {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  try {
+    const supabase = await createClient();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
 
-  if (!user) return null;
+    if (!user) return null;
 
-  const { data: profile } = await supabase
-    .from("profiles")
-    .select("created_at, stripe_subscription_id, subscription_tier")
-    .eq("id", user.id)
-    .single();
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("created_at, stripe_subscription_id, subscription_tier")
+      .eq("id", user.id)
+      .single();
 
-  if (!profile) return null;
+    if (!profile) return null;
 
   // Paid subscribers — no banner
   if (profile.stripe_subscription_id) return null;
@@ -85,4 +86,8 @@ export async function TrialBanner() {
       </Link>
     </div>
   );
+  } catch {
+    // Never let the banner crash the dashboard
+    return null;
+  }
 }
