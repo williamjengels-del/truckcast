@@ -8,19 +8,14 @@ import type { Event } from "@/lib/database.types";
 /**
  * POST /api/pos/toast/inbound
  *
- * Resend inbound email webhook. Called when an email arrives at
- * sync+{userId}@vendcast.co or toast+{userId}@vendcast.co.
+ * Called by the Cloudflare Email Worker when a Toast daily summary
+ * email is forwarded to sync@vendcast.co.
  *
- * Resend payload fields used:
- *   to      – array of recipient addresses
- *   from    – sender address
- *   subject – email subject line
- *   text    – plain-text body
+ * User identification: the "from" field is the user's forwarding email
+ * (their Gmail/Outlook address). We look them up by email in Supabase Auth.
+ * Everyone uses the same address — no user IDs needed.
  *
- * Webhook authenticity is verified via the svix-signature header
- * using RESEND_WEBHOOK_SECRET.
- *
- * Always returns 200 so Resend does not retry on application errors.
+ * Always returns 200 to prevent retries.
  */
 
 function createServiceRoleClient() {
@@ -34,28 +29,22 @@ function createServiceRoleClient() {
   });
 }
 
-/**
- * Extract the user ID encoded in the plus-tag of the to address.
- * e.g. "sync+abc-123@vendcast.co" -> "abc-123"
- *      "toast+abc-123@vendcast.co" -> "abc-123"
- * Returns null if no tag is present or the domain is not vendcast.co.
- */
-function extractUserId(toAddresses: string[]): string | null {
-  for (const addr of toAddresses) {
-    // Strip display name if present, keep only the email portion
-    const emailMatch = addr.match(/<([^>]+)>/) ?? addr.match(/^(\S+)$/);
-    const email = emailMatch ? emailMatch[1] : addr.trim();
+/** Extract bare email address from "Display Name <email>" or plain "email" format. */
+function extractEmail(addr: string): string {
+  const match = addr.match(/<([^>]+)>/);
+  return (match ? match[1] : addr).trim().toLowerCase();
+}
 
-    const [local, domain] = email.split("@");
-    if (!domain?.toLowerCase().includes("vendcast.co")) continue;
-
-    const plusIndex = local.indexOf("+");
-    if (plusIndex === -1) continue;
-
-    const tag = local.slice(plusIndex + 1).trim();
-    if (tag.length > 0) return tag;
-  }
-  return null;
+/** Look up a Supabase user ID by their email address. */
+async function findUserByEmail(
+  supabase: ReturnType<typeof createServiceRoleClient>,
+  email: string
+): Promise<string | null> {
+  const { data } = await supabase.auth.admin.listUsers({ perPage: 1000 });
+  const user = (data?.users ?? []).find(
+    (u) => u.email?.toLowerCase() === email
+  );
+  return user?.id ?? null;
 }
 
 /**
@@ -148,19 +137,29 @@ export async function POST(request: Request) {
       html?: string;
     };
 
-    const { to = [], from = "", subject = "", text = "" } = payload;
+    const { from = "", subject = "", text = "" } = payload;
 
     // --- Verify sender is Toast ---
     if (!from.toLowerCase().includes("toasttab.com")) {
-      console.log(`[toast/inbound] Ignoring email from non-Toast sender: ${from}`);
+      console.log(`[toast/inbound] Ignoring non-Toast email from: ${from}`);
       return NextResponse.json({ ok: true, reason: "not_toast" }, { status: 200 });
     }
 
-    // --- Extract user ID from to address ---
-    const userId = extractUserId(to);
+    // --- Identify user by their forwarding email address ---
+    // When a user forwards email from Gmail, "from" is their own email address.
+    // We look them up in Supabase Auth to get their user ID.
+    const supabase = createServiceRoleClient();
+    const forwarderEmail = extractEmail(from);
+
+    // Re-check: if from is still toasttab.com it means no forward happened (direct send test)
+    // In that case we can't identify the user — skip gracefully
+    const userId = forwarderEmail.includes("toasttab.com")
+      ? null
+      : await findUserByEmail(supabase, forwarderEmail);
+
     if (!userId) {
-      console.warn(`[toast/inbound] Could not extract userId from to addresses: ${JSON.stringify(to)}`);
-      return NextResponse.json({ ok: false, reason: "no_user_id" }, { status: 200 });
+      console.warn(`[toast/inbound] Could not find user for email: ${forwarderEmail}`);
+      return NextResponse.json({ ok: false, reason: "user_not_found" }, { status: 200 });
     }
 
     // --- Parse the email ---
@@ -172,8 +171,6 @@ export async function POST(request: Request) {
       console.warn(`[toast/inbound] Parse failed for user ${userId}:`, parseErr);
       return NextResponse.json({ ok: false, reason: "parse_failed" }, { status: 200 });
     }
-
-    const supabase = createServiceRoleClient();
 
     // --- Find booked events on that date for this user ---
     const { data: matchedEvents, error: eventsError } = await supabase

@@ -434,10 +434,9 @@ function ToastCard({
   const [importSuccess, setImportSuccess] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
 
-  const syncAddress = userId ? `sync+${userId}@vendcast.co` : null;
+  const syncAddress = "sync@vendcast.co";
 
   function handleCopy() {
-    if (!syncAddress) return;
     navigator.clipboard.writeText(syncAddress).then(() => {
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
@@ -569,13 +568,12 @@ function ToastCard({
               </p>
               <div className="flex items-center gap-2 mt-1">
                 <code className="flex-1 rounded bg-muted px-3 py-2 text-xs font-mono break-all">
-                  {syncAddress ?? "Loading..."}
+                  {syncAddress}
                 </code>
                 <Button
                   size="sm"
                   variant="outline"
                   onClick={handleCopy}
-                  disabled={!syncAddress}
                 >
                   {copied ? "Copied!" : "Copy"}
                 </Button>
