@@ -164,6 +164,16 @@ export async function POST(request: Request) {
 
     console.log(`[toast/inbound] from="${from}" to=${JSON.stringify(toAddresses)} subject="${rawSubject}"`);
 
+    // Detect Gmail forwarding verification emails and log the confirmation URL
+    if (rawSubject.toLowerCase().includes("gmail forwarding confirmation") || rawSubject.toLowerCase().includes("forwarding confirmation")) {
+      const urlMatch = rawBody.match(/https:\/\/mail\.google\.com\/mail\/[^\s"<>]+confirm[^\s"<>]+/i)
+        ?? rawBody.match(/https:\/\/[^\s"<>]*confirmation[^\s"<>]*/i);
+      console.log(`[toast/inbound] GMAIL VERIFICATION EMAIL DETECTED`);
+      console.log(`[toast/inbound] Confirmation URL: ${urlMatch?.[0] ?? "not found — check full body below"}`);
+      console.log(`[toast/inbound] Full body: ${rawBody.slice(0, 2000)}`);
+      return NextResponse.json({ ok: true, reason: "gmail_verification_logged" }, { status: 200 });
+    }
+
     // Extract token from to address
     const token = toAddresses.map(extractToken).find(Boolean) ?? null;
     if (!token) {
