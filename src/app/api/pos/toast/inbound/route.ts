@@ -46,12 +46,20 @@ async function findUserByToken(
   supabase: ReturnType<typeof createServiceRoleClient>,
   token: string
 ): Promise<string | null> {
+  // Try profiles table first
   const { data: profiles } = await supabase
     .from("profiles")
     .select("id")
     .ilike("id", `${token}%`)
     .limit(1);
-  return profiles?.[0]?.id ?? null;
+  if (profiles?.[0]?.id) return profiles[0].id;
+
+  // Fall back to auth.users (handles users whose profile row is missing)
+  const { data: authData } = await supabase.auth.admin.listUsers({ perPage: 1000 });
+  const match = authData?.users?.find((u) =>
+    u.id.replace(/-/g, "").startsWith(token)
+  );
+  return match?.id ?? null;
 }
 
 /** Inline recalculation using the service role client. */
