@@ -9,11 +9,11 @@ import type { Event } from "@/lib/database.types";
  * POST /api/pos/toast/inbound
  *
  * Called by the Cloudflare Email Worker when a Toast daily summary
- * email is forwarded to sync@vendcast.co.
+ * email is forwarded to sync+{token}@vendcast.co.
  *
- * User identification: the "from" field is the user's forwarding email
- * (their Gmail/Outlook address). We look them up by email in Supabase Auth.
- * Everyone uses the same address — no user IDs needed.
+ * User identification: we extract the plus-tag token from the "to" address.
+ * The token is the first 8 characters of the user's UUID.
+ * e.g. sync+abc12345@vendcast.co → look for user whose ID starts with "abc12345"
  *
  * Always returns 200 to prevent retries.
  */
@@ -21,62 +21,40 @@ import type { Event } from "@/lib/database.types";
 function createServiceRoleClient() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
-  if (!url || !key) {
-    throw new Error("Missing Supabase service role env vars");
-  }
+  if (!url || !key) throw new Error("Missing Supabase service role env vars");
   return createClient(url, key, {
     auth: { persistSession: false, autoRefreshToken: false },
   });
 }
 
-/** Extract bare email address from "Display Name <email>" or plain "email" format. */
-function extractEmail(addr: string): string {
-  const match = addr.match(/<([^>]+)>/);
-  return (match ? match[1] : addr).trim().toLowerCase();
-}
-
-/** Look up a Supabase user ID by their email address. */
-async function findUserByEmail(
-  supabase: ReturnType<typeof createServiceRoleClient>,
-  email: string
-): Promise<string | null> {
-  const { data } = await supabase.auth.admin.listUsers({ perPage: 1000 });
-  const user = (data?.users ?? []).find(
-    (u) => u.email?.toLowerCase() === email
-  );
-  return user?.id ?? null;
-}
-
-/**
- * Lightweight webhook signature check.
- * Resend uses Svix for inbound webhooks and sends these headers:
- *   svix-id, svix-timestamp, svix-signature
- *
- * Full Svix verification requires the svix npm package. We do a simple
- * presence-check here: the secret is required and the header must be present.
- * Replace with the svix SDK if you need cryptographic verification.
+/** Extract the plus-tag token from the to address.
+ * "sync+abc12345@vendcast.co" → "abc12345"
+ * Handles both plain and "Display Name <email>" formats.
  */
-function verifyWebhookSignature(request: Request): boolean {
-  const secret = process.env.RESEND_WEBHOOK_SECRET;
-  if (!secret) {
-    // If no secret is configured, skip verification (dev / not yet configured)
-    console.warn("[toast/inbound] RESEND_WEBHOOK_SECRET not set — skipping verification");
-    return true;
-  }
-  const signature = request.headers.get("svix-signature");
-  if (!signature) {
-    console.warn("[toast/inbound] Missing svix-signature header");
-    return false;
-  }
-  // With the secret present we at least confirm the header exists.
-  // TODO: use the svix npm package for full HMAC verification:
-  //   import { Webhook } from "svix";
-  //   const wh = new Webhook(secret);
-  //   wh.verify(rawBody, headers);
-  return true;
+function extractToken(to: string): string | null {
+  const emailMatch = to.match(/<([^>]+)>/) ?? to.match(/^(\S+@\S+)$/);
+  const email = emailMatch ? emailMatch[1] : to.trim();
+  const local = email.split("@")[0];
+  const plusIdx = local.indexOf("+");
+  if (plusIdx === -1) return null;
+  const tag = local.slice(plusIdx + 1).trim();
+  return tag.length > 0 ? tag : null;
 }
 
-/** Inline recalculation using the service role client (no user session). */
+/** Find user by matching the first 8 chars of their UUID against the token. */
+async function findUserByToken(
+  supabase: ReturnType<typeof createServiceRoleClient>,
+  token: string
+): Promise<string | null> {
+  const { data: profiles } = await supabase
+    .from("profiles")
+    .select("id")
+    .ilike("id", `${token}%`)
+    .limit(1);
+  return profiles?.[0]?.id ?? null;
+}
+
+/** Inline recalculation using the service role client. */
 async function recalculateForUserServiceRole(
   supabase: ReturnType<typeof createServiceRoleClient>,
   userId: string
@@ -87,7 +65,6 @@ async function recalculateForUserServiceRole(
     .eq("user_id", userId);
 
   const allEvents = (events ?? []) as Event[];
-
   const eventNames = [
     ...new Set(
       allEvents
@@ -105,9 +82,8 @@ async function recalculateForUserServiceRole(
 
   const calibrated = calibrateCoefficients(allEvents);
   const today = new Date().toISOString().split("T")[0];
-  const upcomingEvents = allEvents.filter((e) => e.event_date >= today && e.booked);
-
-  for (const event of upcomingEvents) {
+  const upcoming = allEvents.filter((e) => e.event_date >= today && e.booked);
+  for (const event of upcoming) {
     const result = calculateForecast(event, allEvents, { calibratedCoefficients: calibrated });
     if (result) {
       await supabase
@@ -119,50 +95,39 @@ async function recalculateForUserServiceRole(
 }
 
 export async function POST(request: Request) {
-  // Always return 200 to prevent Resend retries, even on errors.
   try {
-    // Clone so we can read body for both signature check and parsing
-    const cloned = request.clone();
-
-    if (!verifyWebhookSignature(cloned)) {
-      console.warn("[toast/inbound] Webhook signature verification failed");
-      return NextResponse.json({ ok: false, reason: "invalid_signature" }, { status: 200 });
-    }
-
     const payload = await request.json() as {
-      to?: string[];
+      to?: string | string[];
       from?: string;
       subject?: string;
       text?: string;
-      html?: string;
     };
 
-    const { from = "", subject = "", text = "" } = payload;
+    const { to = [], from = "", subject = "", text = "" } = payload;
+    const toAddresses = Array.isArray(to) ? to : [to];
 
-    // --- Verify sender is Toast ---
+    // Verify sender is Toast
     if (!from.toLowerCase().includes("toasttab.com")) {
       console.log(`[toast/inbound] Ignoring non-Toast email from: ${from}`);
       return NextResponse.json({ ok: true, reason: "not_toast" }, { status: 200 });
     }
 
-    // --- Identify user by their forwarding email address ---
-    // When a user forwards email from Gmail, "from" is their own email address.
-    // We look them up in Supabase Auth to get their user ID.
+    // Extract token from to address
+    const token = toAddresses.map(extractToken).find(Boolean) ?? null;
+    if (!token) {
+      console.warn(`[toast/inbound] No plus-tag token found in: ${JSON.stringify(toAddresses)}`);
+      return NextResponse.json({ ok: false, reason: "no_token" }, { status: 200 });
+    }
+
+    // Find user by token (first 8 chars of their UUID)
     const supabase = createServiceRoleClient();
-    const forwarderEmail = extractEmail(from);
-
-    // Re-check: if from is still toasttab.com it means no forward happened (direct send test)
-    // In that case we can't identify the user — skip gracefully
-    const userId = forwarderEmail.includes("toasttab.com")
-      ? null
-      : await findUserByEmail(supabase, forwarderEmail);
-
+    const userId = await findUserByToken(supabase, token);
     if (!userId) {
-      console.warn(`[toast/inbound] Could not find user for email: ${forwarderEmail}`);
+      console.warn(`[toast/inbound] No user found for token: ${token}`);
       return NextResponse.json({ ok: false, reason: "user_not_found" }, { status: 200 });
     }
 
-    // --- Parse the email ---
+    // Parse the email
     const rawText = [subject, text].filter(Boolean).join("\n");
     let parsed: { date: string; netSales: number; rawSubject: string };
     try {
@@ -172,7 +137,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ ok: false, reason: "parse_failed" }, { status: 200 });
     }
 
-    // --- Find booked events on that date for this user ---
+    // Find booked events on that date
     const { data: matchedEvents, error: eventsError } = await supabase
       .from("events")
       .select("id, event_name, user_id")
@@ -181,25 +146,22 @@ export async function POST(request: Request) {
       .eq("booked", true);
 
     if (eventsError) {
-      console.error(`[toast/inbound] DB error looking up events for user ${userId}:`, eventsError);
+      console.error(`[toast/inbound] DB error for user ${userId}:`, eventsError);
       return NextResponse.json({ ok: false, reason: "db_error" }, { status: 200 });
     }
 
     if (!matchedEvents || matchedEvents.length === 0) {
-      console.log(`[toast/inbound] No booked events found for user ${userId} on ${parsed.date} — skipping`);
+      console.log(`[toast/inbound] No booked events for user ${userId} on ${parsed.date}`);
       return NextResponse.json({ ok: true, reason: "no_event_match", date: parsed.date }, { status: 200 });
     }
 
     if (matchedEvents.length > 1) {
-      console.log(
-        `[toast/inbound] Ambiguous: ${matchedEvents.length} booked events for user ${userId} on ${parsed.date} — skipping`
-      );
-      return NextResponse.json({ ok: true, reason: "ambiguous_match", count: matchedEvents.length }, { status: 200 });
+      console.log(`[toast/inbound] Ambiguous: ${matchedEvents.length} events for user ${userId} on ${parsed.date}`);
+      return NextResponse.json({ ok: true, reason: "ambiguous_match" }, { status: 200 });
     }
 
-    // Exactly one match — auto-sync
+    // Exactly one match — sync it
     const event = matchedEvents[0];
-
     const { error: updateError } = await supabase
       .from("events")
       .update({ net_sales: parsed.netSales, pos_source: "toast" })
@@ -207,11 +169,10 @@ export async function POST(request: Request) {
       .eq("user_id", userId);
 
     if (updateError) {
-      console.error(`[toast/inbound] Failed to update event ${event.id}:`, updateError);
+      console.error(`[toast/inbound] Update failed for event ${event.id}:`, updateError);
       return NextResponse.json({ ok: false, reason: "update_failed" }, { status: 200 });
     }
 
-    // Update pos_connections sync metadata
     await supabase
       .from("pos_connections")
       .update({
@@ -222,20 +183,15 @@ export async function POST(request: Request) {
       .eq("user_id", userId)
       .eq("provider", "toast");
 
-    // Recalculate event performance
     await recalculateForUserServiceRole(supabase, userId);
 
-    console.log(
-      `[toast/inbound] Synced $${parsed.netSales} to event "${event.event_name}" (${event.id}) for user ${userId}`
-    );
-
+    console.log(`[toast/inbound] Synced $${parsed.netSales} to "${event.event_name}" for user ${userId}`);
     return NextResponse.json(
       { ok: true, eventId: event.id, eventName: event.event_name, netSales: parsed.netSales },
       { status: 200 }
     );
   } catch (err) {
     console.error("[toast/inbound] Unexpected error:", err);
-    // Still return 200 to prevent Resend retries
     return NextResponse.json({ ok: false, reason: "internal_error" }, { status: 200 });
   }
 }
