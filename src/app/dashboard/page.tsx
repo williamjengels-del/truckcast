@@ -19,6 +19,8 @@ import {
 } from "lucide-react";
 import { DashboardCharts } from "./dashboard-charts";
 import { SetupProgress } from "@/components/setup-progress";
+import { JourneyCallout } from "@/components/journey-callout";
+import { computeJourneyState } from "@/lib/user-journey";
 import type { Event } from "@/lib/database.types";
 
 function formatCurrency(val: number): string {
@@ -66,6 +68,16 @@ export default async function DashboardPage() {
     (e) => e.event_date <= today && e.net_sales !== null && e.net_sales > 0
   );
   const has10Events = events.length >= 10;
+
+  // Journey state
+  const journeyContext = computeJourneyState(
+    events.map((e) => ({
+      booked: e.booked,
+      net_sales: e.net_sales,
+      event_date: e.event_date,
+    })),
+    posConnected
+  );
 
   // KPI calculations
   const bookedEvents = events.filter((e) => e.booked);
@@ -193,7 +205,10 @@ export default async function DashboardPage() {
         hasSales={hasSales}
         hasPOS={posConnected}
         has10Events={has10Events}
+        journeyContext={journeyContext}
       />
+
+      <JourneyCallout journeyContext={journeyContext} />
 
       {unloggedEvents.length > 0 && (
         <div className="rounded-lg border border-amber-200 bg-amber-50 dark:border-amber-900/50 dark:bg-amber-950/20 p-4 space-y-3">

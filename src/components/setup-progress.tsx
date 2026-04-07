@@ -4,12 +4,14 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { CheckCircle, Circle, X } from "lucide-react";
+import type { JourneyContext } from "@/lib/user-journey";
 
 interface SetupProgressProps {
   hasEvents: boolean;
   hasSales: boolean;
   hasPOS: boolean;
   has10Events: boolean;
+  journeyContext?: JourneyContext;
 }
 
 const STORAGE_KEY = "setup_dismissed";
@@ -27,6 +29,7 @@ export function SetupProgress({
   hasSales,
   hasPOS,
   has10Events,
+  journeyContext,
 }: SetupProgressProps) {
   const [dismissed, setDismissed] = useState(false);
   const [mounted, setMounted] = useState(false);
@@ -71,6 +74,17 @@ export function SetupProgress({
       actionLabel: "Import CSV",
       actionHref: "/dashboard/events/import",
     },
+    ...(journeyContext !== undefined
+      ? [
+          {
+            label: `Reach 10 events with sales (${Math.min(journeyContext.eventsWithSales, 10)}/10)`,
+            done: journeyContext.eventsWithSales >= 10,
+            actionLabel: "Log sales",
+            actionHref: "/dashboard/events",
+            description: "Forecast confidence rises sharply at 10 logged events",
+          } satisfies ChecklistItem,
+        ]
+      : []),
   ];
 
   const completedCount = items.filter((i) => i.done).length;

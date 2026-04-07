@@ -43,7 +43,7 @@ describe("calculateEventPerformance", () => {
 
   it("excludes disrupted events from sales stats but counts them in times_booked", () => {
     const events = [
-      makeEvent({ id: "e1", event_date: "2025-06-01", net_sales: 1000, anomaly_flag: null }),
+      makeEvent({ id: "e1", event_date: "2025-06-01", net_sales: 1000 }),
       makeEvent({ id: "e2", event_date: "2025-07-01", net_sales: 500, anomaly_flag: "disrupted" }),
     ];
     const result = calculateEventPerformance("Farmers Market", "user-1", events);
