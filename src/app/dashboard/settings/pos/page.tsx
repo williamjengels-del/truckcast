@@ -32,6 +32,7 @@ export default function PosSettingsPage() {
 function PosSettingsContent() {
   const [connections, setConnections] = useState<PosConnection[]>([]);
   const [profile, setProfile] = useState<Profile | null>(null);
+  const [userId, setUserId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState<PosProvider | null>(null);
   const [disconnecting, setDisconnecting] = useState<PosProvider | null>(null);
@@ -49,6 +50,8 @@ function PosSettingsContent() {
       data: { user },
     } = await supabase.auth.getUser();
     if (!user) return;
+
+    setUserId(user.id);
 
     const [{ data: profileData }, { data: connectionsData }] =
       await Promise.all([
@@ -230,6 +233,7 @@ function PosSettingsContent() {
       <ToastCard
         connection={getConnection("toast")}
         isPro={isPro}
+        userId={userId}
         onRefresh={loadData}
         onDisconnect={() => handleDisconnect("toast")}
         disconnecting={disconnecting === "toast"}
@@ -398,12 +402,14 @@ interface MatchedEvent {
 function ToastCard({
   connection,
   isPro,
+  userId,
   onRefresh,
   onDisconnect,
   disconnecting,
 }: {
   connection: PosConnection | undefined;
   isPro: boolean;
+  userId: string | null;
   onRefresh: () => void;
   onDisconnect: () => void;
   disconnecting: boolean;
@@ -411,6 +417,7 @@ function ToastCard({
   const isConnected = !!connection;
   const [showSetup, setShowSetup] = useState(false);
   const [showImport, setShowImport] = useState(false);
+  const [showGuide, setShowGuide] = useState(false);
   const [businessName, setBusinessName] = useState("");
   const [connecting, setConnecting] = useState(false);
   const [emailContent, setEmailContent] = useState("");
@@ -425,6 +432,17 @@ function ToastCard({
   const [importing, setImporting] = useState(false);
   const [parseError, setParseError] = useState<string | null>(null);
   const [importSuccess, setImportSuccess] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
+
+  const syncAddress = userId ? `sync+${userId}@vendcast.co` : null;
+
+  function handleCopy() {
+    if (!syncAddress) return;
+    navigator.clipboard.writeText(syncAddress).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    });
+  }
 
   async function handleConnect() {
     setConnecting(true);
@@ -518,11 +536,118 @@ function ToastCard({
       </CardHeader>
       <CardContent className="space-y-4">
         <p className="text-sm text-muted-foreground">
-          Toast&apos;s API is partner-locked. Instead, paste your daily Toast summary
-          email to import sales data. Toast sends these automatically after each
-          service.
+          Toast&apos;s API is partner-locked. Set up automatic email forwarding to
+          sync your daily Toast summary emails hands-free, or paste them manually
+          below.
         </p>
 
+        {/* Auto-sync section — visible once connected */}
+        {isConnected && (
+          <div className="rounded-md border p-4 space-y-3">
+            {/* Status indicator */}
+            <div className="flex items-center gap-2">
+              <span
+                className={`inline-block h-2 w-2 rounded-full ${
+                  connection.last_sync_status === "success" || connection.sync_enabled
+                    ? "bg-green-500"
+                    : "bg-muted-foreground"
+                }`}
+              />
+              <span className="text-sm font-medium">
+                {connection.last_sync_status === "success" || connection.sync_enabled
+                  ? "Auto-sync active"
+                  : "Not configured"}
+              </span>
+            </div>
+
+            {/* Unique sync address */}
+            <div className="space-y-1">
+              <p className="text-sm font-medium">Your unique sync address</p>
+              <p className="text-xs text-muted-foreground">
+                Forward Toast daily summary emails to this address and they will sync
+                automatically within minutes.
+              </p>
+              <div className="flex items-center gap-2 mt-1">
+                <code className="flex-1 rounded bg-muted px-3 py-2 text-xs font-mono break-all">
+                  {syncAddress ?? "Loading..."}
+                </code>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={handleCopy}
+                  disabled={!syncAddress}
+                >
+                  {copied ? "Copied!" : "Copy"}
+                </Button>
+              </div>
+            </div>
+
+            {/* Collapsible setup guide */}
+            <div>
+              <button
+                type="button"
+                className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground transition-colors"
+                onClick={() => setShowGuide((v) => !v)}
+              >
+                <span>{showGuide ? "▾" : "▸"}</span>
+                <span>How to set up email forwarding</span>
+              </button>
+
+              {showGuide && (
+                <div className="mt-3 space-y-4">
+                  {/* Gmail instructions */}
+                  <div className="space-y-2">
+                    <p className="text-sm font-medium">Gmail</p>
+                    <ol className="space-y-1 text-sm text-muted-foreground list-decimal list-inside">
+                      <li>Copy your unique sync address above.</li>
+                      <li>
+                        Open Gmail → click the gear icon → <strong>See all settings</strong> →{" "}
+                        <strong>Filters and Blocked Addresses</strong> →{" "}
+                        <strong>Create a new filter</strong>.
+                      </li>
+                      <li>
+                        In the <strong>From</strong> field enter:{" "}
+                        <code className="font-mono text-xs bg-muted px-1 py-0.5 rounded">
+                          no-reply@toasttab.com
+                        </code>{" "}
+                        → click <strong>Create filter</strong>.
+                      </li>
+                      <li>
+                        Check <strong>Forward it to</strong> and paste your sync address →
+                        click <strong>Create filter</strong>.
+                      </li>
+                      <li>Done! Future Toast daily summaries will sync automatically.</li>
+                    </ol>
+                  </div>
+
+                  {/* Outlook instructions */}
+                  <div className="space-y-2">
+                    <p className="text-sm font-medium">Outlook</p>
+                    <ol className="space-y-1 text-sm text-muted-foreground list-decimal list-inside">
+                      <li>Copy your unique sync address above.</li>
+                      <li>
+                        Go to <strong>Settings</strong> → <strong>Rules</strong> →{" "}
+                        <strong>New Rule</strong>.
+                      </li>
+                      <li>
+                        Set condition: <strong>From</strong>{" "}
+                        <code className="font-mono text-xs bg-muted px-1 py-0.5 rounded">
+                          no-reply@toasttab.com
+                        </code>.
+                      </li>
+                      <li>
+                        Set action: <strong>Forward to</strong> → paste your sync address.
+                      </li>
+                      <li>Save the rule. Future Toast summaries will sync automatically.</li>
+                    </ol>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Pre-connection setup form */}
         {!isConnected && !showSetup && (
           <Button onClick={() => setShowSetup(true)} disabled={!isPro}>
             {isPro ? "Set Up Toast" : "Requires Pro Plan"}
@@ -558,6 +683,7 @@ function ToastCard({
 
         {isConnected && (
           <>
+            {/* Last sync metadata */}
             <div className="rounded-md bg-muted p-3 space-y-1 text-sm">
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Business name</span>
@@ -587,111 +713,119 @@ function ToastCard({
               </div>
             </div>
 
-            {!showImport && (
-              <Button onClick={() => { setShowImport(true); setImportSuccess(null); }}>
-                Import from Toast Email
-              </Button>
-            )}
+            {/* Manual paste fallback */}
+            <div className="space-y-2">
+              <p className="text-sm font-medium text-muted-foreground">Or paste manually</p>
 
-            {importSuccess && (
-              <p className="text-sm text-green-700 dark:text-green-400">{importSuccess}</p>
-            )}
+              {!showImport && (
+                <Button
+                  variant="outline"
+                  onClick={() => { setShowImport(true); setImportSuccess(null); }}
+                >
+                  Import from Toast Email
+                </Button>
+              )}
 
-            {showImport && (
-              <div className="space-y-4 rounded-md border p-4">
-                <div className="space-y-1">
-                  <Label htmlFor="toast-email">Paste your Toast daily summary email</Label>
-                  <p className="text-xs text-muted-foreground">
-                    Include the subject line. Example subject:{" "}
-                    <span className="font-mono">
-                      Wok-O Taco - Saturday, April 5, 2025
-                    </span>
-                  </p>
-                  <textarea
-                    id="toast-email"
-                    className="w-full min-h-[160px] rounded-md border border-input bg-background px-3 py-2 text-sm font-mono resize-y focus:outline-none focus:ring-2 focus:ring-ring"
-                    placeholder={"Subject: Wok-O Taco - Saturday, April 5, 2025\n\n...\nTotal Net Sales  $1,234.56\n..."}
-                    value={emailContent}
-                    onChange={(e) => setEmailContent(e.target.value)}
-                  />
-                </div>
+              {importSuccess && (
+                <p className="text-sm text-green-700 dark:text-green-400">{importSuccess}</p>
+              )}
 
-                {parseError && (
-                  <p className="text-sm text-destructive">{parseError}</p>
-                )}
-
-                {!parsed && (
-                  <div className="flex gap-2">
-                    <Button onClick={handleParse} disabled={parsing || !emailContent.trim()}>
-                      {parsing ? "Parsing..." : "Parse Email"}
-                    </Button>
-                    <Button variant="outline" onClick={() => { setShowImport(false); setParseError(null); setEmailContent(""); }}>
-                      Cancel
-                    </Button>
+              {showImport && (
+                <div className="space-y-4 rounded-md border p-4">
+                  <div className="space-y-1">
+                    <Label htmlFor="toast-email">Paste your Toast daily summary email</Label>
+                    <p className="text-xs text-muted-foreground">
+                      Include the subject line. Example subject:{" "}
+                      <span className="font-mono">
+                        Wok-O Taco - Saturday, April 5, 2025
+                      </span>
+                    </p>
+                    <textarea
+                      id="toast-email"
+                      className="w-full min-h-[160px] rounded-md border border-input bg-background px-3 py-2 text-sm font-mono resize-y focus:outline-none focus:ring-2 focus:ring-ring"
+                      placeholder={"Subject: Wok-O Taco - Saturday, April 5, 2025\n\n...\nTotal Net Sales  $1,234.56\n..."}
+                      value={emailContent}
+                      onChange={(e) => setEmailContent(e.target.value)}
+                    />
                   </div>
-                )}
 
-                {parsed && (
-                  <div className="space-y-3">
-                    <div className="rounded-md bg-muted p-3 space-y-1 text-sm">
-                      <div className="flex justify-between">
-                        <span className="text-muted-foreground">Date</span>
-                        <span className="font-medium">{parsed.date}</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span className="text-muted-foreground">Net Sales</span>
-                        <span className="font-medium text-green-700 dark:text-green-400">
-                          ${parsed.netSales.toFixed(2)}
-                        </span>
-                      </div>
-                    </div>
+                  {parseError && (
+                    <p className="text-sm text-destructive">{parseError}</p>
+                  )}
 
-                    {parsed.matchedEvents.length === 0 && (
-                      <p className="text-sm text-amber-700 dark:text-amber-400">
-                        No booked event found on {parsed.date}. Create or book an event for that date first.
-                      </p>
-                    )}
-
-                    {parsed.matchedEvents.length > 0 && (
-                      <div className="space-y-1">
-                        <Label htmlFor="toast-event-select">Apply to event</Label>
-                        <select
-                          id="toast-event-select"
-                          className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-                          value={selectedEventId}
-                          onChange={(e) => setSelectedEventId(e.target.value)}
-                        >
-                          <option value="">Select an event...</option>
-                          {parsed.matchedEvents.map((ev) => (
-                            <option key={ev.id} value={ev.id}>
-                              {ev.event_name}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-                    )}
-
+                  {!parsed && (
                     <div className="flex gap-2">
-                      <Button
-                        onClick={handleImport}
-                        disabled={importing || !selectedEventId}
-                      >
-                        {importing ? "Importing..." : "Import Sales"}
+                      <Button onClick={handleParse} disabled={parsing || !emailContent.trim()}>
+                        {parsing ? "Parsing..." : "Parse Email"}
                       </Button>
-                      <Button
-                        variant="outline"
-                        onClick={() => { setParsed(null); setEmailContent(""); setParseError(null); }}
-                      >
-                        Re-paste
-                      </Button>
-                      <Button variant="ghost" onClick={() => { setShowImport(false); setParsed(null); setEmailContent(""); }}>
+                      <Button variant="outline" onClick={() => { setShowImport(false); setParseError(null); setEmailContent(""); }}>
                         Cancel
                       </Button>
                     </div>
-                  </div>
-                )}
-              </div>
-            )}
+                  )}
+
+                  {parsed && (
+                    <div className="space-y-3">
+                      <div className="rounded-md bg-muted p-3 space-y-1 text-sm">
+                        <div className="flex justify-between">
+                          <span className="text-muted-foreground">Date</span>
+                          <span className="font-medium">{parsed.date}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-muted-foreground">Net Sales</span>
+                          <span className="font-medium text-green-700 dark:text-green-400">
+                            ${parsed.netSales.toFixed(2)}
+                          </span>
+                        </div>
+                      </div>
+
+                      {parsed.matchedEvents.length === 0 && (
+                        <p className="text-sm text-amber-700 dark:text-amber-400">
+                          No booked event found on {parsed.date}. Create or book an event for that date first.
+                        </p>
+                      )}
+
+                      {parsed.matchedEvents.length > 0 && (
+                        <div className="space-y-1">
+                          <Label htmlFor="toast-event-select">Apply to event</Label>
+                          <select
+                            id="toast-event-select"
+                            className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                            value={selectedEventId}
+                            onChange={(e) => setSelectedEventId(e.target.value)}
+                          >
+                            <option value="">Select an event...</option>
+                            {parsed.matchedEvents.map((ev) => (
+                              <option key={ev.id} value={ev.id}>
+                                {ev.event_name}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                      )}
+
+                      <div className="flex gap-2">
+                        <Button
+                          onClick={handleImport}
+                          disabled={importing || !selectedEventId}
+                        >
+                          {importing ? "Importing..." : "Import Sales"}
+                        </Button>
+                        <Button
+                          variant="outline"
+                          onClick={() => { setParsed(null); setEmailContent(""); setParseError(null); }}
+                        >
+                          Re-paste
+                        </Button>
+                        <Button variant="ghost" onClick={() => { setShowImport(false); setParsed(null); setEmailContent(""); }}>
+                          Cancel
+                        </Button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
           </>
         )}
       </CardContent>
