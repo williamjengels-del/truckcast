@@ -5,22 +5,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils";
-import {
-  LayoutDashboard,
-  Calendar,
-  BarChart3,
-  TrendingUp,
-  CloudSun,
-  Settings,
-  LogOut,
-  TruckIcon,
-  Users,
-  FileText,
-  Upload,
-  Bell,
-  Menu,
-  BookOpen,
-} from "lucide-react";
+import { LogOut, TruckIcon, Menu } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Sheet,
@@ -29,28 +14,8 @@ import {
   SheetTitle,
   SheetTrigger,
 } from "@/components/ui/sheet";
+import { navItems } from "@/lib/nav-items";
 import type { SubscriptionTier } from "@/lib/database.types";
-
-interface NavItem {
-  href: string;
-  label: string;
-  icon: typeof LayoutDashboard;
-  tier?: SubscriptionTier;
-}
-
-const navItems: NavItem[] = [
-  { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
-  { href: "/dashboard/analytics", label: "Analytics", icon: TrendingUp, tier: "premium" },
-  { href: "/dashboard/events", label: "Events", icon: Calendar },
-  { href: "/dashboard/performance", label: "Performance", icon: BarChart3 },
-  { href: "/dashboard/forecasts", label: "Forecasts", icon: CloudSun },
-  { href: "/dashboard/events/import", label: "Import CSV", icon: Upload },
-  { href: "/dashboard/contacts", label: "Contacts", icon: Users },
-  { href: "/dashboard/reports", label: "Reports", icon: FileText },
-  { href: "/dashboard/followers", label: "Followers", icon: Bell, tier: "premium" },
-  { href: "/dashboard/bookings", label: "Bookings", icon: BookOpen },
-  { href: "/dashboard/settings", label: "Settings", icon: Settings },
-];
 
 export function MobileNav() {
   const [open, setOpen] = useState(false);
@@ -72,6 +37,7 @@ export function MobileNav() {
           .select("id", { count: "exact", head: true })
           .eq("user_id", user.id)
           .eq("booked", true)
+          .neq("fee_type", "pre_settled")
           .lt("event_date", new Date().toISOString().split("T")[0])
           .or("net_sales.is.null,net_sales.eq.0"),
       ]);
@@ -108,7 +74,7 @@ export function MobileNav() {
           <SheetTitle className="text-xl font-bold">TruckCast</SheetTitle>
         </SheetHeader>
 
-        <nav className="flex-1 px-3 py-4 space-y-1">
+        <nav className="flex-1 overflow-y-auto px-3 py-4 space-y-1">
           {navItems
             .filter((item) => !item.tier || item.tier === tier)
             .map((item) => {

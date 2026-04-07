@@ -5,46 +5,10 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils";
-import {
-  LayoutDashboard,
-  Calendar,
-  BarChart3,
-  TrendingUp,
-  CloudSun,
-  Settings,
-  LogOut,
-  TruckIcon,
-  Users,
-  FileText,
-  Upload,
-  Bell,
-  BookOpen,
-  Plug,
-} from "lucide-react";
+import { LogOut, TruckIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { navItems } from "@/lib/nav-items";
 import type { SubscriptionTier } from "@/lib/database.types";
-
-interface NavItem {
-  href: string;
-  label: string;
-  icon: typeof LayoutDashboard;
-  tier?: SubscriptionTier;
-}
-
-const navItems: NavItem[] = [
-  { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
-  { href: "/dashboard/events", label: "Events", icon: Calendar },
-  { href: "/dashboard/forecasts", label: "Forecasts", icon: CloudSun },
-  { href: "/dashboard/performance", label: "Performance", icon: BarChart3 },
-  { href: "/dashboard/analytics", label: "Analytics", icon: TrendingUp },
-  { href: "/dashboard/reports", label: "Reports", icon: FileText },
-  { href: "/dashboard/bookings", label: "Bookings", icon: BookOpen },
-  { href: "/dashboard/contacts", label: "Contacts", icon: Users },
-  { href: "/dashboard/followers", label: "Followers", icon: Bell, tier: "premium" },
-  { href: "/dashboard/events/import", label: "Import CSV", icon: Upload },
-  { href: "/dashboard/settings/pos", label: "POS Integrations", icon: Plug },
-  { href: "/dashboard/settings", label: "Settings", icon: Settings },
-];
 
 export function Sidebar() {
   const pathname = usePathname();
