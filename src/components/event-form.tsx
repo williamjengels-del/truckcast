@@ -54,6 +54,7 @@ export function EventForm({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isPrivate, setIsPrivate] = useState<boolean>(initialData?.is_private ?? false);
+  const [bookedValue, setBookedValue] = useState<string>(initialData?.booked === false ? "false" : "true");
   const [feeType, setFeeType] = useState<string>(initialData?.fee_type ?? "none");
   const [feeRate, setFeeRate] = useState<number | "">(initialData?.fee_rate ?? "");
   const [salesMinimum, setSalesMinimum] = useState<number | "">(initialData?.sales_minimum ?? "");
@@ -274,12 +275,11 @@ export function EventForm({
                 <Label htmlFor="booked">Status</Label>
                 <Select
                   name="booked"
-                  defaultValue={
-                    initialData?.booked === false ? "false" : "true"
-                  }
+                  value={bookedValue}
+                  onValueChange={(v) => setBookedValue(v ?? "true")}
                 >
                   <SelectTrigger>
-                    <SelectValue placeholder="Select status" />
+                    <SelectValue>{bookedValue === "true" ? "Booked" : "Not Booked"}</SelectValue>
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="true">Booked</SelectItem>

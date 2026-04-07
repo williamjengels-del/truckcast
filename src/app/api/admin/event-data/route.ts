@@ -31,6 +31,7 @@ export async function GET(req: NextRequest) {
   const search = searchParams.get("q") ?? "";
   const businessSearch = searchParams.get("business") ?? "";
   const filterEventType = searchParams.get("event_type") ?? "";
+  const filterBooked = searchParams.get("booked") ?? "";
   const sortField = (searchParams.get("sort") ?? "business") as SortField;
   const sortDir = (searchParams.get("dir") ?? "asc") as SortDir;
 
@@ -60,7 +61,7 @@ export async function GET(req: NextRequest) {
   // Fetch ALL matching events (no range — we sort after enrichment then paginate)
   let eventsQuery = service
     .from("events")
-    .select("id, user_id, event_name, event_date, event_type, location, city, net_sales, fee_type, fee_rate, event_weather, anomaly_flag, event_tier, notes")
+    .select("id, user_id, event_name, event_date, event_type, location, city, net_sales, fee_type, fee_rate, event_weather, anomaly_flag, event_tier, notes, booked, expected_attendance")
     .in("user_id", userIds);
 
   if (search) {
@@ -68,6 +69,11 @@ export async function GET(req: NextRequest) {
   }
   if (filterEventType) {
     eventsQuery = eventsQuery.eq("event_type", filterEventType);
+  }
+  if (filterBooked === "booked") {
+    eventsQuery = eventsQuery.eq("booked", true);
+  } else if (filterBooked === "unbooked") {
+    eventsQuery = eventsQuery.eq("booked", false);
   }
 
   const { data: events } = await eventsQuery;
@@ -79,6 +85,8 @@ export async function GET(req: NextRequest) {
     business_name: profileMap[e.user_id]?.business_name ?? "Unknown",
     business_city: profileMap[e.user_id]?.city ?? null,
     data_sharing_enabled: profileMap[e.user_id]?.data_sharing_enabled ?? true,
+    booked: e.booked ?? null,
+    expected_attendance: e.expected_attendance ?? null,
   }));
 
   // Sort — primary sort by chosen field, secondary always city then business then date

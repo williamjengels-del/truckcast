@@ -448,13 +448,22 @@ export default async function AnalyticsPage({ searchParams }: PageProps) {
 
       {!hasData ? (
         <Card>
-          <CardContent className="py-16 text-center">
-            <p className="text-muted-foreground text-lg">
-              No event data yet.
-            </p>
-            <p className="text-muted-foreground text-sm mt-2">
-              Add events and record sales to see your analytics here.
-            </p>
+          <CardContent className="py-14 text-center space-y-4">
+            <TrendingUp className="h-12 w-12 mx-auto text-muted-foreground/30" />
+            <div>
+              <p className="font-medium">No sales data yet</p>
+              <p className="text-muted-foreground text-sm mt-1 max-w-xs mx-auto">
+                Analytics show revenue trends, top event types, and day-of-week performance — once you have events with sales logged.
+              </p>
+            </div>
+            <div className="flex gap-2 justify-center">
+              <a href="/dashboard/events/import" className="inline-flex items-center gap-1.5 rounded-md bg-primary text-primary-foreground px-3 py-1.5 text-sm font-medium hover:bg-primary/90 transition-colors">
+                Import your events →
+              </a>
+              <a href="/dashboard/events?new=true" className="inline-flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-sm font-medium hover:bg-muted transition-colors">
+                Add manually
+              </a>
+            </div>
           </CardContent>
         </Card>
       ) : (

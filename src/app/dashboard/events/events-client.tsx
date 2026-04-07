@@ -244,7 +244,11 @@ export function EventsClient({ initialEvents, userId = "", businessName = "", us
   const unbookedEvents = initialEvents.filter((e) => e.event_date >= today && !e.booked);
   const pastEvents = initialEvents.filter((e) => e.event_date < today);
   const flaggedEvents = initialEvents.filter(
-    (e) => e.event_date < today && e.booked && (e.net_sales === null || e.net_sales === 0)
+    (e) =>
+      e.event_date < today &&
+      e.booked &&
+      (e.net_sales === null || e.net_sales === 0) &&
+      e.fee_type !== "pre_settled" // pre-settled events already have guaranteed payment captured in fee_rate
   );
 
   const activeEvents =

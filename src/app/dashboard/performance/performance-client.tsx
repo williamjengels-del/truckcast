@@ -198,9 +198,22 @@ export function PerformanceClient({ performances }: PerformanceClientProps) {
         </CardHeader>
         <CardContent>
           {performances.length === 0 ? (
-            <div className="h-32 flex items-center justify-center text-muted-foreground">
-              Performance data will appear once you have events with sales
-              recorded. Add events and enter sales to see stats here.
+            <div className="py-14 text-center space-y-4">
+              <BarChart3 className="h-12 w-12 mx-auto text-muted-foreground/30" />
+              <div>
+                <p className="font-medium text-sm">No performance data yet</p>
+                <p className="text-muted-foreground text-xs mt-1 max-w-xs mx-auto">
+                  Once you have recurring events with sales logged, TruckCast shows avg revenue, consistency scores, and trends per event.
+                </p>
+              </div>
+              <div className="flex gap-2 justify-center">
+                <a href="/dashboard/events/import" className="inline-flex items-center gap-1.5 rounded-md bg-primary text-primary-foreground px-3 py-1.5 text-xs font-medium hover:bg-primary/90 transition-colors">
+                  Import events →
+                </a>
+                <a href="/dashboard/events" className="inline-flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-xs font-medium hover:bg-muted transition-colors">
+                  Log sales
+                </a>
+              </div>
             </div>
           ) : (
             <div className="overflow-x-auto">

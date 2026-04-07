@@ -28,6 +28,9 @@ interface AdminUser {
   data_sharing_enabled: boolean;
   onboarding_completed: boolean;
   event_count: number;
+  booked_count: number;
+  sales_count: number;
+  last_event_date: string | null;
   created_at: string;
 }
 
@@ -166,7 +169,10 @@ export default function AdminUsersPage() {
                   <th className="text-left p-3 font-medium">Business</th>
                   <th className="text-left p-3 font-medium">Email</th>
                   <th className="text-left p-3 font-medium">Location</th>
-                  <th className="text-right p-3 font-medium">Events</th>
+                  <th className="text-right p-3 font-medium">Total</th>
+                  <th className="text-right p-3 font-medium">Booked</th>
+                  <th className="text-right p-3 font-medium">w/ Sales</th>
+                  <th className="text-left p-3 font-medium">Last Event</th>
                   <th className="text-left p-3 font-medium">Status</th>
                   <th className="text-left p-3 font-medium">Plan</th>
                   <th className="text-left p-3 font-medium">Joined</th>
@@ -175,9 +181,9 @@ export default function AdminUsersPage() {
               </thead>
               <tbody>
                 {loading ? (
-                  <tr><td colSpan={7} className="text-center p-8 text-muted-foreground">Loading...</td></tr>
+                  <tr><td colSpan={11} className="text-center p-8 text-muted-foreground">Loading...</td></tr>
                 ) : users.length === 0 ? (
-                  <tr><td colSpan={7} className="text-center p-8 text-muted-foreground">No users found.</td></tr>
+                  <tr><td colSpan={11} className="text-center p-8 text-muted-foreground">No users found.</td></tr>
                 ) : (
                   users.map((user) => (
                     <tr key={user.id} className="border-b last:border-0 hover:bg-muted/30">
@@ -195,6 +201,21 @@ export default function AdminUsersPage() {
                       </td>
                       <td className="p-3 text-right font-mono text-muted-foreground">
                         {user.event_count}
+                      </td>
+                      <td className="p-3 text-right font-mono">
+                        <span className={user.booked_count > 0 ? "text-green-600 font-medium" : "text-muted-foreground"}>
+                          {user.booked_count}
+                        </span>
+                      </td>
+                      <td className="p-3 text-right font-mono">
+                        <span className={user.sales_count > 0 ? "text-primary font-medium" : "text-muted-foreground"}>
+                          {user.sales_count}
+                        </span>
+                      </td>
+                      <td className="p-3 text-xs text-muted-foreground whitespace-nowrap">
+                        {user.last_event_date
+                          ? new Date(user.last_event_date + "T00:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric", year: "2-digit" })
+                          : "—"}
                       </td>
                       <td className="p-3">
                         <div className="flex items-center gap-1.5">

@@ -4,6 +4,7 @@ import { Header } from "@/components/header";
 import { FeedbackDialog } from "@/components/feedback-dialog";
 import { ErrorBoundary } from "@/components/error-boundary";
 import { TrialBanner } from "@/components/trial-banner";
+import { WelcomeTour } from "@/components/welcome-tour";
 
 export const metadata: Metadata = {
   title: {
@@ -31,6 +32,7 @@ export default function DashboardLayout({
         </main>
       </div>
       <FeedbackDialog />
+      <WelcomeTour />
     </div>
   );
 }

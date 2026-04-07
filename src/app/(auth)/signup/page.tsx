@@ -62,6 +62,15 @@ export default function SignupPage() {
       });
     }
 
+    // Fire welcome email (non-blocking — don't await so signup isn't delayed)
+    if (data.user) {
+      fetch("/api/email/welcome", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ businessName }),
+      }).catch(() => {}); // silently ignore email errors
+    }
+
     // If email confirmation is enabled
     if (data.user && !data.session) {
       setSuccess(true);

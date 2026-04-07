@@ -41,6 +41,8 @@ interface AdminEvent {
   anomaly_flag: string | null;
   event_tier: string | null;
   notes: string | null;
+  booked: boolean | null;
+  expected_attendance: number | null;
 }
 
 interface AdminProfile {
@@ -61,6 +63,7 @@ export default function AdminDataPage() {
   const [businessSearchInput, setBusinessSearchInput] = useState("");
   const [filterSharing, setFilterSharing] = useState<string>("all");
   const [filterEventType, setFilterEventType] = useState<string>("all");
+  const [filterBooked, setFilterBooked] = useState<string>("all");
   const [sortField, setSortField] = useState<string>("business");
   const [sortDir, setSortDir] = useState<string>("asc");
   const pageSize = 50;
@@ -93,6 +96,7 @@ export default function AdminDataPage() {
     if (search) params.set("q", search);
     if (businessSearch) params.set("business", businessSearch);
     if (filterEventType !== "all") params.set("event_type", filterEventType);
+    if (filterBooked !== "all") params.set("booked", filterBooked);
 
     const res = await fetch(`/api/admin/event-data?${params}`);
     if (res.ok) {
@@ -102,7 +106,7 @@ export default function AdminDataPage() {
       setTotal(data.total ?? 0);
     }
     setLoading(false);
-  }, [page, search, businessSearch, filterSharing, filterEventType, sortField, sortDir]);
+  }, [page, search, businessSearch, filterSharing, filterEventType, filterBooked, sortField, sortDir]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -124,10 +128,11 @@ export default function AdminDataPage() {
     setBusinessSearchInput("");
     setFilterSharing("all");
     setFilterEventType("all");
+    setFilterBooked("all");
     setPage(1);
   }
 
-  const hasActiveFilters = search || businessSearch || filterSharing !== "all" || filterEventType !== "all";
+  const hasActiveFilters = search || businessSearch || filterSharing !== "all" || filterEventType !== "all" || filterBooked !== "all";
 
   return (
     <div className="space-y-6">
@@ -247,6 +252,19 @@ export default function AdminDataPage() {
             </SelectContent>
           </Select>
         </div>
+        <div className="flex flex-col gap-1">
+          <label className="text-xs text-muted-foreground font-medium">Booked status</label>
+          <Select value={filterBooked} onValueChange={(v) => { if (v) { setFilterBooked(v); setPage(1); } }}>
+            <SelectTrigger className="w-36">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All events</SelectItem>
+              <SelectItem value="booked">Booked only</SelectItem>
+              <SelectItem value="unbooked">Unbooked only</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
         <div className="flex gap-2">
           <Button type="submit" size="sm" variant="outline">Search</Button>
           {hasActiveFilters && (
@@ -284,6 +302,7 @@ export default function AdminDataPage() {
                   Net Sales <SortIcon field="net_sales" />
                 </button>
               </th>
+              <th className="text-left p-3 font-medium">Booked</th>
               <th className="text-left p-3 font-medium">Weather</th>
               <th className="text-left p-3 font-medium">Sharing</th>
             </tr>
@@ -291,13 +310,13 @@ export default function AdminDataPage() {
           <tbody>
             {loading ? (
               <tr>
-                <td colSpan={8} className="text-center p-8 text-muted-foreground">
+                <td colSpan={9} className="text-center p-8 text-muted-foreground">
                   Loading...
                 </td>
               </tr>
             ) : events.length === 0 ? (
               <tr>
-                <td colSpan={8} className="text-center p-8 text-muted-foreground">
+                <td colSpan={9} className="text-center p-8 text-muted-foreground">
                   No events found.
                 </td>
               </tr>
@@ -331,6 +350,15 @@ export default function AdminDataPage() {
                     {event.net_sales != null
                       ? `$${event.net_sales.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
                       : <span className="text-muted-foreground">—</span>}
+                  </td>
+                  <td className="p-3">
+                    {event.booked === true ? (
+                      <Badge className="bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400 border-0 text-xs">Booked</Badge>
+                    ) : event.booked === false ? (
+                      <Badge variant="outline" className="text-xs text-muted-foreground">Unbooked</Badge>
+                    ) : (
+                      <span className="text-muted-foreground text-xs">—</span>
+                    )}
                   </td>
                   <td className="p-3 text-muted-foreground">
                     {event.weather_type ?? "—"}

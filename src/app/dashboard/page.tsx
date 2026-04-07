@@ -14,6 +14,8 @@ import {
   BarChart3,
   Plus,
   ClipboardList,
+  Upload,
+  ArrowRight,
 } from "lucide-react";
 import { DashboardCharts } from "./dashboard-charts";
 import { SetupProgress } from "@/components/setup-progress";
@@ -78,7 +80,11 @@ export default async function DashboardPage() {
   const avgTicket = eventsCompleted > 0 ? ytdRevenue / eventsCompleted : 0;
   // Unlogged past events — booked events in the past with no sales recorded
   const unloggedEvents = bookedEvents
-    .filter((e) => e.event_date < today && (e.net_sales === null || e.net_sales === 0))
+    .filter((e) =>
+      e.event_date < today &&
+      (e.net_sales === null || e.net_sales === 0) &&
+      e.fee_type !== "pre_settled"
+    )
     .sort((a, b) => b.event_date.localeCompare(a.event_date)); // most recent first
 
   const upcomingEvents = bookedEvents.filter((e) => e.event_date > today);
@@ -182,14 +188,12 @@ export default async function DashboardPage() {
 
   return (
     <div className="space-y-6">
-      {profile?.onboarding_completed && (
-        <SetupProgress
-          hasEvents={hasEvents}
-          hasSales={hasSales}
-          hasPOS={posConnected}
-          has10Events={has10Events}
-        />
-      )}
+      <SetupProgress
+        hasEvents={hasEvents}
+        hasSales={hasSales}
+        hasPOS={posConnected}
+        has10Events={has10Events}
+      />
 
       {unloggedEvents.length > 0 && (
         <div className="rounded-lg border border-amber-200 bg-amber-50 dark:border-amber-900/50 dark:bg-amber-950/20 p-4 space-y-3">
@@ -248,23 +252,84 @@ export default async function DashboardPage() {
       </div>
 
       {isNewUser ? (
-        <Card>
-          <CardContent className="py-16 text-center space-y-4">
-            <CalendarDays className="mx-auto h-12 w-12 text-muted-foreground/40" />
-            <div>
-              <h2 className="text-xl font-semibold mb-2">Welcome to TruckCast!</h2>
-              <p className="text-muted-foreground max-w-sm mx-auto">
-                Your dashboard will populate as you add events. Start by adding your first event to begin tracking revenue and generating forecasts.
-              </p>
+        /* ── Getting-started layout for new users ── */
+        <div className="space-y-6">
+          <div className="rounded-xl border bg-gradient-to-br from-orange-50 to-amber-50 dark:from-orange-950/20 dark:to-amber-950/10 p-6 md:p-8">
+            <h2 className="text-xl font-bold mb-1">Let&apos;s get your first forecast ready 🚚</h2>
+            <p className="text-muted-foreground text-sm mb-6">
+              Pick the fastest path to get started:
+            </p>
+            <div className="grid gap-4 sm:grid-cols-3">
+              {/* Option 1 — Import (recommended) */}
+              <Link href="/dashboard/events/import" className="group">
+                <div className="h-full rounded-xl border-2 border-primary/30 bg-card p-5 hover:border-primary hover:shadow-md transition-all">
+                  <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center mb-3">
+                    <Upload className="h-5 w-5 text-primary" />
+                  </div>
+                  <div className="flex items-center gap-1.5 mb-1">
+                    <p className="font-semibold text-sm">Import from CSV</p>
+                    <span className="text-[10px] font-bold uppercase bg-primary text-primary-foreground rounded px-1.5 py-0.5">Fastest</span>
+                  </div>
+                  <p className="text-xs text-muted-foreground leading-relaxed">
+                    Have events in Airtable, Square, or a spreadsheet? Drag in your CSV and TruckCast auto-detects the columns.
+                  </p>
+                  <p className="text-xs font-medium text-primary mt-3 flex items-center gap-1 group-hover:gap-2 transition-all">
+                    Import events <ArrowRight className="h-3.5 w-3.5" />
+                  </p>
+                </div>
+              </Link>
+
+              {/* Option 2 — Add manually */}
+              <Link href="/dashboard/events?new=true" className="group">
+                <div className="h-full rounded-xl border bg-card p-5 hover:border-primary/50 hover:shadow-md transition-all">
+                  <div className="w-10 h-10 rounded-lg bg-blue-100 dark:bg-blue-950/30 flex items-center justify-center mb-3">
+                    <Plus className="h-5 w-5 text-blue-600" />
+                  </div>
+                  <p className="font-semibold text-sm mb-1">Add an event manually</p>
+                  <p className="text-xs text-muted-foreground leading-relaxed">
+                    Add an upcoming booking or a past event one at a time. Best if you&apos;re just getting started.
+                  </p>
+                  <p className="text-xs font-medium text-primary mt-3 flex items-center gap-1 group-hover:gap-2 transition-all">
+                    Add event <ArrowRight className="h-3.5 w-3.5" />
+                  </p>
+                </div>
+              </Link>
+
+              {/* Option 3 — Forecasts preview */}
+              <Link href="/dashboard/forecasts" className="group">
+                <div className="h-full rounded-xl border bg-card p-5 hover:border-primary/50 hover:shadow-md transition-all">
+                  <div className="w-10 h-10 rounded-lg bg-indigo-100 dark:bg-indigo-950/30 flex items-center justify-center mb-3">
+                    <TrendingUp className="h-5 w-5 text-indigo-600" />
+                  </div>
+                  <p className="font-semibold text-sm mb-1">See how forecasts work</p>
+                  <p className="text-xs text-muted-foreground leading-relaxed">
+                    With 10+ past events logged, TruckCast generates revenue forecasts calibrated to your truck&apos;s history.
+                  </p>
+                  <p className="text-xs font-medium text-primary mt-3 flex items-center gap-1 group-hover:gap-2 transition-all">
+                    Explore forecasts <ArrowRight className="h-3.5 w-3.5" />
+                  </p>
+                </div>
+              </Link>
             </div>
-            <Link href="/dashboard/events?new=true">
-              <Button size="lg" className="gap-2 mt-2">
-                <Plus className="h-4 w-4" />
-                Add Your First Event
-              </Button>
-            </Link>
-          </CardContent>
-        </Card>
+          </div>
+
+          {/* Quick explainer */}
+          <div className="grid gap-3 sm:grid-cols-3 text-center">
+            {[
+              { step: "1", label: "Add your events", detail: "Past + upcoming bookings" },
+              { step: "2", label: "Log sales after each event", detail: "Keeps forecasts accurate" },
+              { step: "3", label: "Get revenue forecasts", detail: "Built from your own history" },
+            ].map((s) => (
+              <div key={s.step} className="flex flex-col items-center gap-1 p-4 rounded-lg bg-muted/40">
+                <span className="w-7 h-7 rounded-full bg-primary text-primary-foreground text-xs font-bold flex items-center justify-center">
+                  {s.step}
+                </span>
+                <p className="text-sm font-medium">{s.label}</p>
+                <p className="text-xs text-muted-foreground">{s.detail}</p>
+              </div>
+            ))}
+          </div>
+        </div>
       ) : (
         <>
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">

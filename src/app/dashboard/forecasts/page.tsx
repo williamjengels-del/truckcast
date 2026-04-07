@@ -12,9 +12,11 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { CloudSun } from "lucide-react";
+import Link from "next/link";
+import { CloudSun, Calculator } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { calculateForecast, calibrateCoefficients } from "@/lib/forecast-engine";
-import { TIER_COLORS, WEATHER_COEFFICIENTS } from "@/lib/constants";
+import { TIER_COLORS } from "@/lib/constants";
 import type { Event } from "@/lib/database.types";
 import { ForecastExplainer } from "./forecast-explainer";
 
@@ -75,17 +77,25 @@ export default async function ForecastsPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold">Forecasts</h1>
           <p className="text-muted-foreground">
             Revenue forecasts for {upcomingEvents.length} upcoming events
           </p>
         </div>
-        <Card className="px-4 py-2">
-          <div className="text-sm text-muted-foreground">Total Forecast</div>
-          <div className="text-xl font-bold">{formatCurrency(totalForecast)}</div>
-        </Card>
+        <div className="flex items-center gap-3">
+          <Link href="/dashboard/forecasts/calculator">
+            <Button variant="outline" size="sm" className="gap-1.5">
+              <Calculator className="h-4 w-4" />
+              Calculator
+            </Button>
+          </Link>
+          <Card className="px-4 py-2">
+            <div className="text-sm text-muted-foreground">Total Forecast</div>
+            <div className="text-xl font-bold">{formatCurrency(totalForecast)}</div>
+          </Card>
+        </div>
       </div>
 
       <ForecastExplainer />
@@ -99,8 +109,22 @@ export default async function ForecastsPage() {
         </CardHeader>
         <CardContent>
           {forecastDetails.length === 0 ? (
-            <div className="h-32 flex items-center justify-center text-muted-foreground">
-              No upcoming booked events. Add future events to see forecasts.
+            <div className="py-12 text-center space-y-4">
+              <CloudSun className="h-12 w-12 mx-auto text-muted-foreground/30" />
+              <div>
+                <p className="font-medium text-sm">No upcoming booked events</p>
+                <p className="text-xs text-muted-foreground mt-1 max-w-xs mx-auto">
+                  Add a future booking to see a revenue forecast. The more past events you have logged, the more accurate the forecast.
+                </p>
+              </div>
+              <div className="flex gap-2 justify-center">
+                <a href="/dashboard/events?new=true" className="inline-flex items-center gap-1.5 rounded-md bg-primary text-primary-foreground px-3 py-1.5 text-xs font-medium hover:bg-primary/90 transition-colors">
+                  Add an event →
+                </a>
+                <a href="/dashboard/events/import" className="inline-flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-xs font-medium hover:bg-muted transition-colors">
+                  Import CSV
+                </a>
+              </div>
             </div>
           ) : (
             <div className="space-y-4">

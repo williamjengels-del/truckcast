@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo, useCallback } from "react";
+import { useState, useMemo, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -514,8 +514,8 @@ function parseWithMapping(
     const rawBooked = getValue("booked", values).trim().toLowerCase();
     let booked: boolean | undefined = undefined;
     if (rawBooked) {
-      if (["yes", "true", "1", "confirmed"].includes(rawBooked)) booked = true;
-      else if (["no", "false", "0", "tentative", "unconfirmed"].includes(rawBooked)) booked = false;
+      if (["yes", "true", "1", "confirmed", "booked", "checked"].includes(rawBooked)) booked = true;
+      else if (["no", "false", "0", "tentative", "unconfirmed", "not booked", "unbooked", "pending", "maybe", "tbd"].includes(rawBooked)) booked = false;
     }
 
     // ── Event tier ──
@@ -546,8 +546,13 @@ function parseWithMapping(
     const validSalesMinimum = salesMinimum !== undefined && !isNaN(salesMinimum) ? salesMinimum : undefined;
 
     // ── Multi-day handling ──
+    // If the event spans exactly 1 day and the end time is before 6 AM, it just ran
+    // past midnight (e.g. concert ending at 1 AM) — treat as same-day, not multi-day.
+    const spanDays = endDate && eventDate ? daysBetween(eventDate, endDate) : 0;
+    const endHour = endTime ? parseInt(endTime.split(":")[0], 10) : 12;
+    const runsPastMidnight = spanDays === 1 && endHour < 6;
     const isMultiDay =
-      endDate && eventDate && endDate !== eventDate && daysBetween(eventDate, endDate) > 0;
+      endDate && eventDate && endDate !== eventDate && spanDays > 0 && !runsPastMidnight;
 
     if (isMultiDay) {
       const numDays = Math.min(daysBetween(eventDate, endDate!), 14);
@@ -624,15 +629,19 @@ export default function ImportPage() {
   const [importProgress, setImportProgress] = useState<string | null>(null);
   const [duplicates, setDuplicates] = useState<DuplicateMatch[]>([]);
   const [checkingDuplicates, setCheckingDuplicates] = useState(false);
+  const [isDragging, setIsDragging] = useState(false);
 
   const router = useRouter();
   const supabase = createClient();
+  const dragCounter = useRef(0);
 
   // ── Step 1: Upload ──
 
-  function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    if (!file) return;
+  function processFile(file: File) {
+    if (!file.name.endsWith(".csv") && file.type !== "text/csv") {
+      setImportError("Please upload a CSV file (.csv)");
+      return;
+    }
     setFileName(file.name);
 
     const reader = new FileReader();
@@ -672,6 +681,42 @@ export default function ImportPage() {
     reader.readAsText(file);
   }
 
+  function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    processFile(file);
+  }
+
+  function handleDragEnter(e: React.DragEvent) {
+    e.preventDefault();
+    e.stopPropagation();
+    dragCounter.current += 1;
+    if (e.dataTransfer.items && e.dataTransfer.items.length > 0) {
+      setIsDragging(true);
+    }
+  }
+
+  function handleDragLeave(e: React.DragEvent) {
+    e.preventDefault();
+    e.stopPropagation();
+    dragCounter.current -= 1;
+    if (dragCounter.current === 0) setIsDragging(false);
+  }
+
+  function handleDragOver(e: React.DragEvent) {
+    e.preventDefault();
+    e.stopPropagation();
+  }
+
+  function handleDrop(e: React.DragEvent) {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(false);
+    dragCounter.current = 0;
+    const file = e.dataTransfer.files?.[0];
+    if (file) processFile(file);
+  }
+
   // ── Step 2: Column mapping ──
 
   const updateMapping = useCallback(
@@ -697,7 +742,7 @@ export default function ImportPage() {
   // ── Step 3: Preview (computed from current mappings) ──
 
   const parsedRows = useMemo(() => {
-    if (step !== "preview" || dataLines.length === 0) return [];
+    if ((step !== "preview" && step !== "duplicates") || dataLines.length === 0) return [];
     return parseWithMapping(dataLines, columnMappings);
   }, [step, dataLines, columnMappings]);
 
@@ -776,7 +821,10 @@ export default function ImportPage() {
     }
 
     const validRows = parsedRows.filter((r) => r.valid);
-    if (validRows.length === 0) return;
+    if (validRows.length === 0) {
+      setImportError(`No valid rows found in parsed data (total parsed: ${parsedRows.length}). Please go back to step 1 and re-upload your file.`);
+      return;
+    }
 
     setImporting(true);
     setImportError(null);
@@ -1043,21 +1091,40 @@ export default function ImportPage() {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="border-2 border-dashed rounded-lg p-8 text-center">
-              <FileText className="h-10 w-10 mx-auto text-muted-foreground mb-4" />
-              <p className="text-sm text-muted-foreground mb-2">
-                Upload a CSV from Airtable, Square, Excel, Google Sheets, or any spreadsheet
-              </p>
-              <p className="text-xs text-muted-foreground mb-4">
-                We&apos;ll auto-detect your columns, then let you adjust the mapping
-                before importing. Any format works — you tell us what each column means.
-              </p>
-              <Input
-                type="file"
-                accept=".csv"
-                onChange={handleFileChange}
-                className="max-w-xs mx-auto"
-              />
+            <div
+              onDragEnter={handleDragEnter}
+              onDragLeave={handleDragLeave}
+              onDragOver={handleDragOver}
+              onDrop={handleDrop}
+              className={`border-2 border-dashed rounded-lg p-10 text-center transition-colors ${
+                isDragging
+                  ? "border-primary bg-primary/5"
+                  : "border-muted-foreground/25 hover:border-muted-foreground/50"
+              }`}
+            >
+              <Upload className={`h-10 w-10 mx-auto mb-4 transition-colors ${isDragging ? "text-primary" : "text-muted-foreground"}`} />
+              {isDragging ? (
+                <p className="text-sm font-medium text-primary mb-4">Drop your CSV file here</p>
+              ) : (
+                <>
+                  <p className="text-sm font-medium mb-1">
+                    Drag &amp; drop your CSV here, or click to browse
+                  </p>
+                  <p className="text-xs text-muted-foreground mb-4">
+                    Works with Airtable, Square, Excel, Google Sheets, or any spreadsheet export
+                  </p>
+                </>
+              )}
+              <label className={`inline-flex items-center gap-2 cursor-pointer px-4 py-2 rounded-md text-sm font-medium transition-colors ${isDragging ? "invisible" : "bg-primary text-primary-foreground hover:bg-primary/90"}`}>
+                <FileText className="h-4 w-4" />
+                Choose CSV file
+                <input
+                  type="file"
+                  accept=".csv"
+                  onChange={handleFileChange}
+                  className="sr-only"
+                />
+              </label>
             </div>
           </CardContent>
         </Card>
@@ -1067,14 +1134,28 @@ export default function ImportPage() {
       {step === "map" && (
         <Card>
           <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Columns className="h-5 w-5" />
-              Map Your Columns
-            </CardTitle>
-            <p className="text-sm text-muted-foreground">
-              We auto-detected what we could. Use the dropdowns to assign or change any column.
-              You need at least an <strong>Event Name</strong> and a <strong>Date</strong> (or Start/Setup Time with a date).
-            </p>
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <CardTitle className="flex items-center gap-2">
+                  <Columns className="h-5 w-5" />
+                  Map Your Columns
+                </CardTitle>
+                <p className="text-sm text-muted-foreground mt-1">
+                  We auto-detected what we could. Use the dropdowns to assign or change any column.
+                  You need at least an <strong>Event Name</strong> and a <strong>Date</strong>.
+                </p>
+              </div>
+              <div className="flex gap-2 shrink-0 mt-1">
+                <Button size="sm" variant="outline" onClick={handleReset}>
+                  <ArrowLeft className="h-3.5 w-3.5 mr-1" />
+                  Back
+                </Button>
+                <Button size="sm" disabled={!canProceed} onClick={() => setStep("preview")}>
+                  Preview
+                  <ArrowRight className="h-3.5 w-3.5 ml-1" />
+                </Button>
+              </div>
+            </div>
           </CardHeader>
           <CardContent className="space-y-4">
             {fileName && (
@@ -1188,14 +1269,33 @@ export default function ImportPage() {
       {step === "duplicates" && (
         <Card>
           <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <AlertCircle className="h-5 w-5 text-amber-500" />
-              Duplicate Detection
-            </CardTitle>
-            <p className="text-sm text-muted-foreground">
-              We found {duplicates.length} potential duplicate{duplicates.length !== 1 ? "s" : ""} (same event name + date already in your account).
-              Choose how to handle each one, then click Import.
-            </p>
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <CardTitle className="flex items-center gap-2">
+                  <AlertCircle className="h-5 w-5 text-amber-500" />
+                  Duplicate Detection
+                </CardTitle>
+                <p className="text-sm text-muted-foreground mt-1">
+                  We found {duplicates.length} potential duplicate{duplicates.length !== 1 ? "s" : ""} (same event name + date already in your account).
+                  Choose how to handle each one, then click Import.
+                </p>
+              </div>
+              {!imported && (
+                <div className="flex gap-2 shrink-0 mt-1">
+                  <Button size="sm" variant="outline" onClick={() => setStep("preview")}>
+                    <ArrowLeft className="h-3.5 w-3.5 mr-1" />
+                    Back
+                  </Button>
+                  <Button
+                    size="sm"
+                    onClick={handleImport}
+                    disabled={importing || importableCount === 0}
+                  >
+                    {importing ? "Importing..." : `Import ${importableCount}`}
+                  </Button>
+                </div>
+              )}
+            </div>
           </CardHeader>
           <CardContent className="space-y-4">
             {/* Bulk actions */}
@@ -1301,10 +1401,33 @@ export default function ImportPage() {
       {step === "preview" && (
         <Card>
           <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Eye className="h-5 w-5" />
-              Preview & Import
-            </CardTitle>
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <CardTitle className="flex items-center gap-2">
+                  <Eye className="h-5 w-5" />
+                  Preview & Import
+                </CardTitle>
+                <p className="text-sm text-muted-foreground mt-1">
+                  Review your data before importing. Valid rows are ready to go.
+                </p>
+              </div>
+              {!imported && (
+                <div className="flex gap-2 shrink-0 mt-1">
+                  <Button size="sm" variant="outline" onClick={() => setStep("map")}>
+                    <ArrowLeft className="h-3.5 w-3.5 mr-1" />
+                    Back
+                  </Button>
+                  <Button
+                    size="sm"
+                    onClick={handleCheckDuplicates}
+                    disabled={checkingDuplicates || importing || validCount === 0}
+                  >
+                    {checkingDuplicates ? "Checking..." : `Import ${validCount} Events`}
+                    <ArrowRight className="h-3.5 w-3.5 ml-1" />
+                  </Button>
+                </div>
+              )}
+            </div>
           </CardHeader>
           <CardContent className="space-y-4">
             {/* Summary badges */}

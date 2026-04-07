@@ -63,6 +63,7 @@ export function Sidebar() {
           .select("id", { count: "exact", head: true })
           .eq("user_id", user.id)
           .eq("booked", true)
+          .neq("fee_type", "pre_settled")
           .lt("event_date", new Date().toISOString().split("T")[0])
           .or("net_sales.is.null,net_sales.eq.0"),
       ]);
