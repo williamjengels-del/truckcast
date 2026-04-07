@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import PostalMime from "postal-mime";
 import { parseToastEmail } from "@/lib/pos/toast";
 import { calculateEventPerformance } from "@/lib/event-performance";
 import { calculateForecast, calibrateCoefficients } from "@/lib/forecast-engine";
@@ -12,7 +13,7 @@ import type { Event } from "@/lib/database.types";
  * email is forwarded to sync+{token}@vendcast.co.
  *
  * User identification: we extract the plus-tag token from the "to" address.
- * The token is the first 8 characters of the user's UUID.
+ * The token is the first 8 characters of the user's UUID (dashes removed).
  * e.g. sync+abc12345@vendcast.co → look for user whose ID starts with "abc12345"
  *
  * Always returns 200 to prevent retries.
@@ -46,12 +47,48 @@ async function findUserByToken(
   supabase: ReturnType<typeof createServiceRoleClient>,
   token: string
 ): Promise<string | null> {
-  // Look up user in auth.users by UUID prefix (profiles ilike fails on UUID columns)
   const { data: authData } = await supabase.auth.admin.listUsers({ perPage: 1000 });
   const match = authData?.users?.find((u) =>
     u.id.replace(/-/g, "").startsWith(token)
   );
   return match?.id ?? null;
+}
+
+/**
+ * Parse a raw MIME email string and return { subject, text }.
+ * Falls back to treating the raw string as plain text if parsing fails.
+ */
+async function extractEmailContent(
+  rawText: string,
+  subjectFallback: string
+): Promise<{ subject: string; text: string }> {
+  // Only try MIME parsing if it looks like a MIME email
+  if (rawText.match(/^(MIME-Version|Content-Type|From|To|Subject):/im)) {
+    try {
+      const bytes = new TextEncoder().encode(rawText);
+      const parsed = await new PostalMime().parse(bytes.buffer as ArrayBuffer);
+      const subject = parsed.subject ?? subjectFallback;
+      // Prefer plain text; fall back to HTML with tags stripped
+      let text = parsed.text ?? "";
+      if (!text && parsed.html) {
+        text = parsed.html
+          .replace(/<[^>]+>/g, " ")
+          .replace(/&nbsp;/gi, " ")
+          .replace(/&amp;/gi, "&")
+          .replace(/&lt;/gi, "<")
+          .replace(/&gt;/gi, ">")
+          .replace(/&quot;/gi, '"')
+          .replace(/\s+/g, " ");
+      }
+      console.log(`[toast/inbound] MIME parsed — subject="${subject}" text preview: ${text.slice(0, 400)}`);
+      return { subject, text };
+    } catch (e) {
+      console.warn("[toast/inbound] MIME parse failed, falling back to raw text:", e);
+    }
+  }
+  // Not MIME or parse failed — use as-is
+  console.log(`[toast/inbound] Using raw text (non-MIME). Preview: ${rawText.slice(0, 400)}`);
+  return { subject: subjectFallback, text: rawText };
 }
 
 /** Inline recalculation using the service role client. */
@@ -103,12 +140,10 @@ export async function POST(request: Request) {
       text?: string;
     };
 
-    const { to = [], from = "", subject = "", text = "" } = payload;
+    const { to = [], from = "", subject: rawSubject = "", text: rawBody = "" } = payload;
     const toAddresses = Array.isArray(to) ? to : [to];
 
-    // Log what we received for debugging
-    console.log(`[toast/inbound] from="${from}" to=${JSON.stringify(toAddresses)} subject="${subject}"`);
-    console.log(`[toast/inbound] text preview: ${text.slice(0, 800).replace(/\r?\n/g, "↵")}`);
+    console.log(`[toast/inbound] from="${from}" to=${JSON.stringify(toAddresses)} subject="${rawSubject}"`);
 
     // Extract token from to address
     const token = toAddresses.map(extractToken).find(Boolean) ?? null;
@@ -117,13 +152,16 @@ export async function POST(request: Request) {
       return NextResponse.json({ ok: false, reason: "no_token" }, { status: 200 });
     }
 
-    // Find user by token (first 8 chars of their UUID)
+    // Find user by token
     const supabase = createServiceRoleClient();
     const userId = await findUserByToken(supabase, token);
     if (!userId) {
       console.warn(`[toast/inbound] No user found for token: ${token}`);
       return NextResponse.json({ ok: false, reason: "user_not_found" }, { status: 200 });
     }
+
+    // Extract subject + plain text from the raw MIME email
+    const { subject, text } = await extractEmailContent(rawBody, rawSubject);
 
     // Parse the email
     const rawText = [subject, text].filter(Boolean).join("\n");
