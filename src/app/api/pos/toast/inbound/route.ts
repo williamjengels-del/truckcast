@@ -97,7 +97,9 @@ async function extractEmailContent(
         }
       }
 
-      console.log(`[toast/inbound] MIME parsed — subject="${subject}" text preview: ${text.slice(0, 600)}`);
+      // Log lines containing "sales" or "$" to diagnose format
+      const diagLines = text.split(/\n/).filter(l => /sales|\$/i.test(l)).slice(0, 20);
+      console.log(`[toast/inbound] MIME parsed — subject="${subject}" sales-related lines: ${JSON.stringify(diagLines)}`);
       return { subject, text };
     } catch (e) {
       console.warn("[toast/inbound] MIME parse failed, falling back to raw text:", e);

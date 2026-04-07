@@ -73,14 +73,26 @@ export function parseToastEmail(rawText: string): ToastParseResult {
   // --- Extract net sales ---
   let netSales: number | null = null;
 
-  for (const line of lines) {
-    // Match lines containing "net sales" followed by a dollar amount
-    const salesMatch = line.match(
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+
+    // Pattern 1: value on same line — "Net Sales $1,234.56" or "Net Sales: $1,234.56"
+    const sameLine = line.match(
       /(?:total\s+)?net\s+sales[:\s]+\$?([\d,]+(?:\.\d{1,2})?)/i
     );
-    if (salesMatch) {
-      netSales = parseFloat(salesMatch[1].replace(/,/g, ""));
+    if (sameLine) {
+      netSales = parseFloat(sameLine[1].replace(/,/g, ""));
       break;
+    }
+
+    // Pattern 2: label on this line, dollar amount on next line (HTML table cells)
+    if (/(?:total\s+)?net\s+sales/i.test(line)) {
+      const nextLine = lines[i + 1] ?? "";
+      const nextMatch = nextLine.match(/\$?([\d,]+\.\d{2})/);
+      if (nextMatch) {
+        netSales = parseFloat(nextMatch[1].replace(/,/g, ""));
+        break;
+      }
     }
   }
 
