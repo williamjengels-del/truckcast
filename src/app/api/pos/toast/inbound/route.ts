@@ -108,6 +108,7 @@ export async function POST(request: Request) {
 
     // Log what we received for debugging
     console.log(`[toast/inbound] from="${from}" to=${JSON.stringify(toAddresses)} subject="${subject}"`);
+    console.log(`[toast/inbound] text preview: ${text.slice(0, 800).replace(/\r?\n/g, "↵")}`);
 
     // Extract token from to address
     const token = toAddresses.map(extractToken).find(Boolean) ?? null;
