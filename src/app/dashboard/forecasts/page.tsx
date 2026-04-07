@@ -19,6 +19,7 @@ import { calculateForecast, calibrateCoefficients } from "@/lib/forecast-engine"
 import { TIER_COLORS } from "@/lib/constants";
 import type { Event } from "@/lib/database.types";
 import { ForecastExplainer } from "./forecast-explainer";
+import { WhatIfPanel } from "@/components/what-if-panel";
 
 function formatCurrency(val: number | null): string {
   if (val === null || val === undefined) return "—";
@@ -60,6 +61,22 @@ export default async function ForecastsPage() {
 
   // Calibrate per-user coefficients
   const calibrated = calibrateCoefficients(events);
+
+  // Calculate event-type averages from historical data (for What-If panel)
+  const eventTypeAvgs: Record<string, number> = {};
+  const pastEvents = events.filter(
+    (e) => e.net_sales !== null && e.net_sales > 0 && e.booked && e.anomaly_flag !== "disrupted"
+  );
+  const typeGroups: Record<string, number[]> = {};
+  for (const e of pastEvents) {
+    if (e.event_type && e.net_sales !== null) {
+      if (!typeGroups[e.event_type]) typeGroups[e.event_type] = [];
+      typeGroups[e.event_type].push(e.net_sales);
+    }
+  }
+  for (const [type, sales] of Object.entries(typeGroups)) {
+    eventTypeAvgs[type] = Math.round(sales.reduce((a, b) => a + b, 0) / sales.length);
+  }
 
   // Calculate forecasts with details
   const forecastDetails = upcomingEvents.map((event) => {
@@ -235,7 +252,7 @@ export default async function ForecastsPage() {
                     </div>
                   )}
 
-                  <div className="flex gap-2">
+                  <div className="flex items-center gap-2 flex-wrap">
                     {event.event_tier && (
                       <Badge
                         variant="outline"
@@ -250,6 +267,12 @@ export default async function ForecastsPage() {
                     {event.event_weather && (
                       <Badge variant="outline">{event.event_weather}</Badge>
                     )}
+                    <WhatIfPanel
+                      event={event}
+                      currentForecast={forecast?.forecast ?? event.forecast_sales ?? 0}
+                      calibratedCoefficients={calibrated}
+                      eventTypeAvgs={eventTypeAvgs}
+                    />
                   </div>
                 </div>
               ))}
