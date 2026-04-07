@@ -21,19 +21,34 @@ export async function POST(request: Request) {
 
     if (!profile?.stripe_customer_id) {
       return NextResponse.json(
-        { error: "No Stripe customer found" },
+        { error: "No Stripe customer found. Please subscribe first." },
         { status: 400 }
       );
     }
 
-    const origin = request.headers.get("origin") ?? process.env.NEXT_PUBLIC_APP_URL ?? "https://truckcast.co";
+    const origin = request.headers.get("origin") ?? process.env.NEXT_PUBLIC_APP_URL ?? "https://vendcast.co";
 
-    const session = await stripe.billingPortal.sessions.create({
-      customer: profile.stripe_customer_id,
-      return_url: `${origin}/dashboard/settings`,
-    });
-
-    return NextResponse.json({ url: session.url });
+    try {
+      const session = await stripe.billingPortal.sessions.create({
+        customer: profile.stripe_customer_id,
+        return_url: `${origin}/dashboard/settings`,
+      });
+      return NextResponse.json({ url: session.url });
+    } catch (stripeErr) {
+      const msg = stripeErr instanceof Error ? stripeErr.message : "";
+      // Stale test-mode customer ID — clear it so next checkout creates a fresh live customer
+      if (msg.includes("No such customer")) {
+        await supabase
+          .from("profiles")
+          .update({ stripe_customer_id: null })
+          .eq("id", user.id);
+        return NextResponse.json(
+          { error: "Billing session expired. Please re-subscribe to manage your plan." },
+          { status: 400 }
+        );
+      }
+      throw stripeErr;
+    }
   } catch (err) {
     return NextResponse.json(
       { error: err instanceof Error ? err.message : "Internal error" },

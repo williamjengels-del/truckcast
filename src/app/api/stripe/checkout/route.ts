@@ -16,7 +16,7 @@ export async function POST(request: Request) {
     const { tier, billing } = await request.json();
 
     // Derive base URL from request origin so it always works in all environments
-    const origin = request.headers.get("origin") ?? process.env.NEXT_PUBLIC_APP_URL ?? "https://truckcast.co";
+    const origin = request.headers.get("origin") ?? process.env.NEXT_PUBLIC_APP_URL ?? "https://vendcast.co";
 
     if (!tier || !billing) {
       return NextResponse.json(
@@ -46,6 +46,20 @@ export async function POST(request: Request) {
       .single();
 
     let customerId = profile?.stripe_customer_id;
+
+    // Verify stored customer exists in current Stripe mode (test vs live IDs differ)
+    if (customerId) {
+      try {
+        await stripe.customers.retrieve(customerId);
+      } catch {
+        // Stale test-mode customer — create a fresh live one
+        customerId = null;
+        await supabase
+          .from("profiles")
+          .update({ stripe_customer_id: null })
+          .eq("id", user.id);
+      }
+    }
 
     if (!customerId) {
       const customer = await stripe.customers.create({
