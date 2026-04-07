@@ -68,10 +68,11 @@ async function extractEmailContent(
       const bytes = new TextEncoder().encode(rawText);
       const parsed = await new PostalMime().parse(bytes.buffer as ArrayBuffer);
       const subject = parsed.subject ?? subjectFallback;
-      // Prefer plain text; fall back to HTML with tags stripped
+      // Always combine plain text + stripped HTML — Toast body is often HTML-only
+      // even when a plain text part exists with just the forwarded headers
       let text = parsed.text ?? "";
-      if (!text && parsed.html) {
-        text = parsed.html
+      if (parsed.html) {
+        const htmlStripped = parsed.html
           .replace(/<[^>]+>/g, " ")
           .replace(/&nbsp;/gi, " ")
           .replace(/&amp;/gi, "&")
@@ -79,6 +80,7 @@ async function extractEmailContent(
           .replace(/&gt;/gi, ">")
           .replace(/&quot;/gi, '"')
           .replace(/\s+/g, " ");
+        text = text ? `${text}\n${htmlStripped}` : htmlStripped;
       }
       console.log(`[toast/inbound] MIME parsed — subject="${subject}" text preview: ${text.slice(0, 400)}`);
       return { subject, text };
