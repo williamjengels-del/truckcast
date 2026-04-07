@@ -3,8 +3,8 @@ import Link from "next/link";
 import { TruckIcon } from "lucide-react";
 
 export const metadata: Metadata = {
-  title: "Terms of Service — TruckCast",
-  description: "The terms governing your use of TruckCast.",
+  title: "Terms of Service — TruckCast by VendCast",
+  description: "The terms governing your use of TruckCast, a VendCast product.",
 };
 
 export default function TermsPage() {

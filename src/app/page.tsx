@@ -16,9 +16,9 @@ import {
 } from "lucide-react";
 
 export const metadata: Metadata = {
-  title: "TruckCast — The Home Base for Your Food Truck Calendar",
+  title: "TruckCast by VendCast — The Home Base for Your Food Truck Calendar",
   description:
-    "Track every event, know your schedule at a glance — and the only tool that tells you which bookings are actually worth taking. Built for food truck operators.",
+    "Track every event, know your schedule at a glance — and the only tool that tells you which bookings are actually worth taking. Built for food truck operators by VendCast.",
 };
 
 const FALLBACK_TESTIMONIALS = [
@@ -78,7 +78,10 @@ export default async function LandingPage() {
         <div className="container mx-auto flex h-16 items-center justify-between px-4">
           <div className="flex items-center gap-2">
             <TruckIcon className="h-7 w-7 text-primary" />
-            <span className="text-xl font-bold">TruckCast</span>
+            <div className="flex flex-col leading-none">
+              <span className="text-xl font-bold">TruckCast</span>
+              <span className="text-[10px] text-muted-foreground font-medium tracking-wide">by VendCast</span>
+            </div>
           </div>
           <div className="flex items-center gap-3">
             <Link href="/login">
@@ -119,6 +122,9 @@ export default async function LandingPage() {
             <h2 className="text-center text-3xl font-bold mb-12">
               Built for food truck operators
             </h2>
+            <p className="text-center text-sm text-muted-foreground -mt-8 mb-12">
+              TruckCast is the first product from <span className="font-medium text-foreground">VendCast</span> — software for mobile vendor businesses.
+            </p>
             <div className="grid gap-8 md:grid-cols-2 lg:grid-cols-4">
               {[
                 {
@@ -186,7 +192,7 @@ export default async function LandingPage() {
               What food truckers are saying
             </h2>
             <p className="text-center text-muted-foreground mb-12">
-              Built by a food truck operator. Validated by real event data.
+              Built by a food truck operator. Validated by real event data. A <span className="font-medium text-foreground">VendCast</span> product.
             </p>
             <div className="grid gap-6 md:grid-cols-3 max-w-5xl mx-auto">
               {testimonials.map((t) => (
@@ -362,7 +368,8 @@ export default async function LandingPage() {
             <Link href="/signup" className="hover:text-foreground transition-colors">Get Started</Link>
             <a href="mailto:support@truckcast.app" className="hover:text-foreground transition-colors">Contact</a>
           </div>
-          <p>&copy; {new Date().getFullYear()} TruckCast. Built for food truck operators, by a food truck operator.</p>
+          <p>&copy; {new Date().getFullYear()} VendCast · TruckCast is built for food truck operators, by a food truck operator.</p>
+          <p className="text-xs opacity-60">Also at <a href="https://vendcast.co" className="hover:text-foreground transition-colors">vendcast.co</a> · <a href="https://truckcast.co" className="hover:text-foreground transition-colors">truckcast.co</a></p>
         </div>
       </footer>
     </div>

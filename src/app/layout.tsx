@@ -17,10 +17,10 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "TruckCast - AI-Powered Event Forecasting for Food Trucks",
+  title: "TruckCast by VendCast — Event Forecasting for Food Trucks",
   description:
-    "Forecast event revenue, track performance, and optimize booking decisions for your food truck business.",
-  metadataBase: new URL("https://truckcast.co"),
+    "Forecast event revenue, track performance, and optimize booking decisions for your food truck business. A VendCast product.",
+  metadataBase: new URL("https://vendcast.co"),
   manifest: "/manifest.json",
   appleWebApp: {
     capable: true,
@@ -29,20 +29,20 @@ export const metadata: Metadata = {
   },
   openGraph: {
     type: "website",
-    siteName: "TruckCast",
-    url: "https://truckcast.co",
-    title: "TruckCast - AI-Powered Event Forecasting for Food Trucks",
+    siteName: "VendCast",
+    url: "https://vendcast.co",
+    title: "TruckCast by VendCast — Event Forecasting for Food Trucks",
     description:
       "Forecast event revenue, track performance, and optimize booking decisions for your food truck business.",
   },
   twitter: {
     card: "summary_large_image",
-    title: "TruckCast - AI-Powered Event Forecasting for Food Trucks",
+    title: "TruckCast by VendCast — Event Forecasting for Food Trucks",
     description:
       "Forecast event revenue, track performance, and optimize booking decisions for your food truck business.",
   },
   alternates: {
-    canonical: "https://truckcast.co",
+    canonical: "https://vendcast.co",
   },
   other: {
     "mobile-web-app-capable": "yes",

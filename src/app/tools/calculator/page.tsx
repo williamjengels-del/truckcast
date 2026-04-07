@@ -23,7 +23,10 @@ export default function PublicCalculatorPage() {
         <div className="max-w-4xl mx-auto px-4 h-14 flex items-center justify-between">
           <a href="/" className="flex items-center gap-2 font-semibold text-sm">
             <span className="text-xl">🚚</span>
-            <span>TruckCast</span>
+            <div className="flex flex-col leading-none">
+              <span className="font-bold">TruckCast</span>
+              <span className="text-[10px] text-muted-foreground font-medium tracking-wide">by VendCast</span>
+            </div>
           </a>
           <div className="flex items-center gap-3">
             <a
@@ -65,7 +68,7 @@ export default function PublicCalculatorPage() {
       {/* Footer */}
       <footer className="border-t mt-12 py-6">
         <div className="max-w-4xl mx-auto px-4 flex flex-col sm:flex-row items-center justify-between gap-2 text-xs text-muted-foreground">
-          <span>© {new Date().getFullYear()} TruckCast · Built by food truck operators, for food truck operators</span>
+          <span>© {new Date().getFullYear()} VendCast · TruckCast is built for food truck operators, by a food truck operator</span>
           <div className="flex gap-4">
             <a href="/privacy" className="hover:text-foreground transition-colors">Privacy</a>
             <a href="/terms" className="hover:text-foreground transition-colors">Terms</a>

@@ -3,8 +3,8 @@ import Link from "next/link";
 import { TruckIcon } from "lucide-react";
 
 export const metadata: Metadata = {
-  title: "Privacy Policy — TruckCast",
-  description: "How TruckCast collects, uses, and protects your data.",
+  title: "Privacy Policy — TruckCast by VendCast",
+  description: "How VendCast / TruckCast collects, uses, and protects your data.",
 };
 
 export default function PrivacyPage() {
