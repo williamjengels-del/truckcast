@@ -2,9 +2,7 @@ import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import PostalMime from "postal-mime";
 import { parseToastEmail } from "@/lib/pos/toast";
-import { calculateEventPerformance } from "@/lib/event-performance";
-import { calculateForecast, calibrateCoefficients } from "@/lib/forecast-engine";
-import type { Event } from "@/lib/database.types";
+import { recalculateForUserWithClient } from "@/lib/recalculate-service";
 
 /**
  * POST /api/pos/toast/inbound
@@ -110,45 +108,6 @@ async function extractEmailContent(
   return { subject: subjectFallback, text: rawText };
 }
 
-/** Inline recalculation using the service role client. */
-async function recalculateForUserServiceRole(
-  supabase: ReturnType<typeof createServiceRoleClient>,
-  userId: string
-) {
-  const { data: events } = await supabase
-    .from("events")
-    .select("*")
-    .eq("user_id", userId);
-
-  const allEvents = (events ?? []) as Event[];
-  const eventNames = [
-    ...new Set(
-      allEvents
-        .filter((e) => e.booked && e.net_sales && e.net_sales > 0)
-        .map((e) => e.event_name)
-    ),
-  ];
-
-  for (const eventName of eventNames) {
-    const perf = calculateEventPerformance(eventName, userId, allEvents);
-    await supabase
-      .from("event_performance")
-      .upsert(perf as Record<string, unknown>, { onConflict: "user_id,event_name" });
-  }
-
-  const calibrated = calibrateCoefficients(allEvents);
-  const today = new Date().toISOString().split("T")[0];
-  const upcoming = allEvents.filter((e) => e.event_date >= today && e.booked);
-  for (const event of upcoming) {
-    const result = calculateForecast(event, allEvents, { calibratedCoefficients: calibrated });
-    if (result) {
-      await supabase
-        .from("events")
-        .update({ forecast_sales: result.forecast })
-        .eq("id", event.id);
-    }
-  }
-}
 
 export async function POST(request: Request) {
   try {
@@ -256,7 +215,7 @@ export async function POST(request: Request) {
       .eq("user_id", userId)
       .eq("provider", "toast");
 
-    await recalculateForUserServiceRole(supabase, userId);
+    await recalculateForUserWithClient(userId, supabase);
 
     console.log(`[toast/inbound] Synced $${parsed.netSales} to "${event.event_name}" for user ${userId}`);
     return NextResponse.json(

@@ -7,11 +7,20 @@
 
 import { createClient } from "@/lib/supabase/server";
 import { recalculateForUser } from "@/lib/recalculate";
+import { recalculateForUserWithClient } from "@/lib/recalculate-service";
 import type { PosSource } from "@/lib/database.types";
 
 export interface DailySalesAggregate {
   date: string; // YYYY-MM-DD
   netSales: number; // in dollars, already converted from cents
+}
+
+export interface MatchAndUpdateOptions {
+  /** Skip events that already have net_sales > 0. Used by cron to preserve manual entries. */
+  skipIfHasSales?: boolean;
+  /** Service-role Supabase client. When provided, bypasses cookie auth (used in cron/webhooks). */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  supabase?: any;
 }
 
 /**
@@ -44,18 +53,22 @@ export function aggregateByDate(
  * - Updates pos_source on the event to the given provider.
  * - Triggers recalculation after all updates.
  *
+ * Pass options.skipIfHasSales=true (cron) to skip events with existing sales.
+ * Pass options.supabase (service client) when calling from cron/webhooks.
+ *
  * Returns the number of events updated.
  */
 export async function matchAndUpdateSales(
   userId: string,
   dailySales: DailySalesAggregate[],
-  provider: PosSource
+  provider: PosSource,
+  options: MatchAndUpdateOptions = {}
 ): Promise<number> {
-  const supabase = await createClient();
+  const { skipIfHasSales = false, supabase: serviceClient } = options;
+  const supabase = serviceClient ?? (await createClient());
   let updatedCount = 0;
 
   for (const { date, netSales } of dailySales) {
-    // Find booked events for this user on this date
     const { data: events } = await supabase
       .from("events")
       .select("id, event_name, forecast_sales, net_sales, pos_source")
@@ -65,45 +78,46 @@ export async function matchAndUpdateSales(
 
     if (!events || events.length === 0) continue;
 
-    if (events.length === 1) {
-      // Single event on this date — assign full total
-      const event = events[0];
+    // Optionally skip events that already have sales (cron mode)
+    const eligibleEvents = skipIfHasSales
+      ? events.filter(
+          (e: { net_sales: number | null }) => e.net_sales === null || e.net_sales === 0
+        )
+      : events;
+
+    if (eligibleEvents.length === 0) continue;
+
+    if (eligibleEvents.length === 1) {
+      const event = eligibleEvents[0];
       const existingSource = event.pos_source as PosSource;
       const newSource: PosSource =
-        existingSource !== "manual" && existingSource !== provider
-          ? "mixed"
-          : provider;
+        existingSource !== "manual" && existingSource !== provider ? "mixed" : provider;
 
       await supabase
         .from("events")
-        .update({
-          net_sales: netSales,
-          pos_source: newSource,
-        })
+        .update({ net_sales: netSales, pos_source: newSource })
         .eq("id", event.id);
 
       updatedCount++;
     } else {
       // Multiple events — split by forecast or equally
-      const totalForecast = events.reduce(
-        (sum, e) => sum + (e.forecast_sales ?? 0),
+      const totalForecast = eligibleEvents.reduce(
+        (sum: number, e: { forecast_sales: number | null }) => sum + (e.forecast_sales ?? 0),
         0
       );
       const useForecast = totalForecast > 0;
 
-      for (const event of events) {
+      for (const event of eligibleEvents) {
         let share: number;
         if (useForecast && event.forecast_sales) {
           share = (event.forecast_sales / totalForecast) * netSales;
         } else {
-          share = netSales / events.length;
+          share = netSales / eligibleEvents.length;
         }
 
         const existingSource = event.pos_source as PosSource;
         const newSource: PosSource =
-          existingSource !== "manual" && existingSource !== provider
-            ? "mixed"
-            : provider;
+          existingSource !== "manual" && existingSource !== provider ? "mixed" : provider;
 
         await supabase
           .from("events")
@@ -118,9 +132,12 @@ export async function matchAndUpdateSales(
     }
   }
 
-  // Trigger recalculation after sales updates
   if (updatedCount > 0) {
-    await recalculateForUser(userId);
+    if (serviceClient) {
+      await recalculateForUserWithClient(userId, serviceClient);
+    } else {
+      await recalculateForUser(userId);
+    }
   }
 
   return updatedCount;
@@ -132,9 +149,12 @@ export async function matchAndUpdateSales(
 export async function updateSyncStatus(
   connectionId: string,
   status: "success" | "error",
-  error?: string
+  error?: string,
+  eventsUpdated?: number,
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  serviceClient?: any
 ): Promise<void> {
-  const supabase = await createClient();
+  const supabase = serviceClient ?? (await createClient());
 
   await supabase
     .from("pos_connections")
@@ -142,6 +162,7 @@ export async function updateSyncStatus(
       last_sync_at: new Date().toISOString(),
       last_sync_status: status,
       last_sync_error: status === "error" ? (error ?? "Unknown error") : null,
+      ...(eventsUpdated !== undefined ? { last_sync_events_updated: eventsUpdated } : {}),
     })
     .eq("id", connectionId);
 }

@@ -1,13 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient as createServiceClient } from "@supabase/supabase-js";
-import {
-  fetchSquareOrders,
-  refreshSquareToken,
-} from "@/lib/pos/square";
-import {
-  aggregateByDate,
-  matchAndUpdateSales,
-} from "@/lib/pos/sync";
+import { fetchSquareOrders, refreshSquareToken } from "@/lib/pos/square";
+import { aggregateByDate, matchAndUpdateSales, updateSyncStatus } from "@/lib/pos/sync";
 import type { PosConnection } from "@/lib/database.types";
 
 /**
@@ -133,69 +127,21 @@ export async function GET(request: NextRequest) {
 
       const dailySales = aggregateByDate(orders);
 
-      // Only update events where net_sales is null or 0
-      // matchAndUpdateSales handles the skip-if-manual logic via pos_source check,
-      // but we add an extra guard: only pass days where the event has no sales yet.
-      // We filter dailySales to only dates where at least one event has no net_sales.
-      const { data: userEvents } = await serviceClient
-        .from("events")
-        .select("id, event_date, net_sales, booked")
-        .eq("user_id", connection.user_id)
-        .eq("booked", true)
-        .eq("event_date", targetDate);
-
-      const hasUnsyncedEvent = (userEvents ?? []).some(
-        (e) => e.net_sales === null || e.net_sales === 0
-      );
-
-      if (!hasUnsyncedEvent) {
-        // All events for this day already have sales — skip to preserve manual entries
-        usersProcessed++;
-        await serviceClient
-          .from("pos_connections")
-          .update({
-            last_sync_at: new Date().toISOString(),
-            last_sync_status: "success",
-            last_sync_error: null,
-            last_sync_events_updated: 0,
-          })
-          .eq("id", connection.id);
-        continue;
-      }
-
-      // Use matchAndUpdateSales but only for events without existing net_sales
-      // We implement the "skip if already has value" logic by filtering events
-      const eventsUpdated = await matchAndUpdateSalesSkipExisting(
+      const eventsUpdated = await matchAndUpdateSales(
         connection.user_id,
         dailySales,
         "square",
-        serviceClient
+        { skipIfHasSales: true, supabase: serviceClient }
       );
 
       totalEventsUpdated += eventsUpdated;
       usersProcessed++;
 
-      await serviceClient
-        .from("pos_connections")
-        .update({
-          last_sync_at: new Date().toISOString(),
-          last_sync_status: "success",
-          last_sync_error: null,
-          last_sync_events_updated: eventsUpdated,
-        })
-        .eq("id", connection.id);
+      await updateSyncStatus(connection.id, "success", undefined, eventsUpdated, serviceClient);
     } catch (err) {
       const message = err instanceof Error ? err.message : "Unknown error";
       errors.push({ userId: connection.user_id, error: message });
-
-      await serviceClient
-        .from("pos_connections")
-        .update({
-          last_sync_at: new Date().toISOString(),
-          last_sync_status: "error",
-          last_sync_error: message,
-        })
-        .eq("id", connection.id);
+      await updateSyncStatus(connection.id, "error", message, undefined, serviceClient);
     }
   }
 
@@ -208,75 +154,3 @@ export async function GET(request: NextRequest) {
   });
 }
 
-/**
- * Variant of matchAndUpdateSales that skips events which already have net_sales > 0.
- * Uses service role client to operate across users.
- */
-async function matchAndUpdateSalesSkipExisting(
-  userId: string,
-  dailySales: { date: string; netSales: number }[],
-  provider: "square",
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  serviceClient: any
-): Promise<number> {
-  const { recalculateForUserWithClient } = await import("@/lib/recalculate-service");
-  let updatedCount = 0;
-
-  for (const { date, netSales } of dailySales) {
-    const { data: events } = await serviceClient
-      .from("events")
-      .select("id, event_name, forecast_sales, net_sales, pos_source")
-      .eq("user_id", userId)
-      .eq("event_date", date)
-      .eq("booked", true);
-
-    if (!events || events.length === 0) continue;
-
-    // Filter to only events without existing net_sales (skip manual entries)
-    const eligibleEvents = events.filter(
-      (e: { net_sales: number | null }) => e.net_sales === null || e.net_sales === 0
-    );
-
-    if (eligibleEvents.length === 0) continue;
-
-    if (eligibleEvents.length === 1) {
-      await serviceClient
-        .from("events")
-        .update({ net_sales: netSales, pos_source: provider })
-        .eq("id", eligibleEvents[0].id);
-      updatedCount++;
-    } else {
-      // Split proportionally by forecast or equally
-      const totalForecast = eligibleEvents.reduce(
-        (sum: number, e: { forecast_sales: number | null }) => sum + (e.forecast_sales ?? 0),
-        0
-      );
-      const useForecast = totalForecast > 0;
-
-      for (const event of eligibleEvents) {
-        let share: number;
-        if (useForecast && event.forecast_sales) {
-          share = (event.forecast_sales / totalForecast) * netSales;
-        } else {
-          share = netSales / eligibleEvents.length;
-        }
-
-        await serviceClient
-          .from("events")
-          .update({
-            net_sales: Math.round(share * 100) / 100,
-            pos_source: provider,
-          })
-          .eq("id", event.id);
-
-        updatedCount++;
-      }
-    }
-  }
-
-  if (updatedCount > 0) {
-    await recalculateForUserWithClient(userId, serviceClient);
-  }
-
-  return updatedCount;
-}
