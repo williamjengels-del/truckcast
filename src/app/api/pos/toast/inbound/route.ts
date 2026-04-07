@@ -106,11 +106,8 @@ export async function POST(request: Request) {
     const { to = [], from = "", subject = "", text = "" } = payload;
     const toAddresses = Array.isArray(to) ? to : [to];
 
-    // Verify sender is Toast
-    if (!from.toLowerCase().includes("toasttab.com")) {
-      console.log(`[toast/inbound] Ignoring non-Toast email from: ${from}`);
-      return NextResponse.json({ ok: true, reason: "not_toast" }, { status: 200 });
-    }
+    // Log what we received for debugging
+    console.log(`[toast/inbound] from="${from}" to=${JSON.stringify(toAddresses)} subject="${subject}"`);
 
     // Extract token from to address
     const token = toAddresses.map(extractToken).find(Boolean) ?? null;
