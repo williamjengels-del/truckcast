@@ -45,12 +45,14 @@ export default function SignupPage() {
       return;
     }
 
-    // Update the profile with business name
+    // Upsert profile — ensures row exists even if the DB trigger didn't fire
     if (data.user) {
       await supabase
         .from("profiles")
-        .update({ business_name: businessName })
-        .eq("id", data.user.id);
+        .upsert(
+          { id: data.user.id, business_name: businessName, subscription_tier: "starter" },
+          { onConflict: "id" }
+        );
     }
 
     // Redeem invite code if provided

@@ -10,6 +10,15 @@ export async function GET(request: Request) {
     const supabase = await createClient();
     const { error } = await supabase.auth.exchangeCodeForSession(code);
     if (!error) {
+      // Ensure profile row exists — trigger may not have fired (e.g. OAuth, email confirm)
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) {
+        await supabase.from("profiles").upsert(
+          { id: user.id, subscription_tier: "starter" },
+          { onConflict: "id", ignoreDuplicates: true }
+        );
+      }
+
       const forwardedHost = request.headers.get("x-forwarded-host");
       const isLocalEnv = process.env.NODE_ENV === "development";
       if (isLocalEnv) {
