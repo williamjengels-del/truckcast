@@ -165,12 +165,19 @@ export async function POST(request: Request) {
     console.log(`[toast/inbound] from="${from}" to=${JSON.stringify(toAddresses)} subject="${rawSubject}"`);
 
     // Detect Gmail forwarding verification emails and log the confirmation URL
-    if (rawSubject.toLowerCase().includes("gmail forwarding confirmation") || rawSubject.toLowerCase().includes("forwarding confirmation")) {
-      const urlMatch = rawBody.match(/https:\/\/mail\.google\.com\/mail\/[^\s"<>]+confirm[^\s"<>]+/i)
-        ?? rawBody.match(/https:\/\/[^\s"<>]*confirmation[^\s"<>]*/i);
-      console.log(`[toast/inbound] GMAIL VERIFICATION EMAIL DETECTED`);
-      console.log(`[toast/inbound] Confirmation URL: ${urlMatch?.[0] ?? "not found — check full body below"}`);
-      console.log(`[toast/inbound] Full body: ${rawBody.slice(0, 2000)}`);
+    if (rawSubject.toLowerCase().includes("forwarding confirmation")) {
+      console.log(`[toast/inbound] GMAIL VERIFICATION EMAIL DETECTED — parsing body...`);
+      try {
+        const bytes = new TextEncoder().encode(rawBody);
+        const verifyParsed = await new PostalMime().parse(bytes.buffer as ArrayBuffer);
+        const bodyText = (verifyParsed.text ?? "") + " " + (verifyParsed.html ?? "");
+        const urlMatch = bodyText.match(/https:\/\/mail\.google\.com[^\s"<>]+/i)
+          ?? bodyText.match(/https:\/\/[^\s"<>]*confirm[^\s"<>]*/i);
+        console.log(`[toast/inbound] CONFIRMATION URL: ${urlMatch?.[0] ?? "not found"}`);
+        console.log(`[toast/inbound] Decoded body preview: ${bodyText.slice(0, 800)}`);
+      } catch (e) {
+        console.log(`[toast/inbound] Parse error: ${e}`);
+      }
       return NextResponse.json({ ok: true, reason: "gmail_verification_logged" }, { status: 200 });
     }
 
