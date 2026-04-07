@@ -165,8 +165,9 @@ export async function POST(request: Request) {
     // Extract subject + plain text from the raw MIME email
     const { subject, text } = await extractEmailContent(rawBody, rawSubject);
 
-    // Parse the email
-    const rawText = [subject, text].filter(Boolean).join("\n");
+    // Include raw body too — catches content in nested message/rfc822 parts
+    // that postal-mime doesn't unwrap (e.g. Gmail forwarded messages)
+    const rawText = [subject, text, rawBody].filter(Boolean).join("\n");
     let parsed: { date: string; netSales: number; rawSubject: string };
     try {
       parsed = parseToastEmail(rawText);
