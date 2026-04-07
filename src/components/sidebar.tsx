@@ -19,6 +19,7 @@ import {
   Upload,
   Bell,
   BookOpen,
+  Plug,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import type { SubscriptionTier } from "@/lib/database.types";
@@ -41,6 +42,7 @@ const navItems: NavItem[] = [
   { href: "/dashboard/contacts", label: "Contacts", icon: Users },
   { href: "/dashboard/followers", label: "Followers", icon: Bell, tier: "premium" },
   { href: "/dashboard/events/import", label: "Import CSV", icon: Upload },
+  { href: "/dashboard/settings/pos", label: "POS Integrations", icon: Plug },
   { href: "/dashboard/settings", label: "Settings", icon: Settings },
 ];
 
