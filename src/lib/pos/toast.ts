@@ -38,17 +38,21 @@ export function parseToastEmail(rawText: string): ToastParseResult {
   let rawSubject = "";
 
   for (const line of lines) {
-    // Remove "Subject:" prefix if present
-    const normalized = line.replace(/^Subject:\s*/i, "");
+    // Remove "Subject:" and "Fwd:"/"Re:" prefixes if present
+    const normalized = line
+      .replace(/^Subject:\s*/i, "")
+      .replace(/^(?:Fwd|Re):\s*/i, "");
 
-    // Look for pattern: "... - Weekday, Month Day, Year"
+    // Look for pattern: "... - Weekday, Month Day[, Year]"
+    // Year is optional — Toast sometimes omits it in forwarded subjects
     const subjectMatch = normalized.match(
-      /[-–]\s*(?:Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday),\s*(\w+ \d{1,2},?\s*\d{4})/i
+      /[-–]\s*(?:Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday),\s*(\w+ \d{1,2})(?:,?\s*(\d{4}))?/i
     );
     if (subjectMatch) {
       rawSubject = normalized;
-      const dateStr = subjectMatch[1].replace(",", "");
-      const parsed = new Date(dateStr);
+      const datePart = subjectMatch[1]; // e.g. "April 3"
+      const yearPart = subjectMatch[2] ?? String(new Date().getFullYear());
+      const parsed = new Date(`${datePart}, ${yearPart}`);
       if (!isNaN(parsed.getTime())) {
         // Format as YYYY-MM-DD in local time
         const y = parsed.getFullYear();
