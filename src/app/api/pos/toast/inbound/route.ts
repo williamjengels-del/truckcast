@@ -68,11 +68,9 @@ async function extractEmailContent(
       const bytes = new TextEncoder().encode(rawText);
       const parsed = await new PostalMime().parse(bytes.buffer as ArrayBuffer);
       const subject = parsed.subject ?? subjectFallback;
-      // Always combine plain text + stripped HTML — Toast body is often HTML-only
-      // even when a plain text part exists with just the forwarded headers
-      let text = parsed.text ?? "";
-      if (parsed.html) {
-        const htmlStripped = parsed.html
+
+      function stripHtml(html: string): string {
+        return html
           .replace(/<[^>]+>/g, " ")
           .replace(/&nbsp;/gi, " ")
           .replace(/&amp;/gi, "&")
@@ -80,9 +78,26 @@ async function extractEmailContent(
           .replace(/&gt;/gi, ">")
           .replace(/&quot;/gi, '"')
           .replace(/\s+/g, " ");
-        text = text ? `${text}\n${htmlStripped}` : htmlStripped;
       }
-      console.log(`[toast/inbound] MIME parsed — subject="${subject}" text preview: ${text.slice(0, 400)}`);
+
+      let text = parsed.text ?? "";
+      if (parsed.html) text += "\n" + stripHtml(parsed.html);
+
+      // Gmail wraps forwarded emails as message/rfc822 attachments —
+      // recursively parse each to find the actual Toast content
+      for (const att of parsed.attachments ?? []) {
+        if (att.mimeType === "message/rfc822" && att.content) {
+          try {
+            const nested = await new PostalMime().parse(att.content);
+            if (nested.text) text += "\n" + nested.text;
+            if (nested.html) text += "\n" + stripHtml(nested.html);
+          } catch {
+            // ignore parse failures on nested parts
+          }
+        }
+      }
+
+      console.log(`[toast/inbound] MIME parsed — subject="${subject}" text preview: ${text.slice(0, 600)}`);
       return { subject, text };
     } catch (e) {
       console.warn("[toast/inbound] MIME parse failed, falling back to raw text:", e);
