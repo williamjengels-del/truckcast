@@ -52,7 +52,7 @@ function storageKey(state: JourneyState) {
 }
 
 export function JourneyCallout({ journeyContext }: JourneyCalloutProps) {
-  const { state, eventsWithSales, totalEvents, nextStep } = journeyContext;
+  const { state, eventsWithSales, totalEvents, nextStep, hasPOS } = journeyContext;
   const [dismissed, setDismissed] = useState(false);
   const [mounted, setMounted] = useState(false);
 
@@ -74,6 +74,9 @@ export function JourneyCallout({ journeyContext }: JourneyCalloutProps) {
   if (!mounted || state === "calibrated" || dismissed) return null;
 
   const content = STATE_CONTENT[state];
+
+  // When in logging/calibrating state without POS, show a nudge to connect POS
+  const showPOSNudge = !hasPOS && (state === "logging" || state === "calibrating");
 
   // Progress indicator — how far toward the 30-event goal.
   const progressLabel =
@@ -108,6 +111,18 @@ export function JourneyCallout({ journeyContext }: JourneyCalloutProps) {
 
       {/* Body */}
       <p className="text-sm text-muted-foreground">{content.body}</p>
+
+      {/* POS nudge — shown when not connected and in active logging states */}
+      {showPOSNudge && (
+        <div className="rounded-md bg-muted/60 px-3 py-2 flex items-center justify-between gap-3 text-xs">
+          <span className="text-muted-foreground">
+            💡 Connect Square or Toast to log sales automatically
+          </span>
+          <Link href="/dashboard/settings/pos" className="font-medium text-primary hover:underline shrink-0">
+            Set up POS →
+          </Link>
+        </div>
+      )}
 
       {/* Footer row */}
       <div className="flex items-center justify-between gap-3 flex-wrap">
