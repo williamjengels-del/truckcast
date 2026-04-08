@@ -6,11 +6,8 @@ const nextConfig: NextConfig = {
 };
 
 export default withSentryConfig(nextConfig, {
-  // Your Sentry org and project slugs (update these after you create the project)
   org: process.env.SENTRY_ORG,
   project: process.env.SENTRY_PROJECT,
-
-  // Auth token for source map uploads (set in Vercel env vars as SENTRY_AUTH_TOKEN)
   authToken: process.env.SENTRY_AUTH_TOKEN,
 
   // Upload source maps so stack traces show real line numbers, not minified code
@@ -21,9 +18,15 @@ export default withSentryConfig(nextConfig, {
   // Silences the Sentry build output — errors still surface
   silent: !process.env.CI,
 
-  // Disable the automatic /monitoring route (we don't need it)
-  autoInstrumentMiddleware: false,
+  // Disable telemetry pings back to Sentry during build
+  telemetry: false,
 
-  // Don't inject Sentry into the dev server
-  disableLogger: true,
+  webpack: {
+    // Don't auto-instrument middleware (we don't use it)
+    autoInstrumentMiddleware: false,
+    // Tree-shake Sentry debug logging out of the production bundle
+    treeshake: {
+      removeDebugLogging: true,
+    },
+  },
 });
