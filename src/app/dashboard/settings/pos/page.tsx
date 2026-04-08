@@ -546,18 +546,43 @@ function ToastCard({
         {/* Auto-sync section — visible once connected */}
         {isConnected && (
           <div className="rounded-md border p-4 space-y-3">
+            {/* Gmail verification pending banner */}
+            {connection.last_sync_status === "pending_verify" &&
+              connection.last_sync_error?.startsWith("GMAIL_VERIFY:") && (
+              <div className="rounded-md bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900/50 p-3 space-y-2">
+                <p className="text-sm font-medium text-amber-900 dark:text-amber-300">
+                  ⚠️ One more step — verify your forwarding address
+                </p>
+                <p className="text-xs text-amber-800 dark:text-amber-400">
+                  Gmail sent a verification email to your sync address. Click the button below to confirm it, then return here.
+                </p>
+                <a
+                  href={connection.last_sync_error.replace("GMAIL_VERIFY:", "")}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1.5 rounded-md bg-amber-600 hover:bg-amber-700 text-white px-3 py-1.5 text-xs font-medium transition-colors"
+                >
+                  Confirm Gmail Forwarding →
+                </a>
+              </div>
+            )}
+
             {/* Status indicator */}
             <div className="flex items-center gap-2">
               <span
                 className={`inline-block h-2 w-2 rounded-full ${
                   connection.last_sync_status === "success" || connection.sync_enabled
                     ? "bg-green-500"
+                    : connection.last_sync_status === "pending_verify"
+                    ? "bg-amber-500"
                     : "bg-muted-foreground"
                 }`}
               />
               <span className="text-sm font-medium">
                 {connection.last_sync_status === "success" || connection.sync_enabled
                   ? "Auto-sync active"
+                  : connection.last_sync_status === "pending_verify"
+                  ? "Waiting for Gmail verification"
                   : "Not configured"}
               </span>
             </div>
@@ -600,25 +625,30 @@ function ToastCard({
                   {/* Gmail instructions */}
                   <div className="space-y-2">
                     <p className="text-sm font-medium">Gmail</p>
-                    <ol className="space-y-1 text-sm text-muted-foreground list-decimal list-inside">
+                    <ol className="space-y-2 text-sm text-muted-foreground list-decimal list-inside">
                       <li>Copy your unique sync address above.</li>
                       <li>
-                        Open Gmail → click the gear icon → <strong>See all settings</strong> →{" "}
-                        <strong>Filters and Blocked Addresses</strong> →{" "}
-                        <strong>Create a new filter</strong>.
+                        Open Gmail → gear icon → <strong>See all settings</strong> →{" "}
+                        <strong>Forwarding and POP/IMAP</strong> →{" "}
+                        <strong>Add a forwarding address</strong> → paste your sync address → click <strong>Next</strong>.
                       </li>
                       <li>
-                        In the <strong>From</strong> field enter:{" "}
+                        Gmail sends a verification email to your sync address.{" "}
+                        <strong>Return to this page</strong> — a yellow banner will appear with a confirmation button. Click it to verify.
+                      </li>
+                      <li>
+                        Back in Gmail → <strong>Filters and Blocked Addresses</strong> →{" "}
+                        <strong>Create a new filter</strong>. In the <strong>From</strong> field enter:{" "}
                         <code className="font-mono text-xs bg-muted px-1 py-0.5 rounded">
                           no-reply@toasttab.com
                         </code>{" "}
                         → click <strong>Create filter</strong>.
                       </li>
                       <li>
-                        Check <strong>Forward it to</strong> and paste your sync address →
+                        Check <strong>Forward it to</strong> and select your verified sync address →
                         click <strong>Create filter</strong>.
                       </li>
-                      <li>Done! Future Toast daily summaries will sync automatically.</li>
+                      <li>Done! Future Toast daily summaries will sync automatically within minutes.</li>
                     </ol>
                   </div>
 

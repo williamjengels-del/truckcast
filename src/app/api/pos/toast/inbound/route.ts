@@ -123,19 +123,34 @@ export async function POST(request: Request) {
 
     console.log(`[toast/inbound] from="${from}" to=${JSON.stringify(toAddresses)} subject="${rawSubject}"`);
 
-    // Detect Gmail forwarding verification emails and log the confirmation URL
+    // Detect Gmail forwarding verification emails — extract URL and surface it in the UI
     if (rawSubject.toLowerCase().includes("forwarding confirmation")) {
       console.log(`[toast/inbound] GMAIL VERIFICATION EMAIL DETECTED — parsing body...`);
+      const tokenForVerify = toAddresses.map(extractToken).find(Boolean) ?? null;
       try {
         const bytes = new TextEncoder().encode(rawBody);
         const verifyParsed = await new PostalMime().parse(bytes.buffer as ArrayBuffer);
         const bodyText = (verifyParsed.text ?? "") + " " + (verifyParsed.html ?? "");
         const urlMatch = bodyText.match(/https:\/\/mail\.google\.com[^\s"<>]+/i)
           ?? bodyText.match(/https:\/\/[^\s"<>]*confirm[^\s"<>]*/i);
-        console.log(`[toast/inbound] CONFIRMATION URL: ${urlMatch?.[0] ?? "not found"}`);
-        console.log(`[toast/inbound] Decoded body preview: ${bodyText.slice(0, 800)}`);
+        const confirmUrl = urlMatch?.[0] ?? null;
+        console.log(`[toast/inbound] CONFIRMATION URL: ${confirmUrl ?? "not found"}`);
+
+        // Save the URL into pos_connections.last_sync_error so the UI can surface it
+        if (confirmUrl && tokenForVerify) {
+          const svc = createServiceRoleClient();
+          const userId = await findUserByToken(svc, tokenForVerify);
+          if (userId) {
+            await svc
+              .from("pos_connections")
+              .update({ last_sync_error: `GMAIL_VERIFY:${confirmUrl}`, last_sync_status: "pending_verify" })
+              .eq("user_id", userId)
+              .eq("provider", "toast");
+            console.log(`[toast/inbound] Stored verify URL for user ${userId}`);
+          }
+        }
       } catch (e) {
-        console.log(`[toast/inbound] Parse error: ${e}`);
+        console.log(`[toast/inbound] Verification parse error: ${e}`);
       }
       return NextResponse.json({ ok: true, reason: "gmail_verification_logged" }, { status: 200 });
     }
