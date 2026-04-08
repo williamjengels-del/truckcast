@@ -9,6 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import type { PosConnection, PosProvider, Profile } from "@/lib/database.types";
+import { POSSetupTrigger } from "@/components/pos-setup-guide";
 
 interface LocationSelection {
   id: string;
@@ -189,6 +190,9 @@ function PosSettingsContent() {
           </p>
         </div>
       )}
+
+      {/* Setup guide — shown when no connections exist */}
+      <POSSetupTrigger hasConnection={connections.length > 0} />
 
       {/* Square */}
       <PosProviderCard
