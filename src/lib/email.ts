@@ -102,6 +102,92 @@ export async function sendWelcomeEmail(to: string, businessName: string) {
   });
 }
 
+// ─── Post-Event Sales Reminder ─────────────────────────────────────────────
+
+export interface UnloggedEvent {
+  event_name: string;
+  event_date: string;
+}
+
+export async function sendSalesReminderEmail(
+  to: string,
+  businessName: string,
+  events: UnloggedEvent[]
+) {
+  if (!process.env.RESEND_API_KEY) return;
+  const resend = getResend();
+
+  const displayName = businessName || "there";
+  const count = events.length;
+  const subject =
+    count === 1
+      ? `Don't forget — log your sales from ${events[0].event_name}`
+      : `${count} events need sales logged in TruckCast`;
+
+  function formatDate(iso: string) {
+    return new Date(iso + "T00:00:00").toLocaleDateString("en-US", {
+      weekday: "short",
+      month: "short",
+      day: "numeric",
+    });
+  }
+
+  const eventRows = events
+    .map(
+      (e) => `
+    <tr>
+      <td style="padding:10px 0;border-bottom:1px solid #f3f4f6;font-size:14px;color:#111827;font-weight:500;">${e.event_name}</td>
+      <td style="padding:10px 0;border-bottom:1px solid #f3f4f6;font-size:14px;color:#6b7280;text-align:right;">${formatDate(e.event_date)}</td>
+    </tr>`
+    )
+    .join("");
+
+  await resend.emails.send({
+    from: FROM,
+    to,
+    subject,
+    html: `
+<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
+<body style="margin:0;padding:0;background:#f9fafb;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;">
+  <div style="max-width:560px;margin:40px auto;background:#fff;border-radius:12px;overflow:hidden;border:1px solid #e5e7eb;">
+    <div style="background:#f97316;padding:32px 40px;">
+      <div style="color:white;font-size:28px;font-weight:800;letter-spacing:-1px;">TruckCast</div>
+      <div style="color:rgba(255,255,255,0.8);font-size:12px;margin-top:2px;font-weight:500;">by VendCast</div>
+    </div>
+    <div style="padding:40px;">
+      <h1 style="margin:0 0 8px;font-size:22px;font-weight:700;color:#111827;">Log your sales, ${displayName} 📋</h1>
+      <p style="margin:0 0 24px;font-size:15px;line-height:1.6;color:#374151;">
+        ${count === 1 ? "This past event is" : `These ${count} past events are`} missing sales data.
+        Logging actuals keeps your forecasts sharp — it only takes a second.
+      </p>
+      <table style="width:100%;border-collapse:collapse;margin-bottom:24px;">
+        <thead>
+          <tr>
+            <th style="text-align:left;font-size:12px;font-weight:600;color:#9ca3af;text-transform:uppercase;letter-spacing:0.5px;padding-bottom:8px;border-bottom:2px solid #f3f4f6;">Event</th>
+            <th style="text-align:right;font-size:12px;font-weight:600;color:#9ca3af;text-transform:uppercase;letter-spacing:0.5px;padding-bottom:8px;border-bottom:2px solid #f3f4f6;">Date</th>
+          </tr>
+        </thead>
+        <tbody>${eventRows}</tbody>
+      </table>
+      <a href="${APP_URL}/dashboard/events?tab=past" style="display:inline-block;background:#f97316;color:white;font-weight:600;font-size:15px;padding:12px 28px;border-radius:8px;text-decoration:none;">
+        Log sales now →
+      </a>
+      <p style="margin:24px 0 0;font-size:13px;color:#9ca3af;">
+        Each logged event trains your forecast model — the payoff compounds over time.
+      </p>
+    </div>
+    <div style="padding:20px 40px;border-top:1px solid #f3f4f6;">
+      <p style="margin:0;font-size:12px;color:#9ca3af;">TruckCast by VendCast · <a href="${APP_URL}/dashboard/settings" style="color:#9ca3af;">Manage preferences</a></p>
+    </div>
+  </div>
+</body>
+</html>
+    `.trim(),
+  });
+}
+
 // ─── Trial Expiry Warning Email ─────────────────────────────────────────────
 
 export async function sendTrialExpiryEmail(
