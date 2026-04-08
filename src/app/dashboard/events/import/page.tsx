@@ -32,6 +32,8 @@ import {
   Columns,
   Eye,
   Download,
+  Link,
+  Loader2,
 } from "lucide-react";
 
 // ═══════════════════════════════════════════════════════════════════════
@@ -143,6 +145,8 @@ const COLUMN_ALIASES: Record<FieldKey, string[]> = {
   ],
   event_date: [
     "event_date", "eventdate", "event date", "date", "day",
+    // SkyTab exports
+    "business date", "date closed", "check date", "closed date", "open date",
   ],
   start_time: [
     "start_time", "starttime", "start time", "start", "begins", "begin time",
@@ -165,6 +169,9 @@ const COLUMN_ALIASES: Record<FieldKey, string[]> = {
     "net_sales", "netsales", "net sales", "sales", "revenue",
     "gross sales", "gross", "total sales", "total", "amount",
     "income", "gross revenue", "net revenue", "earnings",
+    // SkyTab exports
+    "net amount", "net total", "check total", "ticket total",
+    "net check total", "revenue total", "daily net sales",
   ],
   event_type: [
     "event_type", "eventtype", "event type", "type", "category",
@@ -617,6 +624,10 @@ function parseWithMapping(
 
 export default function ImportPage() {
   const [step, setStep] = useState<Step>("upload");
+  const [importSource, setImportSource] = useState<"csv" | "sheets">("csv");
+  const [sheetsUrl, setSheetsUrl] = useState("");
+  const [sheetsLoading, setSheetsLoading] = useState(false);
+  const [sheetsError, setSheetsError] = useState<string | null>(null);
   const [rawText, setRawText] = useState<string>("");
   const [fileName, setFileName] = useState<string>("");
   const [columnMappings, setColumnMappings] = useState<ColumnMapping[]>([]);
@@ -637,48 +648,80 @@ export default function ImportPage() {
 
   // ── Step 1: Upload ──
 
+  function processCSVText(text: string, sourceName: string) {
+    setRawText(text);
+    setFileName(sourceName);
+
+    const lines = text.trim().split("\n");
+    if (lines.length < 2) {
+      setImportError("The file appears to be empty or has only one row.");
+      return;
+    }
+
+    const headers = splitCSVLine(lines[0]);
+    const parsedDataLines: string[][] = [];
+    for (let i = 1; i < lines.length; i++) {
+      if (!lines[i].trim()) continue;
+      parsedDataLines.push(splitCSVLine(lines[i]));
+    }
+    setDataLines(parsedDataLines);
+
+    // Build initial column mappings with auto-detection
+    const mappings: ColumnMapping[] = headers.map((h, idx) => {
+      const detected = matchHeader(h);
+      const samples = parsedDataLines.slice(0, 3).map((row) => row[idx] ?? "");
+      return {
+        index: idx,
+        originalHeader: h.trim(),
+        sampleValues: samples,
+        autoDetected: detected,
+        assignedField: detected ?? "skip",
+      };
+    });
+
+    setColumnMappings(mappings);
+    setStep("map");
+    setImported(false);
+    setImportError(null);
+  }
+
   function processFile(file: File) {
     if (!file.name.endsWith(".csv") && file.type !== "text/csv") {
       setImportError("Please upload a CSV file (.csv)");
       return;
     }
-    setFileName(file.name);
-
     const reader = new FileReader();
     reader.onload = () => {
-      const text = reader.result as string;
-      setRawText(text);
-
-      const lines = text.trim().split("\n");
-      if (lines.length < 2) return;
-
-      const headers = splitCSVLine(lines[0]);
-      const parsedDataLines: string[][] = [];
-      for (let i = 1; i < lines.length; i++) {
-        if (!lines[i].trim()) continue;
-        parsedDataLines.push(splitCSVLine(lines[i]));
-      }
-      setDataLines(parsedDataLines);
-
-      // Build initial column mappings with auto-detection
-      const mappings: ColumnMapping[] = headers.map((h, idx) => {
-        const detected = matchHeader(h);
-        const samples = parsedDataLines.slice(0, 3).map((row) => row[idx] ?? "");
-        return {
-          index: idx,
-          originalHeader: h.trim(),
-          sampleValues: samples,
-          autoDetected: detected,
-          assignedField: detected ?? "skip",
-        };
-      });
-
-      setColumnMappings(mappings);
-      setStep("map");
-      setImported(false);
-      setImportError(null);
+      processCSVText(reader.result as string, file.name);
     };
     reader.readAsText(file);
+  }
+
+  async function handleLoadSheet() {
+    const url = sheetsUrl.trim();
+    if (!url) return;
+    setSheetsLoading(true);
+    setSheetsError(null);
+    try {
+      const res = await fetch(
+        `/api/import/google-sheets?url=${encodeURIComponent(url)}`
+      );
+      const body = res.headers.get("content-type")?.includes("text/csv")
+        ? await res.text()
+        : await res.json();
+
+      if (!res.ok) {
+        setSheetsError(
+          typeof body === "object" ? body.error : "Failed to load sheet."
+        );
+        return;
+      }
+      processCSVText(body as string, "Google Sheet");
+    } catch {
+      setSheetsError("Network error — check your connection and try again.");
+    } finally {
+      setSheetsLoading(false);
+    }
   }
 
   function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
@@ -1087,45 +1130,109 @@ export default function ImportPage() {
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <Upload className="h-5 w-5" />
-              Upload CSV
+              Import Events
             </CardTitle>
           </CardHeader>
-          <CardContent>
-            <div
-              onDragEnter={handleDragEnter}
-              onDragLeave={handleDragLeave}
-              onDragOver={handleDragOver}
-              onDrop={handleDrop}
-              className={`border-2 border-dashed rounded-lg p-10 text-center transition-colors ${
-                isDragging
-                  ? "border-primary bg-primary/5"
-                  : "border-muted-foreground/25 hover:border-muted-foreground/50"
-              }`}
-            >
-              <Upload className={`h-10 w-10 mx-auto mb-4 transition-colors ${isDragging ? "text-primary" : "text-muted-foreground"}`} />
-              {isDragging ? (
-                <p className="text-sm font-medium text-primary mb-4">Drop your CSV file here</p>
-              ) : (
-                <>
-                  <p className="text-sm font-medium mb-1">
-                    Drag &amp; drop your CSV here, or click to browse
-                  </p>
-                  <p className="text-xs text-muted-foreground mb-4">
-                    Works with Airtable, Square, Excel, Google Sheets, or any spreadsheet export
-                  </p>
-                </>
-              )}
-              <label className={`inline-flex items-center gap-2 cursor-pointer px-4 py-2 rounded-md text-sm font-medium transition-colors ${isDragging ? "invisible" : "bg-primary text-primary-foreground hover:bg-primary/90"}`}>
+          <CardContent className="space-y-4">
+            {/* Source toggle */}
+            <div className="flex gap-2">
+              <button
+                onClick={() => { setImportSource("csv"); setSheetsError(null); }}
+                className={`flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium border transition-colors ${
+                  importSource === "csv"
+                    ? "bg-primary text-primary-foreground border-primary"
+                    : "bg-background border-input hover:bg-muted"
+                }`}
+              >
                 <FileText className="h-4 w-4" />
-                Choose CSV file
-                <input
-                  type="file"
-                  accept=".csv"
-                  onChange={handleFileChange}
-                  className="sr-only"
-                />
-              </label>
+                Upload CSV
+              </button>
+              <button
+                onClick={() => { setImportSource("sheets"); setSheetsError(null); }}
+                className={`flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium border transition-colors ${
+                  importSource === "sheets"
+                    ? "bg-primary text-primary-foreground border-primary"
+                    : "bg-background border-input hover:bg-muted"
+                }`}
+              >
+                <Link className="h-4 w-4" />
+                Google Sheets
+              </button>
             </div>
+
+            {/* CSV upload */}
+            {importSource === "csv" && (
+              <div
+                onDragEnter={handleDragEnter}
+                onDragLeave={handleDragLeave}
+                onDragOver={handleDragOver}
+                onDrop={handleDrop}
+                className={`border-2 border-dashed rounded-lg p-10 text-center transition-colors ${
+                  isDragging
+                    ? "border-primary bg-primary/5"
+                    : "border-muted-foreground/25 hover:border-muted-foreground/50"
+                }`}
+              >
+                <Upload className={`h-10 w-10 mx-auto mb-4 transition-colors ${isDragging ? "text-primary" : "text-muted-foreground"}`} />
+                {isDragging ? (
+                  <p className="text-sm font-medium text-primary mb-4">Drop your CSV file here</p>
+                ) : (
+                  <>
+                    <p className="text-sm font-medium mb-1">
+                      Drag &amp; drop your CSV here, or click to browse
+                    </p>
+                    <p className="text-xs text-muted-foreground mb-4">
+                      Works with Airtable, Square, Excel, SkyTab, or any spreadsheet export
+                    </p>
+                  </>
+                )}
+                <label className={`inline-flex items-center gap-2 cursor-pointer px-4 py-2 rounded-md text-sm font-medium transition-colors ${isDragging ? "invisible" : "bg-primary text-primary-foreground hover:bg-primary/90"}`}>
+                  <FileText className="h-4 w-4" />
+                  Choose CSV file
+                  <input
+                    type="file"
+                    accept=".csv"
+                    onChange={handleFileChange}
+                    className="sr-only"
+                  />
+                </label>
+              </div>
+            )}
+
+            {/* Google Sheets URL */}
+            {importSource === "sheets" && (
+              <div className="space-y-3">
+                <div className="rounded-md bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800/40 p-3 text-sm text-blue-800 dark:text-blue-300 space-y-1">
+                  <p className="font-medium">Before you paste your link:</p>
+                  <p className="text-xs">In Google Sheets, click <strong>Share</strong> → set to <strong>&ldquo;Anyone with the link can view&rdquo;</strong>. Your data stays private — we only read it once to import.</p>
+                </div>
+                <div className="flex gap-2">
+                  <Input
+                    placeholder="https://docs.google.com/spreadsheets/d/..."
+                    value={sheetsUrl}
+                    onChange={(e) => { setSheetsUrl(e.target.value); setSheetsError(null); }}
+                    onKeyDown={(e) => { if (e.key === "Enter") handleLoadSheet(); }}
+                    className="font-mono text-xs"
+                  />
+                  <Button
+                    onClick={handleLoadSheet}
+                    disabled={!sheetsUrl.trim() || sheetsLoading}
+                  >
+                    {sheetsLoading ? (
+                      <><Loader2 className="h-4 w-4 animate-spin mr-2" />Loading…</>
+                    ) : (
+                      <>Import <ArrowRight className="h-4 w-4 ml-1" /></>
+                    )}
+                  </Button>
+                </div>
+                {sheetsError && (
+                  <div className="flex items-start gap-2 text-sm text-destructive">
+                    <AlertCircle className="h-4 w-4 mt-0.5 shrink-0" />
+                    <span>{sheetsError}</span>
+                  </div>
+                )}
+              </div>
+            )}
           </CardContent>
         </Card>
       )}
