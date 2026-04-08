@@ -239,6 +239,24 @@ function PosSettingsContent() {
         onDisconnect={() => handleDisconnect("toast")}
         disconnecting={disconnecting === "toast"}
       />
+
+      {/* SumUp */}
+      <PosProviderCard
+        provider="sumup"
+        label="SumUp"
+        description="Connect your SumUp account to automatically pull transaction data. No location setup needed — syncs your full account."
+        connection={getConnection("sumup")}
+        locations={[]}
+        isPro={isPro}
+        syncing={syncing === "sumup"}
+        disconnecting={disconnecting === "sumup"}
+        onConnect={() => {
+          window.location.href = "/api/pos/sumup/authorize";
+        }}
+        onDisconnect={() => handleDisconnect("sumup")}
+        onSync={() => handleSync("sumup")}
+        onLocationToggle={() => {}}
+      />
     </div>
   );
 }

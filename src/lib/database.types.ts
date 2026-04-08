@@ -25,7 +25,7 @@ export type FeeType =
   | "percentage"
   | "commission_with_minimum"
   | "pre_settled";
-export type PosSource = "manual" | "square" | "toast" | "clover" | "mixed";
+export type PosSource = "manual" | "square" | "toast" | "clover" | "sumup" | "mixed";
 export type ConfidenceLevel = "HIGH" | "MEDIUM" | "LOW";
 export type TrendType =
   | "Growing"
@@ -118,7 +118,7 @@ export interface Contact {
   updated_at: string;
 }
 
-export type PosProvider = "square" | "clover" | "toast";
+export type PosProvider = "square" | "clover" | "toast" | "sumup";
 
 export interface PosConnection {
   id: string;
