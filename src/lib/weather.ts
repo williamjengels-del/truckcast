@@ -1,5 +1,45 @@
 import type { WeatherType } from "./database.types";
 
+/**
+ * Geocode a city name to latitude/longitude using Open-Meteo's free geocoding API.
+ * Returns null if the city can't be found.
+ */
+export async function geocodeCity(
+  city: string
+): Promise<{ latitude: number; longitude: number } | null> {
+  if (!city.trim()) return null;
+  try {
+    const res = await fetch(
+      `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(city.trim())}&count=1&format=json`
+    );
+    if (!res.ok) return null;
+    const data = await res.json();
+    const results = data.results as Array<{ latitude: number; longitude: number }> | undefined;
+    if (!results || results.length === 0) return null;
+    return { latitude: results[0].latitude, longitude: results[0].longitude };
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Given a city and date, resolve coordinates and return the weather classification.
+ * Returns null if geocoding fails or weather is unavailable (e.g. > 16 days out).
+ * Uses Supabase client for weather_cache reads/writes.
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export async function autoClassifyWeather(
+  city: string,
+  date: string,
+  supabase: any
+): Promise<{ classification: WeatherType; latitude: number; longitude: number } | null> {
+  const coords = await geocodeCity(city);
+  if (!coords) return null;
+  const result = await getWeatherForEvent(coords.latitude, coords.longitude, date, supabase);
+  if (!result) return null;
+  return { classification: result.classification, ...coords };
+}
+
 interface WeatherData {
   maxTempF: number;
   minTempF: number;

@@ -3,6 +3,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { revalidatePath } from "next/cache";
 import { recalculateForUser } from "@/lib/recalculate";
+import { autoClassifyWeather } from "@/lib/weather";
 import type { Event } from "@/lib/database.types";
 
 export type EventFormData = {
@@ -58,6 +59,20 @@ export async function createEvent(formData: EventFormData) {
   if (formData.city_area) insertData.city_area = formData.city_area;
   if (formData.latitude) insertData.latitude = formData.latitude;
   if (formData.longitude) insertData.longitude = formData.longitude;
+
+  // Auto-geocode + classify weather when city is provided and weather not manually set
+  if (formData.city && !formData.event_weather) {
+    try {
+      const wx = await autoClassifyWeather(formData.city, formData.event_date, supabase);
+      if (wx) {
+        insertData.event_weather = wx.classification;
+        if (!formData.latitude) insertData.latitude = wx.latitude;
+        if (!formData.longitude) insertData.longitude = wx.longitude;
+      }
+    } catch {
+      // Non-fatal — skip if geo/weather fails
+    }
+  }
   if (formData.net_sales !== undefined && formData.net_sales !== null)
     insertData.net_sales = formData.net_sales;
   if (formData.event_type) insertData.event_type = formData.event_type;
@@ -107,6 +122,33 @@ export async function updateEvent(id: string, formData: Partial<EventFormData>) 
   for (const [key, value] of Object.entries(formData)) {
     if (value !== undefined) {
       updateData[key] = value === "" ? null : value;
+    }
+  }
+
+  // Auto-geocode + classify weather when city or date changed and weather not manually set
+  const newCity = formData.city;
+  const newDate = formData.event_date;
+  if ((newCity || newDate) && !formData.event_weather) {
+    // Fetch current event to fill in missing city/date if only one changed
+    const { data: current } = await supabase
+      .from("events")
+      .select("city, event_date, latitude, longitude")
+      .eq("id", id)
+      .eq("user_id", user.id)
+      .single();
+    const resolvedCity = newCity || current?.city;
+    const resolvedDate = newDate || current?.event_date;
+    if (resolvedCity && resolvedDate) {
+      try {
+        const wx = await autoClassifyWeather(resolvedCity, resolvedDate, supabase);
+        if (wx) {
+          updateData.event_weather = wx.classification;
+          if (!formData.latitude && !current?.latitude) updateData.latitude = wx.latitude;
+          if (!formData.longitude && !current?.longitude) updateData.longitude = wx.longitude;
+        }
+      } catch {
+        // Non-fatal
+      }
     }
   }
 

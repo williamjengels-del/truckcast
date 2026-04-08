@@ -71,6 +71,7 @@ const PHASES: Phase[] = [
       { label: "Fee calculator handles flat fees, percentages, pre-settled, and day rates", status: "done" },
       { label: "AI forecast engine predicts revenue for upcoming events", status: "done", note: "Validated: within 16% of actual revenue on aggregate forecasts" },
       { label: "Forecasts automatically adjust for weather, day of week, and attendance size", status: "done" },
+      { label: "Enter your city, and TruckCast automatically looks up the weather and location coordinates", status: "done" },
       { label: "The more events you log, the smarter your forecasts get", status: "done" },
       { label: "Dashboard with year-to-date revenue, upcoming projections, and trends at a glance", status: "done" },
       { label: "See which events, event types, and organizers are most valuable to your business", status: "done" },
