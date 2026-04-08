@@ -173,9 +173,9 @@ export default async function LandingPage() {
         <div className="container mx-auto px-4 py-16">
           <div className="grid gap-6 md:grid-cols-3 max-w-3xl mx-auto text-center">
             {[
-              { stat: "351+", label: "Events analyzed to build the model" },
-              { stat: "16%", label: "Aggregate forecast error in best year" },
-              { stat: "59%", label: "MAPE on high-confidence events" },
+              { stat: "351+", label: "Real events used to build and validate the model" },
+              { stat: "Within 16%", label: "Aggregate forecast accuracy on real event data" },
+              { stat: "Zero", label: "Spreadsheets required — it's all built in" },
             ].map((s) => (
               <div key={s.label} className="space-y-1">
                 <p className="text-4xl font-bold text-primary">{s.stat}</p>

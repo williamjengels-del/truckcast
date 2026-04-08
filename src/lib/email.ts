@@ -67,7 +67,7 @@ export async function sendWelcomeEmail(to: string, businessName: string) {
           <div style="width:28px;height:28px;background:#f97316;border-radius:50%;color:white;font-weight:700;font-size:13px;flex-shrink:0;text-align:center;line-height:28px;">2</div>
           <div>
             <div style="font-weight:600;color:#111827;font-size:14px;">Check your forecasts</div>
-            <div style="color:#6b7280;font-size:13px;margin-top:2px;">With 10+ past events, TruckCast generates revenue forecasts for upcoming bookings — calibrated to your actual history.</div>
+            <div style="color:#6b7280;font-size:13px;margin-top:2px;">Even a few events unlock your first forecast. The more you add, the sharper it gets — calibrated to your actual history, not a generic average.</div>
           </div>
         </div>
         <div style="display:flex;gap:12px;">
