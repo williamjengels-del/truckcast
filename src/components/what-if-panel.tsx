@@ -27,6 +27,7 @@ import {
 } from "@/lib/constants";
 import type { Event } from "@/lib/database.types";
 import type { CalibratedCoefficients } from "@/lib/forecast-engine";
+import { calcEventFee } from "@/lib/fee-calculator";
 
 // ─── Attendance conversion rates (same as forecast-calculator.tsx) ──────────
 const CONVERSION_RATES: Record<string, number> = {
@@ -55,25 +56,13 @@ function formatCurrency(v: number): string {
   })}`;
 }
 
-function calcFee(
+// Thin wrapper around shared utility for use in this component
+const calcFee = (
   gross: number,
   feeType: string,
   feeRate: number,
   salesMinimum: number
-): number {
-  switch (feeType) {
-    case "flat_fee":
-      return feeRate;
-    case "percentage":
-      return gross * (feeRate / 100);
-    case "commission_with_minimum":
-      return Math.max(salesMinimum, gross * (feeRate / 100));
-    case "pre_settled":
-      return 0;
-    default:
-      return 0;
-  }
-}
+): number => calcEventFee(gross, feeType, feeRate, salesMinimum);
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
