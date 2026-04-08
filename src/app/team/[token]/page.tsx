@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
+import Link from "next/link";
 import { TruckIcon, MapPin, Clock, Calendar } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 
@@ -59,6 +60,7 @@ export default async function TeamViewPage({ params }: Props) {
   }
 
   const today = new Date().toISOString().split("T")[0];
+  // eslint-disable-next-line react-hooks/purity
   const in14Days = new Date(Date.now() + 14 * 24 * 60 * 60 * 1000)
     .toISOString()
     .split("T")[0];
@@ -194,9 +196,9 @@ export default async function TeamViewPage({ params }: Props) {
       <footer className="border-t py-6 mt-8">
         <div className="container mx-auto px-4 text-center text-xs text-muted-foreground">
           Powered by{" "}
-          <a href="/" className="text-primary hover:underline">
+          <Link href="/" className="text-primary hover:underline">
             TruckCast
-          </a>
+          </Link>
         </div>
       </footer>
     </div>

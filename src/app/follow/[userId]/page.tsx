@@ -143,10 +143,10 @@ export default function FollowTruckPage() {
           <div className="bg-white rounded-2xl shadow-sm border border-green-200 p-6 mb-8 text-center">
             <CheckCircle2 className="h-12 w-12 text-green-500 mx-auto mb-3" />
             <h2 className="text-xl font-semibold text-gray-900 mb-2">
-              You're subscribed!
+              You&apos;re subscribed!
             </h2>
             <p className="text-gray-500">
-              You'll get notified when {truckName} posts new events. See you there!
+              You&apos;ll get notified when {truckName} posts new events. See you there!
             </p>
           </div>
         ) : (

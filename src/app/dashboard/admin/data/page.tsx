@@ -51,6 +51,13 @@ interface AdminProfile {
   data_sharing_enabled: boolean;
 }
 
+function SortIcon({ field, sortField, sortDir }: { field: string; sortField: string; sortDir: string }) {
+  if (sortField !== field) return <ChevronsUpDown className="h-3 w-3 ml-1 opacity-40" />;
+  return sortDir === "asc"
+    ? <ChevronUp className="h-3 w-3 ml-1 text-primary" />
+    : <ChevronDown className="h-3 w-3 ml-1 text-primary" />;
+}
+
 export default function AdminDataPage() {
   const [events, setEvents] = useState<AdminEvent[]>([]);
   const [profiles, setProfiles] = useState<AdminProfile[]>([]);
@@ -78,13 +85,6 @@ export default function AdminDataPage() {
     setPage(1);
   }
 
-  function SortIcon({ field }: { field: string }) {
-    if (sortField !== field) return <ChevronsUpDown className="h-3 w-3 ml-1 opacity-40" />;
-    return sortDir === "asc"
-      ? <ChevronUp className="h-3 w-3 ml-1 text-primary" />
-      : <ChevronDown className="h-3 w-3 ml-1 text-primary" />;
-  }
-
   const load = useCallback(async () => {
     setLoading(true);
     const params = new URLSearchParams({
@@ -108,6 +108,7 @@ export default function AdminDataPage() {
     setLoading(false);
   }, [page, search, businessSearch, filterSharing, filterEventType, filterBooked, sortField, sortDir]);
 
+  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { load(); }, [load]);
 
   const optedInCount = profiles.filter((p) => p.data_sharing_enabled).length;
@@ -282,24 +283,24 @@ export default function AdminDataPage() {
             <tr className="border-b bg-muted/50">
               <th className="text-left p-3 font-medium">
                 <button onClick={() => handleSort("business")} className="flex items-center hover:text-foreground transition-colors">
-                  Business <SortIcon field="business" />
+                  Business <SortIcon field="business" sortField={sortField} sortDir={sortDir} />
                 </button>
               </th>
               <th className="text-left p-3 font-medium">Event</th>
               <th className="text-left p-3 font-medium">
                 <button onClick={() => handleSort("event_date")} className="flex items-center hover:text-foreground transition-colors">
-                  Date <SortIcon field="event_date" />
+                  Date <SortIcon field="event_date" sortField={sortField} sortDir={sortDir} />
                 </button>
               </th>
               <th className="text-left p-3 font-medium">Type</th>
               <th className="text-left p-3 font-medium">
                 <button onClick={() => handleSort("city")} className="flex items-center hover:text-foreground transition-colors">
-                  City <SortIcon field="city" />
+                  City <SortIcon field="city" sortField={sortField} sortDir={sortDir} />
                 </button>
               </th>
               <th className="text-right p-3 font-medium">
                 <button onClick={() => handleSort("net_sales")} className="flex items-center ml-auto hover:text-foreground transition-colors">
-                  Net Sales <SortIcon field="net_sales" />
+                  Net Sales <SortIcon field="net_sales" sortField={sortField} sortDir={sortDir} />
                 </button>
               </th>
               <th className="text-left p-3 font-medium">Booked</th>

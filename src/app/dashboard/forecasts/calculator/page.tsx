@@ -12,7 +12,7 @@ export default async function CalculatorPage() {
 
   let events: Event[] = [];
   let overallAvg: number | null = null;
-  let eventTypeAvgs: Record<string, number> = {};
+  const eventTypeAvgs: Record<string, number> = {};
 
   if (user) {
     const { data } = await supabase

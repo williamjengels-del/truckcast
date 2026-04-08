@@ -72,7 +72,7 @@ export default function FollowersPage() {
             <h2 className="text-lg font-semibold mb-2">Premium Feature</h2>
             <p className="text-sm text-muted-foreground max-w-md mx-auto">
               Upgrade to Premium to let your customers subscribe to event
-              notifications. They'll get an email whenever you post new events.
+              notifications. They&apos;ll get an email whenever you post new events.
             </p>
           </CardContent>
         </Card>

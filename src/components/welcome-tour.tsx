@@ -153,7 +153,9 @@ export function WelcomeTour({ forceOpen = false, onClose }: WelcomeTourProps) {
   // Auto-show on first visit
   useEffect(() => {
     if (forceOpen) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setOpen(true);
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setSlide(0);
       return;
     }

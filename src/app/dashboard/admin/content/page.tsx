@@ -2,7 +2,6 @@
 
 import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
-import { createClient as createServiceClient } from "@supabase/supabase-js";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -19,17 +18,6 @@ const adminNavItems = [
   { href: "/dashboard/admin/feedback", label: "Feedback" },
   { href: "/dashboard/admin/content", label: "Content", active: true },
 ];
-
-function getServiceClient() {
-  // Note: In a client component we can only use public env vars.
-  // This page should only be accessible to admins — the service role key
-  // is used server-side. For client-side admin operations we route through
-  // API routes. However, since this is a simple admin tool with no sensitive
-  // data beyond what's already publicly readable via testimonials policy,
-  // we use the anon key here and rely on RLS + server-side validation.
-  // Full testimonial CRUD requires service role, so we use API routes.
-  return null;
-}
 
 export default function AdminContentPage() {
   const [testimonials, setTestimonials] = useState<Testimonial[]>([]);
@@ -58,6 +46,7 @@ export default function AdminContentPage() {
   }, []);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     load();
   }, [load]);
 
@@ -335,6 +324,3 @@ export default function AdminContentPage() {
     </div>
   );
 }
-
-// Suppress unused import warning for the service client helper
-void getServiceClient;

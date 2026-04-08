@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
+import Link from "next/link";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { TruckIcon, MapPin, Clock, Calendar } from "lucide-react";
@@ -171,9 +172,9 @@ export default async function PublicSchedulePage({ params }: Props) {
       <footer className="border-t py-6 mt-12">
         <div className="container mx-auto px-4 text-center text-sm text-muted-foreground">
           Powered by{" "}
-          <a href="/" className="text-primary hover:underline">
+          <Link href="/" className="text-primary hover:underline">
             TruckCast
-          </a>
+          </Link>
         </div>
       </footer>
     </div>

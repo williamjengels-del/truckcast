@@ -185,13 +185,30 @@ const PHASES: Phase[] = [
       { label: "Cost templates per event type — set your usual costs once, apply them automatically", status: "planned" },
     ],
   },
+  {
+    number: 9,
+    name: "Brand Redesign",
+    tagline: "A fresh look that feels as professional as the system behind it — built for real operators.",
+    color: "bg-violet-50 dark:bg-violet-950/20",
+    accent: "border-violet-300 dark:border-violet-700",
+    badge: "bg-violet-100 text-violet-700 dark:bg-violet-900/50 dark:text-violet-300",
+    status: "in_progress",
+    milestones: [
+      { label: "New color palette and typography — clean, modern, and easy on the eyes", status: "in_progress" },
+      { label: "Refreshed logo and brand identity", status: "planned" },
+      { label: "Updated marketing site — clearer messaging for food truck operators", status: "planned" },
+      { label: "Polished dashboard UI — every screen gets a visual pass", status: "planned" },
+      { label: "Mobile-first tweaks — tighter layout for phones operators actually use mid-event", status: "planned" },
+      { label: "Dark mode refinements — better contrast and color balance", status: "planned" },
+    ],
+  },
 ];
 
 const STATS = [
   { label: "Phases completed", value: "7" },
   { label: "Features shipped", value: "50+" },
   { label: "POS integrations", value: "3" },
-  { label: "Automated tests", value: "17" },
+  { label: "Automated tests", value: "90" },
 ];
 
 function StatusIcon({ status }: { status: MilestoneStatus }) {
@@ -263,8 +280,8 @@ export default function RoadmapPage() {
             From Guesswork to Real Forecasts
           </h1>
           <p className="text-xl text-muted-foreground max-w-2xl mx-auto">
-            TruckCast started as one food truck owner's spreadsheet in St. Louis.
-            Here's every step we've taken — and everything coming next.
+            TruckCast started as one food truck owner&apos;s spreadsheet in St. Louis.
+            Here&apos;s every step we&apos;ve taken — and everything coming next.
           </p>
 
           {/* Stats */}

@@ -240,11 +240,22 @@ function confidenceScoreToLabel(score: number): "HIGH" | "MEDIUM" | "LOW" {
  * @param historicalEvents - All historical events for this user
  * @param options - Optional: calibrated coefficients, etc.
  */
+/** Public input type for calculateForecast — relaxes event_type to any string
+ *  so callers don't need to use the strict EventType enum. The engine handles
+ *  unknown event types via Level 3/4 fallbacks. */
+export type ForecastTarget = Omit<Partial<Event>, "event_type" | "event_date"> & {
+  event_name: string;
+  event_type?: string | null;
+  event_date?: string | null;
+};
+
 export function calculateForecast(
-  targetEvent: Partial<Event>,
+  targetEvent: ForecastTarget,
   historicalEvents: Event[],
   options?: ForecastOptions
 ): ForecastResult | null {
+  // Internal cast: all fields match Partial<Event> except event_type which is widened
+  const target = targetEvent as Partial<Event>;
   // Filter to booked events with sales, exclude disrupted
   const validEvents = historicalEvents.filter(
     (e) =>
@@ -259,27 +270,27 @@ export function calculateForecast(
   const calibrated = options?.calibratedCoefficients ?? null;
 
   // Check venue familiarity
-  const venueHistory = targetEvent.location
-    ? getVenueHistory(targetEvent.location, historicalEvents)
+  const venueHistory = target.location
+    ? getVenueHistory(target.location, historicalEvents)
     : null;
 
   let result: ForecastResult | null = null;
 
   // Level 1: Direct Event History
-  result = tryLevel1(targetEvent, validEvents);
-  if (result) return applyAdjustments(result, targetEvent, validEvents, calibrated, venueHistory);
+  result = tryLevel1(target, validEvents);
+  if (result) return applyAdjustments(result, target, validEvents, calibrated, venueHistory);
 
   // Level 2: Similar Event Combo (same type + city area)
-  result = tryLevel2(targetEvent, validEvents);
-  if (result) return applyAdjustments(result, targetEvent, validEvents, calibrated, venueHistory);
+  result = tryLevel2(target, validEvents);
+  if (result) return applyAdjustments(result, target, validEvents, calibrated, venueHistory);
 
   // Level 3: Event Type Average
-  result = tryLevel3(targetEvent, validEvents, calibrated);
-  if (result) return applyAdjustments(result, targetEvent, validEvents, calibrated, venueHistory);
+  result = tryLevel3(target, validEvents, calibrated);
+  if (result) return applyAdjustments(result, target, validEvents, calibrated, venueHistory);
 
   // Level 4: Seasonal Monthly Average
-  result = tryLevel4(targetEvent, validEvents, calibrated);
-  if (result) return applyAdjustments(result, targetEvent, validEvents, calibrated, venueHistory);
+  result = tryLevel4(target, validEvents, calibrated);
+  if (result) return applyAdjustments(result, target, validEvents, calibrated, venueHistory);
 
   return null;
 }

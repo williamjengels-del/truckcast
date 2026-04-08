@@ -1100,6 +1100,116 @@ function VenueSection({
 
 // ─── Compare Events Section ───────────────────────────────────────────────────
 
+function CompareCard({
+  row,
+  isWinner,
+}: {
+  row: CompareEventRow;
+  isWinner: boolean;
+}) {
+  const occurrenceData = row.occurrences.map((o, i) => ({
+    label: `#${i + 1}`,
+    value: o.net_sales,
+    color:
+      o.anomaly_flag === "disrupted"
+        ? "#dc2626"
+        : o.anomaly_flag === "boosted"
+          ? "#16a34a"
+          : "#2563eb",
+  }));
+
+  return (
+    <div
+      className={`flex-1 min-w-[240px] rounded-lg border p-4 space-y-3 ${
+        isWinner ? "border-green-400 ring-1 ring-green-400" : ""
+      }`}
+    >
+      <div className="flex items-start justify-between">
+        <h3 className="font-semibold text-base">{row.event_name}</h3>
+        {isWinner && (
+          <Badge className="bg-green-600 hover:bg-green-700 text-xs shrink-0">
+            Winner
+          </Badge>
+        )}
+      </div>
+      <div className="grid grid-cols-2 gap-2 text-sm">
+        <div>
+          <p className="text-xs text-muted-foreground">Times Booked</p>
+          <p className="font-medium">{row.times_booked}</p>
+        </div>
+        <div>
+          <p className="text-xs text-muted-foreground">Avg Net Sales</p>
+          <p className="font-medium">{formatCurrency(row.avg_sales)}</p>
+        </div>
+        <div>
+          <p className="text-xs text-muted-foreground">Best</p>
+          <p className="font-medium text-green-600">
+            {formatCurrency(row.max_sales)}
+          </p>
+        </div>
+        <div>
+          <p className="text-xs text-muted-foreground">Worst</p>
+          <p className="font-medium text-red-600">
+            {formatCurrency(row.min_sales)}
+          </p>
+        </div>
+        <div>
+          <p className="text-xs text-muted-foreground">Confidence</p>
+          <Badge
+            variant="secondary"
+            className={
+              row.confidence === "HIGH"
+                ? "bg-green-100 text-green-800"
+                : row.confidence === "LOW"
+                  ? "bg-red-100 text-red-800"
+                  : "bg-yellow-100 text-yellow-800"
+            }
+          >
+            {row.confidence ?? "—"}
+          </Badge>
+        </div>
+        <div>
+          <p className="text-xs text-muted-foreground">Trend</p>
+          <Badge
+            variant={
+              row.trend === "Growing"
+                ? "default"
+                : row.trend === "Declining"
+                  ? "destructive"
+                  : "secondary"
+            }
+          >
+            {row.trend ?? "Stable"}
+          </Badge>
+        </div>
+        {row.consistency_score !== null && (
+          <div>
+            <p className="text-xs text-muted-foreground">Consistency</p>
+            <p className="font-medium">
+              {Math.round(row.consistency_score * 100)}%
+            </p>
+          </div>
+        )}
+        {row.forecast_next !== null && (
+          <div>
+            <p className="text-xs text-muted-foreground">Next Forecast</p>
+            <p className="font-medium">{formatCurrency(row.forecast_next)}</p>
+          </div>
+        )}
+      </div>
+      {occurrenceData.length > 0 && (
+        <div>
+          <p className="text-xs text-muted-foreground mb-1">Historical sales</p>
+          <MiniBarChart data={occurrenceData} />
+          <p className="text-xs text-muted-foreground mt-1">
+            Blue=normal · Green=boosted · Red=disrupted
+          </p>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function CompareEventsSection({
   compareEventRows,
 }: {
@@ -1121,116 +1231,6 @@ function CompareEventsSection({
     const a = compareEventRows.find((r) => r.event_name === eventA);
     const b = compareEventRows.find((r) => r.event_name === eventB);
     if (a && b) setCompared({ a, b });
-  }
-
-  function CompareCard({
-    row,
-    isWinner,
-  }: {
-    row: CompareEventRow;
-    isWinner: boolean;
-  }) {
-    const occurrenceData = row.occurrences.map((o, i) => ({
-      label: `#${i + 1}`,
-      value: o.net_sales,
-      color:
-        o.anomaly_flag === "disrupted"
-          ? "#dc2626"
-          : o.anomaly_flag === "boosted"
-            ? "#16a34a"
-            : "#2563eb",
-    }));
-
-    return (
-      <div
-        className={`flex-1 min-w-[240px] rounded-lg border p-4 space-y-3 ${
-          isWinner ? "border-green-400 ring-1 ring-green-400" : ""
-        }`}
-      >
-        <div className="flex items-start justify-between">
-          <h3 className="font-semibold text-base">{row.event_name}</h3>
-          {isWinner && (
-            <Badge className="bg-green-600 hover:bg-green-700 text-xs shrink-0">
-              Winner
-            </Badge>
-          )}
-        </div>
-        <div className="grid grid-cols-2 gap-2 text-sm">
-          <div>
-            <p className="text-xs text-muted-foreground">Times Booked</p>
-            <p className="font-medium">{row.times_booked}</p>
-          </div>
-          <div>
-            <p className="text-xs text-muted-foreground">Avg Net Sales</p>
-            <p className="font-medium">{formatCurrency(row.avg_sales)}</p>
-          </div>
-          <div>
-            <p className="text-xs text-muted-foreground">Best</p>
-            <p className="font-medium text-green-600">
-              {formatCurrency(row.max_sales)}
-            </p>
-          </div>
-          <div>
-            <p className="text-xs text-muted-foreground">Worst</p>
-            <p className="font-medium text-red-600">
-              {formatCurrency(row.min_sales)}
-            </p>
-          </div>
-          <div>
-            <p className="text-xs text-muted-foreground">Confidence</p>
-            <Badge
-              variant="secondary"
-              className={
-                row.confidence === "HIGH"
-                  ? "bg-green-100 text-green-800"
-                  : row.confidence === "LOW"
-                    ? "bg-red-100 text-red-800"
-                    : "bg-yellow-100 text-yellow-800"
-              }
-            >
-              {row.confidence ?? "—"}
-            </Badge>
-          </div>
-          <div>
-            <p className="text-xs text-muted-foreground">Trend</p>
-            <Badge
-              variant={
-                row.trend === "Growing"
-                  ? "default"
-                  : row.trend === "Declining"
-                    ? "destructive"
-                    : "secondary"
-              }
-            >
-              {row.trend ?? "Stable"}
-            </Badge>
-          </div>
-          {row.consistency_score !== null && (
-            <div>
-              <p className="text-xs text-muted-foreground">Consistency</p>
-              <p className="font-medium">
-                {Math.round(row.consistency_score * 100)}%
-              </p>
-            </div>
-          )}
-          {row.forecast_next !== null && (
-            <div>
-              <p className="text-xs text-muted-foreground">Next Forecast</p>
-              <p className="font-medium">{formatCurrency(row.forecast_next)}</p>
-            </div>
-          )}
-        </div>
-        {occurrenceData.length > 0 && (
-          <div>
-            <p className="text-xs text-muted-foreground mb-1">Historical sales</p>
-            <MiniBarChart data={occurrenceData} />
-            <p className="text-xs text-muted-foreground mt-1">
-              Blue=normal · Green=boosted · Red=disrupted
-            </p>
-          </div>
-        )}
-      </div>
-    );
   }
 
   return (

@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { ForecastCalculator } from "@/components/forecast-calculator";
 
 export const metadata: Metadata = {
@@ -21,13 +22,13 @@ export default function PublicCalculatorPage() {
       {/* Nav strip */}
       <header className="border-b bg-background/80 backdrop-blur supports-[backdrop-filter]:bg-background/60 sticky top-0 z-50">
         <div className="max-w-4xl mx-auto px-4 h-14 flex items-center justify-between">
-          <a href="/" className="flex items-center gap-2 font-semibold text-sm">
+          <Link href="/" className="flex items-center gap-2 font-semibold text-sm">
             <span className="text-xl">🚚</span>
             <div className="flex flex-col leading-none">
               <span className="font-bold">TruckCast</span>
               <span className="text-[10px] text-muted-foreground font-medium tracking-wide">by VendCast</span>
             </div>
-          </a>
+          </Link>
           <div className="flex items-center gap-3">
             <a
               href="/login"

@@ -50,10 +50,10 @@ export default function UnsubscribePage() {
           <div className="bg-white rounded-2xl shadow-sm border border-green-200 p-6 text-center">
             <CheckCircle2 className="h-12 w-12 text-green-500 mx-auto mb-3" />
             <h2 className="text-lg font-semibold text-gray-900 mb-2">
-              You've been unsubscribed
+              You&apos;ve been unsubscribed
             </h2>
             <p className="text-gray-500 text-sm">
-              You won't receive any more event notifications.
+              You won&apos;t receive any more event notifications.
             </p>
           </div>
         ) : (

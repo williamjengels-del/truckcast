@@ -5,6 +5,7 @@ import { AlertTriangle, Sparkles } from "lucide-react";
 const TRIAL_DAYS = 14;
 
 export async function TrialBanner() {
+  /* eslint-disable react-hooks/error-boundaries */
   try {
     const supabase = await createClient();
     const {
@@ -90,4 +91,5 @@ export async function TrialBanner() {
     // Never let the banner crash the dashboard
     return null;
   }
+  /* eslint-enable react-hooks/error-boundaries */
 }

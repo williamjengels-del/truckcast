@@ -77,6 +77,33 @@ function getWeatherBadgeVariant(
   return "destructive";
 }
 
+function SortHeader({
+  label,
+  column,
+  className,
+  sortKey,
+  sortAsc,
+  onSort,
+}: {
+  label: string;
+  column: SortKey;
+  className?: string;
+  sortKey: SortKey;
+  sortAsc: boolean;
+  onSort: (key: SortKey) => void;
+}) {
+  const isActive = sortKey === column;
+  return (
+    <TableHead
+      className={`cursor-pointer select-none hover:bg-muted/50 ${className ?? ""}`}
+      onClick={() => onSort(column)}
+    >
+      {label}
+      {isActive ? (sortAsc ? " \u25B2" : " \u25BC") : ""}
+    </TableHead>
+  );
+}
+
 export function EventBreakdownTable({ rows }: { rows: EventBreakdownRow[] }) {
   const [sortKey, setSortKey] = useState<SortKey>("event_date");
   const [sortAsc, setSortAsc] = useState(false);
@@ -135,27 +162,6 @@ export function EventBreakdownTable({ rows }: { rows: EventBreakdownRow[] }) {
     }
   }
 
-  function SortHeader({
-    label,
-    column,
-    className,
-  }: {
-    label: string;
-    column: SortKey;
-    className?: string;
-  }) {
-    const isActive = sortKey === column;
-    return (
-      <TableHead
-        className={`cursor-pointer select-none hover:bg-muted/50 ${className ?? ""}`}
-        onClick={() => handleSort(column)}
-      >
-        {label}
-        {isActive ? (sortAsc ? " \u25B2" : " \u25BC") : ""}
-      </TableHead>
-    );
-  }
-
   if (rows.length === 0) {
     return (
       <div className="h-32 flex items-center justify-center text-muted-foreground">
@@ -195,32 +201,44 @@ export function EventBreakdownTable({ rows }: { rows: EventBreakdownRow[] }) {
         <Table>
           <TableHeader>
             <TableRow>
-              <SortHeader label="Event" column="event_name" />
-              <SortHeader label="Date" column="event_date" />
-              <SortHeader label="Type" column="event_type" />
-              <SortHeader label="City" column="city" />
+              <SortHeader label="Event" column="event_name" sortKey={sortKey} sortAsc={sortAsc} onSort={handleSort} />
+              <SortHeader label="Date" column="event_date" sortKey={sortKey} sortAsc={sortAsc} onSort={handleSort} />
+              <SortHeader label="Type" column="event_type" sortKey={sortKey} sortAsc={sortAsc} onSort={handleSort} />
+              <SortHeader label="City" column="city" sortKey={sortKey} sortAsc={sortAsc} onSort={handleSort} />
               <SortHeader
                 label="Net Sales"
                 column="net_sales"
                 className="text-right"
+                sortKey={sortKey}
+                sortAsc={sortAsc}
+                onSort={handleSort}
               />
               <SortHeader
                 label="Forecast"
                 column="forecast_sales"
                 className="text-right"
+                sortKey={sortKey}
+                sortAsc={sortAsc}
+                onSort={handleSort}
               />
               <SortHeader
                 label="Accuracy"
                 column="accuracy"
                 className="text-right"
+                sortKey={sortKey}
+                sortAsc={sortAsc}
+                onSort={handleSort}
               />
-              <SortHeader label="Fee Type" column="fee_type" />
+              <SortHeader label="Fee Type" column="fee_type" sortKey={sortKey} sortAsc={sortAsc} onSort={handleSort} />
               <SortHeader
                 label="Fee Amount"
                 column="fee_amount"
                 className="text-right"
+                sortKey={sortKey}
+                sortAsc={sortAsc}
+                onSort={handleSort}
               />
-              <SortHeader label="Weather" column="event_weather" />
+              <SortHeader label="Weather" column="event_weather" sortKey={sortKey} sortAsc={sortAsc} onSort={handleSort} />
             </TableRow>
           </TableHeader>
           <TableBody>

@@ -27,10 +27,10 @@ export async function geocodeCity(
  * Returns null if geocoding fails or weather is unavailable (e.g. > 16 days out).
  * Uses Supabase client for weather_cache reads/writes.
  */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export async function autoClassifyWeather(
   city: string,
   date: string,
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   supabase: any
 ): Promise<{ classification: WeatherType; latitude: number; longitude: number } | null> {
   const coords = await geocodeCity(city);
@@ -154,11 +154,11 @@ export async function fetchWeather(
 /**
  * Fetch weather and classify it, with caching via Supabase.
  */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export async function getWeatherForEvent(
   latitude: number,
   longitude: number,
   date: string,
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   supabase: any
 ): Promise<{ classification: WeatherType; data: WeatherData } | null> {
   // Check cache first
