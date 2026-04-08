@@ -66,7 +66,7 @@ export function SetupProgress({
       label: "Connect your POS (optional)",
       done: hasPOS,
       actionLabel: "Connect POS",
-      actionHref: "/dashboard/settings",
+      actionHref: "/dashboard/settings/pos",
     },
     {
       label: "Add 10+ events for better forecasts",
