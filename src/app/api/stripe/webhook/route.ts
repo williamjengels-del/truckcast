@@ -82,7 +82,10 @@ export async function POST(request: Request) {
       if (profiles && profiles.length > 0) {
         await supabase
           .from("profiles")
-          .update({ subscription_tier: tier })
+          .update({
+            subscription_tier: tier,
+            stripe_subscription_id: subscription.id,
+          })
           .eq("id", profiles[0].id);
       }
       break;

@@ -5,9 +5,13 @@ const TRIAL_DAYS = 14;
 
 /**
  * Dashboard routes that are always accessible even after trial expiry.
- * Upgrade page + settings (so users can complete checkout).
+ * Upgrade page + settings (so users can complete checkout) + admin (Julian's own panel).
  */
-const TRIAL_GATE_EXEMPT = ["/dashboard/upgrade", "/dashboard/settings"];
+const TRIAL_GATE_EXEMPT = [
+  "/dashboard/upgrade",
+  "/dashboard/settings",
+  "/dashboard/admin",
+];
 
 export async function middleware(request: NextRequest) {
   let supabaseResponse = NextResponse.next({ request });
