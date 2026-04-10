@@ -17,7 +17,8 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { BarChart3, ChevronUp, ChevronDown, ChevronsUpDown, Info, RefreshCw } from "lucide-react";
+import { BarChart3, ChevronUp, ChevronDown, ChevronsUpDown, Info, RefreshCw, ExternalLink } from "lucide-react";
+import Link from "next/link";
 import { CONFIDENCE_COLORS, TREND_COLORS } from "@/lib/constants";
 import type { EventPerformance } from "@/lib/database.types";
 
@@ -249,9 +250,15 @@ export function PerformanceClient({ performances }: PerformanceClientProps) {
                 </TableHeader>
                 <TableBody>
                   {sorted.map((perf) => (
-                    <TableRow key={perf.id}>
+                    <TableRow key={perf.id} className="group">
                       <TableCell className="font-medium">
-                        {perf.event_name}
+                        <Link
+                          href={`/dashboard/performance/${encodeURIComponent(perf.event_name)}`}
+                          className="hover:text-primary hover:underline inline-flex items-center gap-1"
+                        >
+                          {perf.event_name}
+                          <ExternalLink className="h-3 w-3 opacity-0 group-hover:opacity-50 transition-opacity shrink-0" />
+                        </Link>
                       </TableCell>
                       <TableCell className="text-center">
                         {perf.times_booked}
