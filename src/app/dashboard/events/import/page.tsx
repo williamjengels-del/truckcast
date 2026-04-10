@@ -59,7 +59,8 @@ type FieldKey =
   | "anomaly_flag"
   | "weather_type"
   | "expected_attendance"
-  | "sales_minimum";
+  | "sales_minimum"
+  | "event_mode";
 
 interface ParsedRow {
   event_name: string;
@@ -81,6 +82,7 @@ interface ParsedRow {
   weather_type?: string;
   expected_attendance?: number;
   sales_minimum?: number;
+  event_mode?: string;
   valid: boolean;
   error?: string;
   multi_day_label?: string;
@@ -132,6 +134,7 @@ const FIELD_OPTIONS: { value: FieldKey | "skip"; label: string; description: str
   { value: "weather_type", label: "Weather", description: "Weather conditions at the event" },
   { value: "expected_attendance", label: "Expected Attendance", description: "Estimated crowd size" },
   { value: "notes", label: "Notes", description: "Additional notes or comments" },
+  { value: "event_mode", label: "Event Mode", description: "food_truck or catering" },
 ];
 
 // ═══════════════════════════════════════════════════════════════════════
@@ -197,6 +200,7 @@ const COLUMN_ALIASES: Record<FieldKey, string[]> = {
   weather_type: ["weather", "weather_type", "conditions", "weather conditions"],
   expected_attendance: ["attendance", "expected attendance", "expected_attendance", "crowd size", "expected crowd"],
   sales_minimum: ["sales minimum", "sales_minimum", "minimum", "min guarantee", "guarantee"],
+  event_mode: ["event_mode", "eventmode", "mode", "event mode", "truck mode", "service mode"],
 };
 
 function normalizeHeader(h: string): string {
@@ -547,6 +551,17 @@ function parseWithMapping(
     const expectedAttendance = rawAttendance ? parseInt(rawAttendance.replace(/[,]/g, ""), 10) : undefined;
     const validAttendance = expectedAttendance !== undefined && !isNaN(expectedAttendance) ? expectedAttendance : undefined;
 
+    // ── Event mode ──
+    const rawMode = getValue("event_mode", values).trim().toLowerCase();
+    let eventMode: string | undefined = undefined;
+    if (rawMode) {
+      if (["catering", "private catering", "private", "invoice", "invoiced"].includes(rawMode)) {
+        eventMode = "catering";
+      } else {
+        eventMode = "food_truck";
+      }
+    }
+
     // ── Sales minimum ──
     const rawSalesMin = getValue("sales_minimum", values).trim();
     const salesMinimum = rawSalesMin ? parseFloat(rawSalesMin.replace(/[$,]/g, "")) : undefined;
@@ -586,6 +601,7 @@ function parseWithMapping(
           weather_type: weatherType,
           expected_attendance: validAttendance,
           sales_minimum: validSalesMinimum,
+          event_mode: eventMode,
           valid: true,
           multi_day_label: `Day ${d + 1} of ${numDays + 1}`,
         });
@@ -610,6 +626,7 @@ function parseWithMapping(
         weather_type: weatherType,
         expected_attendance: validAttendance,
         sales_minimum: validSalesMinimum,
+        event_mode: eventMode,
         valid: true,
       });
     }
@@ -938,6 +955,7 @@ export default function ImportPage() {
       anomaly_flag: r.anomaly_flag ?? "normal",
       event_weather: r.weather_type ?? null,
       expected_attendance: r.expected_attendance ?? null,
+      event_mode: (r.event_mode === "catering" ? "catering" : "food_truck") as "food_truck" | "catering",
       pos_source: "manual" as const,
     }));
 
