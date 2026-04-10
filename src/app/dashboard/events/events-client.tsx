@@ -73,7 +73,8 @@ type SortField =
   | "location"
   | "net_sales"
   | "net_after_fees"
-  | "forecast_sales";
+  | "forecast_sales"
+  | "net_profit";
 type SortDirection = "asc" | "desc";
 type ViewMode = "list" | "split" | "calendar";
 type TabMode = "all" | "upcoming" | "unbooked" | "past" | "flagged";
@@ -320,6 +321,15 @@ export function EventsClient({ initialEvents, userId = "", businessName = "", us
         const va = a[sortField] ?? -Infinity;
         const vb = b[sortField] ?? -Infinity;
         return (va - vb) * dir;
+      }
+      case "net_profit": {
+        const profitOf = (e: Event) => {
+          const hasCost = e.food_cost !== null || e.labor_cost !== null || e.other_costs !== null;
+          if (!hasCost) return -Infinity;
+          const rev = (e.net_sales ?? 0) + (e.event_mode === "catering" ? (e.invoice_revenue ?? 0) : 0);
+          return rev - (e.food_cost ?? 0) - (e.labor_cost ?? 0) - (e.other_costs ?? 0);
+        };
+        return (profitOf(a) - profitOf(b)) * dir;
       }
       default:
         return 0;
@@ -1099,6 +1109,15 @@ export function EventsClient({ initialEvents, userId = "", businessName = "", us
                         <SortIcon field="forecast_sales" />
                       </span>
                     </TableHead>
+                    <TableHead
+                      className="hidden xl:table-cell cursor-pointer select-none text-right"
+                      onClick={() => handleSort("net_profit")}
+                    >
+                      <span className="inline-flex items-center justify-end">
+                        Profit
+                        <SortIcon field="net_profit" />
+                      </span>
+                    </TableHead>
                     <TableHead></TableHead>
                   </TableRow>
                 </TableHeader>
@@ -1167,6 +1186,21 @@ export function EventsClient({ initialEvents, userId = "", businessName = "", us
                       </TableCell>
                       <TableCell className="hidden lg:table-cell text-right text-sm text-muted-foreground">
                         {formatCurrency(event.forecast_sales)}
+                      </TableCell>
+                      <TableCell className="hidden xl:table-cell text-right text-sm font-medium">
+                        {(() => {
+                          const hasCost = event.food_cost !== null || event.labor_cost !== null || event.other_costs !== null;
+                          if (!hasCost) return <span className="text-muted-foreground">—</span>;
+                          const rev = (event.net_sales ?? 0) + (event.event_mode === "catering" ? (event.invoice_revenue ?? 0) : 0);
+                          const costs = (event.food_cost ?? 0) + (event.labor_cost ?? 0) + (event.other_costs ?? 0);
+                          const p = rev - costs;
+                          const margin = rev > 0 ? (p / rev) * 100 : 0;
+                          return (
+                            <span className={p >= 0 ? "text-green-700 dark:text-green-400" : "text-red-600"} title={`Margin: ${margin.toFixed(1)}%`}>
+                              {formatCurrency(p)}
+                            </span>
+                          );
+                        })()}
                       </TableCell>
                       <TableCell>
                         <div className="flex items-center gap-1 justify-end" onClick={(e) => e.stopPropagation()}>

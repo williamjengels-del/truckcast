@@ -10,6 +10,9 @@ import {
   Star,
   Tag,
   PiggyBank,
+  ChevronUp,
+  ChevronDown,
+  Minus,
 } from "lucide-react";
 // TrendingUp used in KPI card
 import { AnalyticsControls } from "./analytics-controls";
@@ -361,6 +364,68 @@ export default async function AnalyticsPage({ searchParams }: PageProps) {
   const profitMargin = revenueForCostEvents > 0 ? (profit / revenueForCostEvents) * 100 : null;
   const hasCostData = eventsWithCosts.length > 0;
 
+  // Profitability by event type — requires cost data
+  interface TypeProfitRow {
+    type: string;
+    count: number;
+    avgRevenue: number;
+    avgCosts: number;
+    avgProfit: number;
+    avgMargin: number;
+  }
+  const profitByType: TypeProfitRow[] = [];
+  if (hasCostData) {
+    const typeMap = new Map<string, { revenues: number[]; costs: number[] }>();
+    for (const e of eventsWithCosts) {
+      const type = e.event_type ?? "Untagged";
+      if (!typeMap.has(type)) typeMap.set(type, { revenues: [], costs: [] });
+      const g = typeMap.get(type)!;
+      g.revenues.push(eventRevenue(e));
+      g.costs.push((e.food_cost ?? 0) + (e.labor_cost ?? 0) + (e.other_costs ?? 0));
+    }
+    for (const [type, { revenues, costs }] of typeMap) {
+      const n = revenues.length;
+      const avgRev = revenues.reduce((a, b) => a + b, 0) / n;
+      const avgCost = costs.reduce((a, b) => a + b, 0) / n;
+      const avgProfit = avgRev - avgCost;
+      const avgMargin = avgRev > 0 ? (avgProfit / avgRev) * 100 : 0;
+      profitByType.push({ type, count: n, avgRevenue: avgRev, avgCosts: avgCost, avgProfit, avgMargin });
+    }
+    profitByType.sort((a, b) => b.avgMargin - a.avgMargin);
+  }
+
+  // Profitability by day of week — requires cost data
+  interface DowProfitRow {
+    day: string;
+    count: number;
+    avgRevenue: number;
+    avgCosts: number;
+    avgProfit: number;
+    avgMargin: number;
+  }
+  const profitByDow: DowProfitRow[] = [];
+  if (hasCostData) {
+    const dowMap = new Map<number, { revenues: number[]; costs: number[] }>();
+    for (const e of eventsWithCosts) {
+      const dow = new Date(e.event_date + "T00:00:00").getDay();
+      if (!dowMap.has(dow)) dowMap.set(dow, { revenues: [], costs: [] });
+      const g = dowMap.get(dow)!;
+      g.revenues.push(eventRevenue(e));
+      g.costs.push((e.food_cost ?? 0) + (e.labor_cost ?? 0) + (e.other_costs ?? 0));
+    }
+    for (const [dow, { revenues, costs }] of dowMap) {
+      const n = revenues.length;
+      const avgRev = revenues.reduce((a, b) => a + b, 0) / n;
+      const avgCost = costs.reduce((a, b) => a + b, 0) / n;
+      const avgProfit = avgRev - avgCost;
+      const avgMargin = avgRev > 0 ? (avgProfit / avgRev) * 100 : 0;
+      profitByDow.push({ day: DAY_NAMES[dow], count: n, avgRevenue: avgRev, avgCosts: avgCost, avgProfit, avgMargin });
+    }
+    // Sort by day of week order
+    const dowOrder = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+    profitByDow.sort((a, b) => dowOrder.indexOf(a.day) - dowOrder.indexOf(b.day));
+  }
+
   // Build chart data
   const trendData = buildTrendData(
     periodEvents,
@@ -575,6 +640,103 @@ export default async function AnalyticsPage({ searchParams }: PageProps) {
                       <p className="text-xs text-muted-foreground">
                         {label === "Net Profit" ? "margin" : "of revenue"}: {pct.toFixed(1)}%
                       </p>
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {hasCostData && profitByType.length >= 2 && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2 text-base">
+                  <Tag className="h-4 w-4" />
+                  Profitability by Event Type · {periodLabel}
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <p className="text-xs text-muted-foreground mb-4">
+                  Sorted by average margin. Only events with cost data included.
+                </p>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b text-xs text-muted-foreground">
+                        <th className="text-left pb-2 font-medium">Event Type</th>
+                        <th className="text-right pb-2 font-medium">Events</th>
+                        <th className="text-right pb-2 font-medium">Avg Revenue</th>
+                        <th className="text-right pb-2 font-medium hidden sm:table-cell">Avg Costs</th>
+                        <th className="text-right pb-2 font-medium">Avg Profit</th>
+                        <th className="text-right pb-2 font-medium">Margin</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y">
+                      {profitByType.map((row, i) => {
+                        const isTop = i === 0;
+                        return (
+                          <tr key={row.type} className={isTop ? "bg-green-50/50 dark:bg-green-950/10" : ""}>
+                            <td className="py-2.5 font-medium">
+                              {row.type}
+                              {isTop && (
+                                <span className="ml-2 text-[10px] font-bold uppercase bg-green-100 text-green-800 dark:bg-green-900/40 dark:text-green-300 rounded px-1.5 py-0.5">
+                                  Best
+                                </span>
+                              )}
+                            </td>
+                            <td className="py-2.5 text-right text-muted-foreground">{row.count}</td>
+                            <td className="py-2.5 text-right">{formatCurrency(row.avgRevenue)}</td>
+                            <td className="py-2.5 text-right text-muted-foreground hidden sm:table-cell">{formatCurrency(row.avgCosts)}</td>
+                            <td className={`py-2.5 text-right font-medium ${row.avgProfit >= 0 ? "text-green-700 dark:text-green-400" : "text-red-600"}`}>
+                              {formatCurrency(row.avgProfit)}
+                            </td>
+                            <td className="py-2.5 text-right">
+                              <div className="inline-flex items-center gap-1">
+                                {row.avgMargin > (profitMargin ?? 0) ? (
+                                  <ChevronUp className="h-3.5 w-3.5 text-green-600" />
+                                ) : row.avgMargin < (profitMargin ?? 0) ? (
+                                  <ChevronDown className="h-3.5 w-3.5 text-red-500" />
+                                ) : (
+                                  <Minus className="h-3.5 w-3.5 text-muted-foreground" />
+                                )}
+                                <span className={`font-semibold ${row.avgMargin >= 30 ? "text-green-700 dark:text-green-400" : row.avgMargin >= 15 ? "text-yellow-700 dark:text-yellow-400" : "text-red-600"}`}>
+                                  {row.avgMargin.toFixed(1)}%
+                                </span>
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+                {profitMargin !== null && (
+                  <p className="text-xs text-muted-foreground mt-3 pt-3 border-t">
+                    Overall average margin: <span className="font-medium">{profitMargin.toFixed(1)}%</span> across all event types
+                  </p>
+                )}
+              </CardContent>
+            </Card>
+          )}
+
+          {hasCostData && profitByDow.length >= 3 && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2 text-base">
+                  <Star className="h-4 w-4" />
+                  Profitability by Day of Week · {periodLabel}
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="grid gap-3 grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-7">
+                  {profitByDow.map((row) => (
+                    <div key={row.day} className="rounded-lg border bg-muted/30 p-3 space-y-1 text-center">
+                      <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">{row.day}</p>
+                      <p className={`text-lg font-bold ${row.avgMargin >= 30 ? "text-green-700 dark:text-green-400" : row.avgMargin >= 15 ? "text-yellow-700 dark:text-yellow-400" : "text-red-600"}`}>
+                        {row.avgMargin.toFixed(0)}%
+                      </p>
+                      <p className="text-xs text-muted-foreground">{formatCurrency(row.avgProfit)} avg</p>
+                      <p className="text-xs text-muted-foreground">{row.count} event{row.count !== 1 ? "s" : ""}</p>
                     </div>
                   ))}
                 </div>
