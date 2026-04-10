@@ -1107,7 +1107,14 @@ export function EventsClient({ initialEvents, userId = "", businessName = "", us
                         {event.location ?? event.city ?? "—"}
                       </TableCell>
                       <TableCell className="text-right font-medium">
-                        {formatCurrency(event.net_sales)}
+                        {event.event_mode === "catering" && (event.invoice_revenue ?? 0) > 0 ? (
+                          <span title={`Invoice: ${formatCurrency(event.invoice_revenue)}\nOn-site: ${formatCurrency(event.net_sales)}`}>
+                            {formatCurrency((event.net_sales ?? 0) + (event.invoice_revenue ?? 0))}
+                            <span className="text-[10px] text-violet-600 ml-1">inv</span>
+                          </span>
+                        ) : (
+                          formatCurrency(event.net_sales)
+                        )}
                       </TableCell>
                       <TableCell className="hidden md:table-cell text-right text-sm">
                         {formatCurrency(event.net_after_fees)}
