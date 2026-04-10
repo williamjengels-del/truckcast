@@ -36,6 +36,18 @@ export default async function AdminOverviewPage() {
   sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
   const sevenDaysAgoStr = sevenDaysAgo.toISOString();
 
+  // Check if cost migration has been applied (events.food_cost column exists)
+  let costMigrationApplied = false;
+  try {
+    const { error: costCheckError } = await serviceClient
+      .from("events")
+      .select("food_cost")
+      .limit(1);
+    costMigrationApplied = !costCheckError;
+  } catch {
+    costMigrationApplied = false;
+  }
+
   const [
     { count: totalUsers },
     { data: recentProfiles },
@@ -128,8 +140,25 @@ export default async function AdminOverviewPage() {
         </div>
       )}
 
-      {/* Cost tracking migration reminder */}
-      {/* This banner will disappear once the migration is applied (food_cost column will exist) */}
+      {/* Cost tracking migration reminder — disappears once migration is applied */}
+      {!costMigrationApplied && (
+        <div className="rounded-lg border p-4 bg-blue-50 border-blue-300 dark:bg-blue-950/20 dark:border-blue-800">
+          <div className="flex items-start gap-3">
+            <span className="text-xl">🗄️</span>
+            <div>
+              <p className="font-semibold text-sm text-blue-800 dark:text-blue-300">
+                Supabase migration needed: cost tracking columns
+              </p>
+              <p className="text-xs text-muted-foreground mt-1">
+                Run <code className="font-mono bg-muted px-1 rounded">20260409000004_add_event_costs.sql</code> in the Supabase SQL editor to enable food cost, labor cost, and profit tracking. Until then, cost fields entered in event forms will not save.
+              </p>
+              <p className="text-xs text-muted-foreground mt-1">
+                SQL: <code className="font-mono bg-muted px-1 rounded text-xs">ALTER TABLE events ADD COLUMN IF NOT EXISTS food_cost numeric(10,2), ADD COLUMN IF NOT EXISTS labor_cost numeric(10,2), ADD COLUMN IF NOT EXISTS other_costs numeric(10,2);</code>
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Nav strip */}
       <div className="flex gap-1 border-b pb-0 -mb-2">
