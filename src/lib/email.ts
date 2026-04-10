@@ -244,9 +244,24 @@ export async function sendTrialExpiryEmail(
 
 // ─── Trial Expired Email ────────────────────────────────────────────────────
 
-export async function sendTrialExpiredEmail(to: string, businessName: string) {
+/**
+ * @param gracePeriodActive - When true (before May 1 hard gate), the copy is softer:
+ *   "trial ended, but you still have full access until May 1." After May 1, the
+ *   copy is direct: "upgrade to restore full access."
+ */
+export async function sendTrialExpiredEmail(
+  to: string,
+  businessName: string,
+  gracePeriodActive = false
+) {
   if (!process.env.RESEND_API_KEY) return;
   const resend = getResend();
+
+  const bodyText = gracePeriodActive
+    ? `Hey ${businessName || "there"} — your TruckCast free trial has ended, but your access isn't going anywhere yet. You have full dashboard access until <strong>May 1, 2026</strong>. Use this time to add your events and run some forecasts — then decide if TruckCast is worth keeping.`
+    : `Hey ${businessName || "there"} — your TruckCast free trial has ended. Your data is safe and waiting for you. Upgrade to restore full access.`;
+
+  const ctaText = gracePeriodActive ? "View upgrade options" : "Upgrade to continue →";
 
   await resend.emails.send({
     from: FROM,
@@ -264,12 +279,9 @@ export async function sendTrialExpiredEmail(to: string, businessName: string) {
     </div>
     <div style="padding:40px;">
       <h1 style="margin:0 0 16px;font-size:22px;font-weight:700;color:#111827;">Your trial has ended</h1>
-      <p style="margin:0 0 24px;font-size:15px;line-height:1.6;color:#374151;">
-        Hey ${businessName || "there"} — your TruckCast free trial has ended.
-        Your data is safe and waiting for you. Upgrade to restore full access.
-      </p>
+      <p style="margin:0 0 24px;font-size:15px;line-height:1.6;color:#374151;">${bodyText}</p>
       <a href="${APP_URL}/dashboard/settings?upgrade=true" style="display:inline-block;background:#f97316;color:white;font-weight:600;font-size:15px;padding:12px 28px;border-radius:8px;text-decoration:none;">
-        Upgrade to continue →
+        ${ctaText}
       </a>
       <p style="margin:24px 0 0;font-size:13px;color:#9ca3af;">Plans start at $19/month. Cancel anytime.</p>
     </div>

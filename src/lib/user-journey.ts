@@ -49,12 +49,20 @@ const NEXT_STEPS: Record<JourneyState, { label: string; href: string; descriptio
 };
 
 export function computeJourneyState(
-  events: Array<{ booked: boolean; net_sales: number | null; event_date: string }>,
+  events: Array<{
+    booked: boolean;
+    net_sales: number | null;
+    invoice_revenue?: number;
+    event_mode?: string;
+    event_date: string;
+  }>,
   hasPOS: boolean
 ): JourneyContext {
   const totalEvents = events.length;
   const eventsWithSales = events.filter(
-    (e) => e.net_sales !== null && e.net_sales > 0
+    (e) =>
+      (e.net_sales !== null && e.net_sales > 0) ||
+      (e.event_mode === "catering" && (e.invoice_revenue ?? 0) > 0)
   ).length;
   const hasUpcoming = events.some((e) => e.event_date > TODAY);
 

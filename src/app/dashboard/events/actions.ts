@@ -32,6 +32,9 @@ export type EventFormData = {
   fee_rate?: number;
   sales_minimum?: number;
   forecast_sales?: number;
+  food_cost?: number;
+  labor_cost?: number;
+  other_costs?: number;
   notes?: string;
   pos_source?: string;
 };
@@ -93,6 +96,12 @@ export async function createEvent(formData: EventFormData) {
     insertData.fee_rate = formData.fee_rate;
   if (formData.sales_minimum !== undefined && formData.sales_minimum !== null)
     insertData.sales_minimum = formData.sales_minimum;
+  if (formData.food_cost !== undefined && formData.food_cost !== null)
+    insertData.food_cost = formData.food_cost;
+  if (formData.labor_cost !== undefined && formData.labor_cost !== null)
+    insertData.labor_cost = formData.labor_cost;
+  if (formData.other_costs !== undefined && formData.other_costs !== null)
+    insertData.other_costs = formData.other_costs;
   if (formData.notes) insertData.notes = formData.notes;
   if (formData.pos_source) insertData.pos_source = formData.pos_source;
 

@@ -4,6 +4,11 @@ import { AlertTriangle, Sparkles } from "lucide-react";
 
 const TRIAL_DAYS = 14;
 
+/**
+ * Match this date in middleware.ts — both must agree on when the hard gate fires.
+ */
+const HARD_GATE_DATE = new Date("2026-05-01T00:00:00Z");
+
 export async function TrialBanner() {
   /* eslint-disable react-hooks/error-boundaries */
   try {
@@ -41,12 +46,19 @@ export async function TrialBanner() {
 
   // Trial expired
   if (daysLeft <= 0) {
+    const hardGateActive = now >= HARD_GATE_DATE;
     return (
       <div className="bg-destructive/10 border-b border-destructive/20 px-4 py-2.5 flex items-center justify-between gap-3 flex-wrap">
         <div className="flex items-center gap-2 text-sm">
           <AlertTriangle className="h-4 w-4 text-destructive shrink-0" />
           <span className="text-destructive font-medium">Your free trial has ended.</span>
-          <span className="text-muted-foreground hidden sm:inline">Upgrade to keep your data and continue using TruckCast.</span>
+          {hardGateActive ? (
+            <span className="text-muted-foreground hidden sm:inline">Upgrade to keep your data and continue using TruckCast.</span>
+          ) : (
+            <span className="text-muted-foreground hidden sm:inline">
+              Full access continues until May 1 — upgrade anytime to lock in your plan.
+            </span>
+          )}
         </div>
         <Link
           href="/dashboard/settings?upgrade=true"

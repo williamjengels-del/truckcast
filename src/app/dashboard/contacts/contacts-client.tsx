@@ -315,6 +315,7 @@ export function ContactsClient({
                   <TableHead>Organization</TableHead>
                   <TableHead>Email</TableHead>
                   <TableHead>Phone</TableHead>
+                  <TableHead>Linked Events</TableHead>
                   {isPremium && <TableHead>Quality Score</TableHead>}
                   <TableHead>Notes</TableHead>
                   <TableHead></TableHead>
@@ -348,6 +349,19 @@ export function ContactsClient({
                         </span>
                       ) : (
                         "—"
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      {(c.linked_event_names?.length ?? 0) > 0 ? (
+                        <span
+                          className="text-xs text-primary font-medium cursor-pointer hover:underline"
+                          onClick={() => setEditing(c)}
+                          title={c.linked_event_names?.join(", ")}
+                        >
+                          {c.linked_event_names!.length} event{c.linked_event_names!.length !== 1 ? "s" : ""}
+                        </span>
+                      ) : (
+                        <span className="text-xs text-muted-foreground">None</span>
                       )}
                     </TableCell>
                     {isPremium && (

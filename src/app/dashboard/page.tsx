@@ -12,6 +12,7 @@ import {
   CalendarDays,
   Target,
   BarChart3,
+  PiggyBank,
   Plus,
   ClipboardList,
   Upload,
@@ -28,6 +29,17 @@ function formatCurrency(val: number): string {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   })}`;
+}
+
+/** Total recognised revenue for an event: on-site sales + catering invoice */
+function eventRevenue(e: Event): number {
+  return (e.net_sales ?? 0) + (e.event_mode === "catering" ? e.invoice_revenue : 0);
+}
+
+/** True if an event has any recognised revenue */
+function hasRevenue(e: Event): boolean {
+  return (e.net_sales !== null && e.net_sales > 0) ||
+    (e.event_mode === "catering" && e.invoice_revenue > 0);
 }
 
 export default async function DashboardPage() {
@@ -65,7 +77,7 @@ export default async function DashboardPage() {
   // Setup progress checks
   const hasEvents = events.length > 0;
   const hasSales = events.some(
-    (e) => e.event_date <= today && e.net_sales !== null && e.net_sales > 0
+    (e) => e.event_date <= today && hasRevenue(e)
   );
   const has10Events = events.length >= 10;
 
@@ -74,6 +86,8 @@ export default async function DashboardPage() {
     events.map((e) => ({
       booked: e.booked,
       net_sales: e.net_sales,
+      invoice_revenue: e.invoice_revenue,
+      event_mode: e.event_mode,
       event_date: e.event_date,
     })),
     posConnected
@@ -82,12 +96,12 @@ export default async function DashboardPage() {
   // KPI calculations
   const bookedEvents = events.filter((e) => e.booked);
   const completedEvents = bookedEvents.filter(
-    (e) => e.event_date <= today && e.net_sales !== null && e.net_sales > 0
+    (e) => e.event_date <= today && hasRevenue(e)
   );
   const ytdEvents = completedEvents.filter(
     (e) => new Date(e.event_date + "T00:00:00").getFullYear() === currentYear
   );
-  const ytdRevenue = ytdEvents.reduce((sum, e) => sum + (e.net_sales ?? 0), 0);
+  const ytdRevenue = ytdEvents.reduce((sum, e) => sum + eventRevenue(e), 0);
   const eventsCompleted = ytdEvents.length;
   const avgTicket = eventsCompleted > 0 ? ytdRevenue / eventsCompleted : 0;
 
@@ -98,26 +112,26 @@ export default async function DashboardPage() {
   const modeBreakdown = showModeBreakdown
     ? {
         truck: {
-          revenue: ytdTruck.reduce((s, e) => s + (e.net_sales ?? 0), 0),
+          revenue: ytdTruck.reduce((s, e) => s + eventRevenue(e), 0),
           count: ytdTruck.length,
           avg:
-            ytdTruck.reduce((s, e) => s + (e.net_sales ?? 0), 0) /
+            ytdTruck.reduce((s, e) => s + eventRevenue(e), 0) /
             ytdTruck.length,
         },
         catering: {
-          revenue: ytdCatering.reduce((s, e) => s + (e.net_sales ?? 0), 0),
+          revenue: ytdCatering.reduce((s, e) => s + eventRevenue(e), 0),
           count: ytdCatering.length,
           avg:
-            ytdCatering.reduce((s, e) => s + (e.net_sales ?? 0), 0) /
+            ytdCatering.reduce((s, e) => s + eventRevenue(e), 0) /
             ytdCatering.length,
         },
       }
     : null;
-  // Unlogged past events — booked events in the past with no sales recorded
+  // Unlogged past events — booked events in the past with no revenue recorded
   const unloggedEvents = bookedEvents
     .filter((e) =>
       e.event_date < today &&
-      (e.net_sales === null || e.net_sales === 0) &&
+      !hasRevenue(e) &&
       e.fee_type !== "pre_settled"
     )
     .sort((a, b) => b.event_date.localeCompare(a.event_date)); // most recent first
@@ -130,6 +144,19 @@ export default async function DashboardPage() {
   );
   const projectedSeason = ytdRevenue + upcomingForecastSum;
 
+  // YTD profitability — only calculated when at least some events have cost data
+  const ytdEventsWithCosts = ytdEvents.filter(
+    (e) => e.food_cost !== null || e.labor_cost !== null || e.other_costs !== null
+  );
+  const ytdTotalCosts = ytdEventsWithCosts.reduce(
+    (sum, e) => sum + (e.food_cost ?? 0) + (e.labor_cost ?? 0) + (e.other_costs ?? 0),
+    0
+  );
+  const ytdCostableRevenue = ytdEventsWithCosts.reduce((sum, e) => sum + eventRevenue(e), 0);
+  const ytdProfit = ytdCostableRevenue - ytdTotalCosts;
+  const ytdMargin = ytdCostableRevenue > 0 ? (ytdProfit / ytdCostableRevenue) * 100 : null;
+  const showProfitKpi = ytdEventsWithCosts.length > 0;
+
   // Forecast accuracy (MAPE)
   const eventsWithBoth = completedEvents.filter(
     (e) => e.forecast_sales !== null && e.forecast_sales > 0
@@ -138,7 +165,7 @@ export default async function DashboardPage() {
   if (eventsWithBoth.length >= 3) {
     const mape =
       eventsWithBoth.reduce((sum, e) => {
-        const actual = e.net_sales ?? 0;
+        const actual = eventRevenue(e);
         const forecast = e.forecast_sales ?? 0;
         return sum + Math.abs(actual - forecast) / Math.max(actual, 1);
       }, 0) / eventsWithBoth.length;
@@ -156,8 +183,8 @@ export default async function DashboardPage() {
       return d.getFullYear() === currentYear && d.getMonth() === m;
     });
     const actual = monthEvents
-      .filter((e) => e.net_sales !== null)
-      .reduce((sum, e) => sum + (e.net_sales ?? 0), 0);
+      .filter((e) => hasRevenue(e))
+      .reduce((sum, e) => sum + eventRevenue(e), 0);
     const forecast = monthEvents.reduce(
       (sum, e) => sum + (e.forecast_sales ?? 0),
       0
@@ -170,7 +197,7 @@ export default async function DashboardPage() {
   const typeMap = new Map<string, number>();
   for (const e of completedEvents) {
     const t = e.event_type ?? "Other";
-    typeMap.set(t, (typeMap.get(t) ?? 0) + (e.net_sales ?? 0));
+    typeMap.set(t, (typeMap.get(t) ?? 0) + eventRevenue(e));
   }
   for (const [name, value] of typeMap) {
     typeData.push({ name, value: Math.round(value) });
@@ -182,19 +209,19 @@ export default async function DashboardPage() {
       label: "YTD Revenue",
       value: formatCurrency(ytdRevenue),
       icon: DollarSign,
-      description: `${currentYear} net sales`,
+      description: `${currentYear} total revenue`,
     },
     {
       label: "Events Completed",
       value: eventsCompleted.toString(),
       icon: CalendarCheck,
-      description: `Booked events with sales in ${currentYear}`,
+      description: `Booked events with revenue in ${currentYear}`,
     },
     {
       label: "Avg Per Event",
       value: formatCurrency(avgTicket),
       icon: TrendingUp,
-      description: "Average net sales per event",
+      description: "Average revenue per event",
     },
     {
       label: "Upcoming Events",
@@ -217,6 +244,18 @@ export default async function DashboardPage() {
           ? `Based on ${eventsWithBoth.length} events`
           : "Need 3+ events with forecasts",
     },
+    ...(showProfitKpi
+      ? [
+          {
+            label: "YTD Profit",
+            value: formatCurrency(ytdProfit),
+            icon: PiggyBank,
+            description: ytdMargin !== null
+              ? `${ytdMargin.toFixed(1)}% margin · ${ytdEventsWithCosts.length} event${ytdEventsWithCosts.length !== 1 ? "s" : ""} with cost data`
+              : `${ytdEventsWithCosts.length} event${ytdEventsWithCosts.length !== 1 ? "s" : ""} with cost data`,
+          },
+        ]
+      : []),
   ];
 
   const isNewUser = events.length === 0;
@@ -239,7 +278,7 @@ export default async function DashboardPage() {
             <div className="flex items-center gap-2">
               <ClipboardList className="h-4 w-4 text-amber-600 dark:text-amber-500 shrink-0" />
               <p className="text-sm font-medium text-amber-900 dark:text-amber-300">
-                {unloggedEvents.length} event{unloggedEvents.length !== 1 ? "s" : ""} need{unloggedEvents.length === 1 ? "s" : ""} sales logged
+                {unloggedEvents.length} event{unloggedEvents.length !== 1 ? "s" : ""} need{unloggedEvents.length === 1 ? "s" : ""} revenue logged
               </p>
             </div>
             <Link href="/dashboard/events?tab=past">
@@ -255,9 +294,12 @@ export default async function DashboardPage() {
                   {new Date(e.event_date + "T00:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric" })}
                   {" · "}
                   {e.event_name}
+                  {e.event_mode === "catering" && (
+                    <span className="ml-1.5 text-xs font-medium opacity-70">(catering)</span>
+                  )}
                 </span>
                 <Link href="/dashboard/events?tab=past" className="text-xs text-amber-700 dark:text-amber-500 hover:underline shrink-0 font-medium">
-                  Log sales →
+                  {e.event_mode === "catering" ? "Log invoice →" : "Log sales →"}
                 </Link>
               </div>
             ))}

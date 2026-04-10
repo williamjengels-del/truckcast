@@ -72,13 +72,18 @@ export default async function ForecastsPage() {
   // Calculate event-type averages from historical data (for What-If panel)
   const eventTypeAvgs: Record<string, number> = {};
   const pastEvents = events.filter(
-    (e) => e.net_sales !== null && e.net_sales > 0 && e.booked && e.anomaly_flag !== "disrupted"
+    (e) =>
+      e.booked &&
+      e.anomaly_flag !== "disrupted" &&
+      ((e.net_sales !== null && e.net_sales > 0) ||
+        (e.event_mode === "catering" && e.invoice_revenue > 0))
   );
   const typeGroups: Record<string, number[]> = {};
   for (const e of pastEvents) {
-    if (e.event_type && e.net_sales !== null) {
+    if (e.event_type) {
       if (!typeGroups[e.event_type]) typeGroups[e.event_type] = [];
-      typeGroups[e.event_type].push(e.net_sales);
+      const rev = (e.net_sales ?? 0) + (e.event_mode === "catering" ? e.invoice_revenue : 0);
+      typeGroups[e.event_type].push(rev);
     }
   }
   for (const [type, sales] of Object.entries(typeGroups)) {

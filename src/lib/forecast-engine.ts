@@ -104,6 +104,17 @@ export function getSeriesDay(
 
 const SIX_MONTHS_MS = 6 * 30 * 24 * 60 * 60 * 1000;
 
+/** Total recognised revenue for an event: on-site sales + catering invoice */
+function eventRevenue(e: Event): number {
+  return (e.net_sales ?? 0) + (e.event_mode === "catering" ? e.invoice_revenue : 0);
+}
+
+/** True if an event has any recognised revenue */
+function hasRevenue(e: Event): boolean {
+  return (e.net_sales !== null && e.net_sales > 0) ||
+    (e.event_mode === "catering" && e.invoice_revenue > 0);
+}
+
 function recencyWeight(eventDate: string): number {
   const eventTime = new Date(eventDate + "T00:00:00").getTime();
   const now = Date.now();
@@ -115,7 +126,7 @@ function weightedAverage(events: Event[]): number {
   let totalWeight = 0;
   for (const e of events) {
     const w = recencyWeight(e.event_date);
-    weightedSum += (e.net_sales ?? 0) * w;
+    weightedSum += eventRevenue(e) * w;
     totalWeight += w;
   }
   return totalWeight > 0 ? weightedSum / totalWeight : 0;
@@ -134,8 +145,7 @@ export function calibrateCoefficients(
   const validEvents = historicalEvents.filter(
     (e) =>
       e.booked &&
-      e.net_sales !== null &&
-      e.net_sales > 0 &&
+      hasRevenue(e) &&
       e.anomaly_flag !== "disrupted"
   );
 
@@ -227,8 +237,7 @@ export function getVenueHistory(
       e.location &&
       e.location.toLowerCase().trim() === normalized &&
       e.booked &&
-      e.net_sales !== null &&
-      e.net_sales > 0 &&
+      hasRevenue(e) &&
       e.anomaly_flag !== "disrupted"
   );
 
@@ -348,12 +357,11 @@ export function calculateForecast(
 ): ForecastResult | null {
   // Internal cast: all fields match Partial<Event> except event_type which is widened
   const target = targetEvent as Partial<Event>;
-  // Filter to booked events with sales, exclude disrupted
+  // Filter to booked events with revenue (net_sales or catering invoice), exclude disrupted
   const validEvents = historicalEvents.filter(
     (e) =>
       e.booked &&
-      e.net_sales !== null &&
-      e.net_sales > 0 &&
+      hasRevenue(e) &&
       e.anomaly_flag !== "disrupted"
   );
 
@@ -801,7 +809,7 @@ function getMatchingEventsForLevel(
 
 function calculateConsistency(events: Event[]): number {
   if (events.length < 2) return 0;
-  const sales = events.map((e) => e.net_sales ?? 0);
+  const sales = events.map((e) => eventRevenue(e));
   const mean = sales.reduce((a, b) => a + b, 0) / sales.length;
   if (mean === 0) return 0;
   const variance =

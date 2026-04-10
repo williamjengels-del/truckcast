@@ -1,6 +1,11 @@
 import { median } from "./forecast-engine";
 import type { Event, EventPerformance, ConfidenceLevel, TrendType } from "./database.types";
 
+/** Total recognised revenue for an event: on-site sales + catering invoice */
+function eventRevenue(e: Event): number {
+  return (e.net_sales ?? 0) + (e.event_mode === "catering" ? e.invoice_revenue : 0);
+}
+
 /**
  * Recalculate event performance stats for a given event name.
  * Follows the recalculation rules from the spec exactly.
@@ -10,13 +15,13 @@ export function calculateEventPerformance(
   userId: string,
   events: Event[]
 ): Omit<EventPerformance, "id" | "updated_at"> {
-  // Step 1: Filter to booked events with sales
+  // Step 1: Filter to booked events with revenue (net_sales OR catering invoice)
   const relevantEvents = events.filter(
     (e) =>
       e.event_name.toLowerCase().trim() === eventName.toLowerCase().trim() &&
       e.booked &&
-      e.net_sales !== null &&
-      e.net_sales > 0
+      ((e.net_sales !== null && e.net_sales > 0) ||
+        (e.event_mode === "catering" && e.invoice_revenue > 0))
   );
 
   // Step 2: Exclude disrupted from stats (but count total booked)
@@ -49,7 +54,7 @@ export function calculateEventPerformance(
   }
 
   // Step 3: Calculate stats
-  const sales = statsEvents.map((e) => e.net_sales!);
+  const sales = statsEvents.map((e) => eventRevenue(e));
   const totalSales = sales.reduce((a, b) => a + b, 0);
   const avgSales = totalSales / sales.length;
   const medianSales = median(sales);
@@ -82,10 +87,10 @@ export function calculateEventPerformance(
       (e) => new Date(e.event_date + "T00:00:00").getFullYear() === prevYear
     );
     const latestAvg =
-      latestEvents.reduce((sum, e) => sum + (e.net_sales ?? 0), 0) /
+      latestEvents.reduce((sum, e) => sum + eventRevenue(e), 0) /
       latestEvents.length;
     const prevAvg =
-      prevEvents.reduce((sum, e) => sum + (e.net_sales ?? 0), 0) /
+      prevEvents.reduce((sum, e) => sum + eventRevenue(e), 0) /
       prevEvents.length;
     if (prevAvg > 0) {
       yoyGrowth =
@@ -142,7 +147,7 @@ export function calculateEventPerformance(
   for (const e of statsEvents) {
     const year = new Date(e.event_date + "T00:00:00").getFullYear();
     const weight = year >= currentYear - 1 ? 2 : 1;
-    weightedSum += (e.net_sales ?? 0) * weight;
+    weightedSum += eventRevenue(e) * weight;
     totalWeight += weight;
   }
   const forecastNext =

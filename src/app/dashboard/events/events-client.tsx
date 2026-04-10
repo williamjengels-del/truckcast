@@ -40,6 +40,7 @@ import {
   Download,
   CloudLightning,
   Heart,
+  CopyPlus,
 } from "lucide-react";
 import { EventForm } from "@/components/event-form";
 import { SalesEntryDialog } from "@/components/sales-entry-dialog";
@@ -123,6 +124,7 @@ const TIER_CHIP_COLORS: Record<string, string> = {
 export function EventsClient({ initialEvents, userId = "", businessName = "", userCity = "" }: EventsClientProps) {
   const [showForm, setShowForm] = useState(false);
   const [editingEvent, setEditingEvent] = useState<Event | null>(null);
+  const [duplicatingEvent, setDuplicatingEvent] = useState<Event | null>(null);
   const [salesEvent, setSalesEvent] = useState<Event | null>(null);
   const [search, setSearch] = useState("");
   const [yearFilter, setYearFilter] = useState<string>("all");
@@ -254,9 +256,10 @@ export function EventsClient({ initialEvents, userId = "", businessName = "", us
     (e) =>
       e.event_date < today &&
       e.booked &&
-      e.net_sales === null &&           // null only — $0 intentional (charity) is cleared by dismiss
-      e.anomaly_flag !== "disrupted" && // disrupted = already dismissed
-      e.fee_type !== "pre_settled"      // pre-settled = guaranteed payment, no sales entry needed
+      e.net_sales === null &&                                    // null only — $0 intentional (charity) is cleared by dismiss
+      !(e.event_mode === "catering" && e.invoice_revenue > 0) && // catering with invoice = not missing
+      e.anomaly_flag !== "disrupted" &&                          // disrupted = already dismissed
+      e.fee_type !== "pre_settled"                               // pre-settled = guaranteed payment, no sales entry needed
   );
 
   const activeEvents =
@@ -418,30 +421,58 @@ export function EventsClient({ initialEvents, userId = "", businessName = "", us
     }
   }
 
+  function handleDuplicate(event: Event) {
+    // Build a clean template — copy structure but clear sales, dates, and derived fields
+    const template: Event = {
+      ...event,
+      id: "duplicate", // placeholder; EventForm ignores this on create
+      event_date: "",
+      net_sales: null,
+      invoice_revenue: 0,
+      net_after_fees: null,
+      forecast_sales: null,
+      anomaly_flag: "normal",
+    };
+    setDuplicatingEvent(template);
+  }
+
   function exportCSV() {
     const headers = [
-      "Event Name", "Date", "Type", "Tier", "Location", "City",
-      "Booked", "Net Sales", "After Fees", "Forecast", "Fee Type",
-      "Fee Rate", "Sales Minimum", "Weather", "Anomaly", "Notes",
+      "Event Name", "Date", "Mode", "Type", "Tier", "Location", "City",
+      "Booked", "Net Sales", "Invoice Revenue", "After Fees", "Forecast",
+      "Food Cost", "Labor Cost", "Other Costs", "Net Profit",
+      "Fee Type", "Fee Rate", "Sales Minimum", "Weather", "Anomaly", "Notes",
     ];
-    const rows = initialEvents.map((e) => [
-      e.event_name,
-      e.event_date,
-      e.event_type ?? "",
-      e.event_tier ?? "",
-      e.location ?? "",
-      e.city ?? "",
-      e.booked ? "Yes" : "No",
-      e.net_sales ?? "",
-      e.net_after_fees ?? "",
-      e.forecast_sales ?? "",
-      e.fee_type ?? "",
-      e.fee_rate ?? "",
-      e.sales_minimum ?? "",
-      e.event_weather ?? "",
-      e.anomaly_flag ?? "",
-      (e.notes ?? "").replace(/"/g, '""'),
-    ]);
+    const rows = initialEvents.map((e) => {
+      const totalRevenue = (e.net_sales ?? 0) + (e.event_mode === "catering" ? (e.invoice_revenue ?? 0) : 0);
+      const totalCosts = (e.food_cost ?? 0) + (e.labor_cost ?? 0) + (e.other_costs ?? 0);
+      const hasAnyCost = e.food_cost !== null || e.labor_cost !== null || e.other_costs !== null;
+      const netProfit = hasAnyCost ? (e.net_after_fees ?? totalRevenue) - totalCosts : "";
+      return [
+        e.event_name,
+        e.event_date,
+        e.event_mode === "catering" ? "Catering" : "Food Truck",
+        e.event_type ?? "",
+        e.event_tier ?? "",
+        e.location ?? "",
+        e.city ?? "",
+        e.booked ? "Yes" : "No",
+        e.net_sales ?? "",
+        e.invoice_revenue > 0 ? e.invoice_revenue : "",
+        e.net_after_fees ?? "",
+        e.forecast_sales ?? "",
+        e.food_cost ?? "",
+        e.labor_cost ?? "",
+        e.other_costs ?? "",
+        netProfit,
+        e.fee_type ?? "",
+        e.fee_rate ?? "",
+        e.sales_minimum ?? "",
+        e.event_weather ?? "",
+        e.anomaly_flag ?? "",
+        (e.notes ?? "").replace(/"/g, '""'),
+      ];
+    });
 
     const csv = [headers, ...rows]
       .map((row) => row.map((cell) => `"${cell}"`).join(","))
@@ -1191,6 +1222,15 @@ export function EventsClient({ initialEvents, userId = "", businessName = "", us
                               <Button
                                 variant="ghost"
                                 size="icon"
+                                className="h-8 w-8 text-muted-foreground hover:text-foreground"
+                                title="Duplicate event"
+                                onClick={() => handleDuplicate(event)}
+                              >
+                                <CopyPlus className="h-4 w-4" />
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="icon"
                                 className="h-8 w-8 text-destructive"
                                 title="Delete event"
                                 onClick={() => handleDelete(event.id)}
@@ -1390,6 +1430,15 @@ export function EventsClient({ initialEvents, userId = "", businessName = "", us
         onSubmit={handleUpdate}
         initialData={editingEvent}
         title="Edit Event"
+      />
+
+      {/* Duplicate Event Dialog — opens a pre-filled create form with cleared sales/dates */}
+      <EventForm
+        open={!!duplicatingEvent}
+        onOpenChange={(open) => !open && setDuplicatingEvent(null)}
+        onSubmit={handleCreate}
+        initialData={duplicatingEvent}
+        title="Duplicate Event"
       />
 
       {/* Sales Entry Dialog — always mounted for same reason */}

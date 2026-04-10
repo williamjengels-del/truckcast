@@ -44,9 +44,9 @@ export async function GET(req: NextRequest) {
   const toDate = yesterday.toISOString().split("T")[0];
 
   // Fetch unlogged events in the window
-  const { data: events, error } = await service
+  const { data: rawEvents, error } = await service
     .from("events")
-    .select("id, user_id, event_name, event_date")
+    .select("id, user_id, event_name, event_date, event_mode, invoice_revenue")
     .eq("booked", true)
     .neq("fee_type", "pre_settled")
     .gte("event_date", fromDate)
@@ -58,7 +58,12 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
-  if (!events || events.length === 0) {
+  // Exclude catering events that have invoice revenue logged — those are complete
+  const events = (rawEvents ?? []).filter(
+    (e) => !(e.event_mode === "catering" && (e.invoice_revenue ?? 0) > 0)
+  );
+
+  if (events.length === 0) {
     return NextResponse.json({ sent: 0, reason: "no_unlogged_events" });
   }
 

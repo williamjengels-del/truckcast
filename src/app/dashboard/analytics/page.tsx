@@ -9,6 +9,7 @@ import {
   TrendingUp,
   Star,
   Tag,
+  PiggyBank,
 } from "lucide-react";
 // TrendingUp used in KPI card
 import { AnalyticsControls } from "./analytics-controls";
@@ -53,14 +54,22 @@ function filterEvents(
 
 function completedOnly(events: Event[]): Event[] {
   return events.filter(
-    (e) => e.booked && e.net_sales !== null && e.net_sales > 0
+    (e) =>
+      e.booked &&
+      ((e.net_sales !== null && e.net_sales > 0) ||
+        (e.event_mode === "catering" && e.invoice_revenue > 0))
   );
+}
+
+/** Total recognised revenue for an event: on-site sales + catering invoice */
+function eventRevenue(e: Event): number {
+  return (e.net_sales ?? 0) + (e.event_mode === "catering" ? e.invoice_revenue : 0);
 }
 
 function computeMetrics(events: Event[]) {
   const completed = completedOnly(events);
   const totalRevenue = completed.reduce(
-    (sum, e) => sum + (e.net_sales ?? 0),
+    (sum, e) => sum + eventRevenue(e),
     0
   );
   const eventCount = completed.length;
@@ -71,7 +80,7 @@ function computeMetrics(events: Event[]) {
   const dowCount = new Map<number, number>();
   for (const e of completed) {
     const dow = new Date(e.event_date + "T00:00:00").getDay();
-    dowRevenue.set(dow, (dowRevenue.get(dow) ?? 0) + (e.net_sales ?? 0));
+    dowRevenue.set(dow, (dowRevenue.get(dow) ?? 0) + eventRevenue(e));
     dowCount.set(dow, (dowCount.get(dow) ?? 0) + 1);
   }
   let bestDow = "N/A";
@@ -87,7 +96,7 @@ function computeMetrics(events: Event[]) {
   const typeRevenue = new Map<string, number>();
   for (const e of completed) {
     const t = e.event_type ?? "Other";
-    typeRevenue.set(t, (typeRevenue.get(t) ?? 0) + (e.net_sales ?? 0));
+    typeRevenue.set(t, (typeRevenue.get(t) ?? 0) + eventRevenue(e));
   }
   let bestType = "N/A";
   let bestTypeRevenue = 0;
@@ -134,7 +143,7 @@ function buildTrendData(
           const dt = new Date(e.event_date + "T00:00:00");
           return dt.getDate() === d;
         })
-        .reduce((sum, e) => sum + (e.net_sales ?? 0), 0);
+        .reduce((sum, e) => sum + eventRevenue(e), 0);
 
       const point: { label: string; revenue: number; compareRevenue?: number } =
         { label: dayStr, revenue: Math.round(dayRevenue * 100) / 100 };
@@ -147,7 +156,7 @@ function buildTrendData(
               const dt = new Date(e.event_date + "T00:00:00");
               return dt.getDate() === d;
             })
-            .reduce((sum, e) => sum + (e.net_sales ?? 0), 0);
+            .reduce((sum, e) => sum + eventRevenue(e), 0);
           point.compareRevenue = Math.round(cRev * 100) / 100;
         }
       }
@@ -161,7 +170,7 @@ function buildTrendData(
     for (let m = 0; m < 12; m++) {
       const monthRevenue = completed
         .filter((e) => new Date(e.event_date + "T00:00:00").getMonth() === m)
-        .reduce((sum, e) => sum + (e.net_sales ?? 0), 0);
+        .reduce((sum, e) => sum + eventRevenue(e), 0);
 
       const point: { label: string; revenue: number; compareRevenue?: number } =
         {
@@ -174,7 +183,7 @@ function buildTrendData(
           .filter(
             (e) => new Date(e.event_date + "T00:00:00").getMonth() === m
           )
-          .reduce((sum, e) => sum + (e.net_sales ?? 0), 0);
+          .reduce((sum, e) => sum + eventRevenue(e), 0);
         point.compareRevenue = Math.round(cRev * 100) / 100;
       }
 
@@ -198,7 +207,7 @@ function buildDowData(
       (e) => new Date(e.event_date + "T00:00:00").getDay() === i
     );
     const revenue = dayEvents.reduce(
-      (sum, e) => sum + (e.net_sales ?? 0),
+      (sum, e) => sum + eventRevenue(e),
       0
     );
 
@@ -219,7 +228,7 @@ function buildDowData(
         (e) => new Date(e.event_date + "T00:00:00").getDay() === i
       );
       point.compareRevenue = Math.round(
-        cDayEvents.reduce((sum, e) => sum + (e.net_sales ?? 0), 0) * 100
+        cDayEvents.reduce((sum, e) => sum + eventRevenue(e), 0) * 100
       ) / 100;
       point.compareCount = cDayEvents.length;
     }
@@ -246,7 +255,7 @@ function buildTypeData(
   const data = Array.from(allTypes).map((type) => {
     const revenue = completed
       .filter((e) => (e.event_type ?? "Other") === type)
-      .reduce((sum, e) => sum + (e.net_sales ?? 0), 0);
+      .reduce((sum, e) => sum + eventRevenue(e), 0);
 
     const point: { name: string; revenue: number; compareRevenue?: number } = {
       name: type,
@@ -257,7 +266,7 @@ function buildTypeData(
       point.compareRevenue = Math.round(
         compareCompleted
           .filter((e) => (e.event_type ?? "Other") === type)
-          .reduce((sum, e) => sum + (e.net_sales ?? 0), 0) * 100
+          .reduce((sum, e) => sum + eventRevenue(e), 0) * 100
       ) / 100;
     }
 
@@ -338,6 +347,20 @@ export default async function AnalyticsPage({ searchParams }: PageProps) {
   const compareMetrics =
     compareEvents !== null ? computeMetrics(compareEvents) : null;
 
+  // Cost & profitability — only calculated for events with cost data
+  const completedPeriod = completedOnly(periodEvents);
+  const eventsWithCosts = completedPeriod.filter(
+    (e) => e.food_cost !== null || e.labor_cost !== null || e.other_costs !== null
+  );
+  const totalFoodCost = eventsWithCosts.reduce((s, e) => s + (e.food_cost ?? 0), 0);
+  const totalLaborCost = eventsWithCosts.reduce((s, e) => s + (e.labor_cost ?? 0), 0);
+  const totalOtherCosts = eventsWithCosts.reduce((s, e) => s + (e.other_costs ?? 0), 0);
+  const totalCosts = totalFoodCost + totalLaborCost + totalOtherCosts;
+  const revenueForCostEvents = eventsWithCosts.reduce((s, e) => s + eventRevenue(e), 0);
+  const profit = revenueForCostEvents - totalCosts;
+  const profitMargin = revenueForCostEvents > 0 ? (profit / revenueForCostEvents) * 100 : null;
+  const hasCostData = eventsWithCosts.length > 0;
+
   // Build chart data
   const trendData = buildTrendData(
     periodEvents,
@@ -401,7 +424,7 @@ export default async function AnalyticsPage({ searchParams }: PageProps) {
         ? delta(metrics.eventCount, compareMetrics.eventCount)
         : undefined,
       icon: CalendarCheck,
-      description: "Completed events with sales",
+      description: "Completed events with revenue",
     },
     {
       label: "Avg Per Event",
@@ -410,7 +433,7 @@ export default async function AnalyticsPage({ searchParams }: PageProps) {
         ? delta(metrics.avgPerEvent, compareMetrics.avgPerEvent)
         : undefined,
       icon: TrendingUp,
-      description: "Average net sales per event",
+      description: "Average revenue per event",
     },
     {
       label: "Best Day of Week",
@@ -424,6 +447,19 @@ export default async function AnalyticsPage({ searchParams }: PageProps) {
       icon: Tag,
       description: "Highest revenue category",
     },
+    ...(hasCostData
+      ? [
+          {
+            label: "Profit",
+            value: formatCurrency(profit),
+            delta: undefined,
+            icon: PiggyBank,
+            description: profitMargin !== null
+              ? `${profitMargin.toFixed(1)}% margin · ${eventsWithCosts.length} event${eventsWithCosts.length !== 1 ? "s" : ""} with costs`
+              : `${eventsWithCosts.length} event${eventsWithCosts.length !== 1 ? "s" : ""} with costs`,
+          },
+        ]
+      : []),
   ];
 
   const hasData = events.length > 0;
@@ -510,6 +546,41 @@ export default async function AnalyticsPage({ searchParams }: PageProps) {
             periodLabel={periodLabel}
             comparePeriodLabel={comparePeriodLabel}
           />
+
+          {hasCostData && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2 text-base">
+                  <PiggyBank className="h-4 w-4" />
+                  Cost Breakdown · {periodLabel}
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <p className="text-xs text-muted-foreground mb-4">
+                  Based on {eventsWithCosts.length} event{eventsWithCosts.length !== 1 ? "s" : ""} with cost data entered.
+                  Add costs to events via the Edit Event form.
+                </p>
+                <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+                  {[
+                    { label: "Food Cost", value: totalFoodCost, pct: revenueForCostEvents > 0 ? (totalFoodCost / revenueForCostEvents) * 100 : 0, color: "text-orange-600" },
+                    { label: "Labor Cost", value: totalLaborCost, pct: revenueForCostEvents > 0 ? (totalLaborCost / revenueForCostEvents) * 100 : 0, color: "text-blue-600" },
+                    { label: "Other Costs", value: totalOtherCosts, pct: revenueForCostEvents > 0 ? (totalOtherCosts / revenueForCostEvents) * 100 : 0, color: "text-purple-600" },
+                    { label: "Net Profit", value: profit, pct: profitMargin ?? 0, color: profit >= 0 ? "text-green-600" : "text-red-600" },
+                  ].map(({ label, value, pct, color }) => (
+                    <div key={label} className="space-y-1">
+                      <p className="text-xs font-medium text-muted-foreground">{label}</p>
+                      <p className={`text-xl font-bold ${color}`}>
+                        {formatCurrency(value)}
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        {label === "Net Profit" ? "margin" : "of revenue"}: {pct.toFixed(1)}%
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          )}
         </>
       )}
     </div>

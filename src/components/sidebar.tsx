@@ -26,7 +26,7 @@ export function Sidebar() {
         supabase.from("profiles").select("subscription_tier").eq("id", user.id).single(),
         supabase
           .from("events")
-          .select("id", { count: "exact", head: true })
+          .select("id, event_mode, invoice_revenue")
           .eq("user_id", user.id)
           .eq("booked", true)
           .neq("fee_type", "pre_settled")
@@ -35,7 +35,12 @@ export function Sidebar() {
       ]);
 
       if (profileRes.data) setTier(profileRes.data.subscription_tier);
-      setUnloggedCount(unloggedRes.count ?? 0);
+
+      // Exclude catering events that have invoice revenue — those are complete
+      const unloggedEvents = (unloggedRes.data ?? []).filter(
+        (e) => !(e.event_mode === "catering" && (e.invoice_revenue ?? 0) > 0)
+      );
+      setUnloggedCount(unloggedEvents.length);
     }
     load();
   }, [supabase]);

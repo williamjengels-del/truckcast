@@ -18,11 +18,16 @@ export async function recalculateForUser(userId: string) {
 
   const allEvents = (events ?? []) as Event[];
 
-  // Get unique event names with sales
+  // Get unique event names with revenue (net_sales OR catering invoice)
   const eventNames = [
     ...new Set(
       allEvents
-        .filter((e) => e.booked && e.net_sales && e.net_sales > 0)
+        .filter(
+          (e) =>
+            e.booked &&
+            ((e.net_sales !== null && e.net_sales > 0) ||
+              (e.event_mode === "catering" && e.invoice_revenue > 0))
+        )
         .map((e) => e.event_name)
     ),
   ];
@@ -70,8 +75,8 @@ export async function recalculateForUser(userId: string) {
     (e) =>
       e.event_date < today &&
       e.booked &&
-      e.net_sales !== null &&
-      e.net_sales > 0 &&
+      ((e.net_sales !== null && e.net_sales > 0) ||
+        (e.event_mode === "catering" && e.invoice_revenue > 0)) &&
       e.forecast_sales === null &&
       e.anomaly_flag !== "disrupted"
   );

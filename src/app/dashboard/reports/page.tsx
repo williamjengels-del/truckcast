@@ -56,9 +56,17 @@ export default async function ReportsPage() {
     performances = (perfRes.data ?? []) as EventPerformance[];
   }
 
-  // Filter to only completed events with sales data
+  /** Total recognised revenue for an event: on-site sales + catering invoice */
+  function eventRevenue(e: Event): number {
+    return (e.net_sales ?? 0) + (e.event_mode === "catering" ? e.invoice_revenue : 0);
+  }
+
+  // Filter to completed events with any revenue (net_sales OR catering invoice)
   const completedEvents = events.filter(
-    (e) => e.net_sales !== null && e.net_sales > 0
+    (e) =>
+      e.booked !== false &&
+      ((e.net_sales !== null && e.net_sales > 0) ||
+        (e.event_mode === "catering" && e.invoice_revenue > 0))
   );
 
   // --- Monthly Summary ---
@@ -73,7 +81,7 @@ export default async function ReportsPage() {
     }
     monthlyMap.get(key)!.events.push({
       name: e.event_name,
-      revenue: e.net_sales!,
+      revenue: eventRevenue(e),
     });
   }
 
@@ -104,7 +112,7 @@ export default async function ReportsPage() {
     }
     const entry = typeMap.get(type)!;
     entry.count += 1;
-    entry.totalRevenue += e.net_sales!;
+    entry.totalRevenue += eventRevenue(e);
   }
 
   const eventTypeBreakdown: EventTypeBreakdown[] = Array.from(
@@ -131,7 +139,7 @@ export default async function ReportsPage() {
     }
     const entry = dayMap.get(dayIndex)!;
     entry.count += 1;
-    entry.totalRevenue += e.net_sales!;
+    entry.totalRevenue += eventRevenue(e);
   }
 
   const dayOfWeekSummaries: DayOfWeekSummary[] = Array.from(dayMap.entries())
@@ -154,7 +162,7 @@ export default async function ReportsPage() {
     }
     const entry = yearMap.get(year)!;
     entry.count += 1;
-    entry.totalRevenue += e.net_sales!;
+    entry.totalRevenue += eventRevenue(e);
   }
 
   const yoyData: YoYData[] = Array.from(yearMap.entries())
@@ -179,16 +187,18 @@ export default async function ReportsPage() {
 
   // --- Event Performance Breakdown ---
   const eventBreakdownRows: EventBreakdownRow[] = completedEvents.map((e) => {
-    const netSales = e.net_sales!;
+    const rev = eventRevenue(e);
+    // Fee amount: difference between gross sales (net_sales) and after-fee amount
+    // For invoice-only catering events, fees are tracked separately so we skip
     const feeAmount =
       e.net_sales !== null && e.net_after_fees !== null
         ? e.net_sales - e.net_after_fees
         : 0;
     let accuracy: number | null = null;
-    if (e.forecast_sales !== null && e.forecast_sales > 0 && netSales > 0) {
+    if (e.forecast_sales !== null && e.forecast_sales > 0 && rev > 0) {
       accuracy = Math.max(
         0,
-        100 - (Math.abs(netSales - e.forecast_sales) / e.forecast_sales) * 100
+        100 - (Math.abs(rev - e.forecast_sales) / e.forecast_sales) * 100
       );
     }
     return {
@@ -197,7 +207,7 @@ export default async function ReportsPage() {
       event_date: e.event_date,
       event_type: e.event_type,
       city: e.city,
-      net_sales: netSales,
+      net_sales: rev,
       forecast_sales: e.forecast_sales,
       accuracy,
       fee_type: e.fee_type,
@@ -217,7 +227,7 @@ export default async function ReportsPage() {
       locationMap.set(city, { totalRevenue: 0, eventCount: 0 });
     }
     const entry = locationMap.get(city)!;
-    entry.totalRevenue += e.net_sales!;
+    entry.totalRevenue += eventRevenue(e);
     entry.eventCount += 1;
   }
   const locationSummaries: LocationSummary[] = Array.from(locationMap.entries())
@@ -265,7 +275,7 @@ export default async function ReportsPage() {
   for (const e of completedEvents) {
     if (compareMap.has(e.event_name)) {
       compareMap.get(e.event_name)!.occurrences.push({
-        net_sales: e.net_sales!,
+        net_sales: eventRevenue(e),
         anomaly_flag: e.anomaly_flag ?? null,
       });
     }
@@ -289,7 +299,7 @@ export default async function ReportsPage() {
 
   // --- Summary Stats ---
   const totalRevenue = completedEvents.reduce(
-    (s, e) => s + (e.net_sales ?? 0),
+    (s, e) => s + eventRevenue(e),
     0
   );
   const eventsCompleted = completedEvents.length;
@@ -299,8 +309,9 @@ export default async function ReportsPage() {
   let bestEventName = "";
   let bestEventRevenue = 0;
   for (const e of completedEvents) {
-    if (e.net_sales! > bestEventRevenue) {
-      bestEventRevenue = e.net_sales!;
+    const rev = eventRevenue(e);
+    if (rev > bestEventRevenue) {
+      bestEventRevenue = rev;
       bestEventName = e.event_name;
     }
   }
@@ -313,7 +324,7 @@ export default async function ReportsPage() {
   if (eventsWithBoth.length >= 3) {
     const mape =
       eventsWithBoth.reduce((sum, e) => {
-        const actual = e.net_sales ?? 0;
+        const actual = eventRevenue(e);
         const forecast = e.forecast_sales ?? 0;
         return sum + Math.abs(actual - forecast) / Math.max(actual, 1);
       }, 0) / eventsWithBoth.length;

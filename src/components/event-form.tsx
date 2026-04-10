@@ -61,6 +61,9 @@ export function EventForm({
   const [salesMinimum, setSalesMinimum] = useState<number | "">(initialData?.sales_minimum ?? "");
   const [netSales, setNetSales] = useState<number | "">(initialData?.net_sales ?? "");
   const [invoiceRevenue, setInvoiceRevenue] = useState<number | "">(initialData?.invoice_revenue && initialData.invoice_revenue > 0 ? initialData.invoice_revenue : "");
+  const [foodCost, setFoodCost] = useState<number | "">(initialData?.food_cost ?? "");
+  const [laborCost, setLaborCost] = useState<number | "">(initialData?.labor_cost ?? "");
+  const [otherCosts, setOtherCosts] = useState<number | "">(initialData?.other_costs ?? "");
 
   // Simple/Advanced mode
   const isEditing = !!initialData;
@@ -164,6 +167,9 @@ export function EventForm({
     setSalesMinimum(initialData?.sales_minimum ?? "");
     setNetSales(initialData?.net_sales ?? "");
     setInvoiceRevenue(initialData?.invoice_revenue && initialData.invoice_revenue > 0 ? initialData.invoice_revenue : "");
+    setFoodCost(initialData?.food_cost ?? "");
+    setLaborCost(initialData?.labor_cost ?? "");
+    setOtherCosts(initialData?.other_costs ?? "");
     setCityValue(initialData?.city ?? "");
     setDateValue(initialData?.event_date ?? "");
     setWeatherValue(initialData?.event_weather ?? "");
@@ -259,6 +265,9 @@ export function EventForm({
         ? Number(form.get("net_sales"))
         : undefined,
       invoice_revenue: invoiceRevenue !== "" ? Number(invoiceRevenue) : undefined,
+      food_cost: foodCost !== "" ? Number(foodCost) : undefined,
+      labor_cost: laborCost !== "" ? Number(laborCost) : undefined,
+      other_costs: otherCosts !== "" ? Number(otherCosts) : undefined,
       notes: (form.get("notes") as string) || undefined,
       latitude: suggestedLat ?? undefined,
       longitude: suggestedLon ?? undefined,
@@ -607,6 +616,85 @@ export function EventForm({
                       ${afterFeeAmount.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                     </span>
                   </div>
+                )}
+              </div>
+
+              {/* Event Costs */}
+              <div className="space-y-4">
+                <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">
+                  Event Costs
+                </h3>
+                <div className="grid grid-cols-3 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="food_cost">Food Cost ($)</Label>
+                    <Input
+                      id="food_cost"
+                      name="food_cost"
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      value={foodCost}
+                      onChange={(e) => setFoodCost(e.target.value === "" ? "" : Number(e.target.value))}
+                      placeholder="0.00"
+                    />
+                    <p className="text-xs text-muted-foreground">Ingredients, packaging</p>
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="labor_cost">Labor ($)</Label>
+                    <Input
+                      id="labor_cost"
+                      name="labor_cost"
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      value={laborCost}
+                      onChange={(e) => setLaborCost(e.target.value === "" ? "" : Number(e.target.value))}
+                      placeholder="0.00"
+                    />
+                    <p className="text-xs text-muted-foreground">Staff, yourself</p>
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="other_costs">Other ($)</Label>
+                    <Input
+                      id="other_costs"
+                      name="other_costs"
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      value={otherCosts}
+                      onChange={(e) => setOtherCosts(e.target.value === "" ? "" : Number(e.target.value))}
+                      placeholder="0.00"
+                    />
+                    <p className="text-xs text-muted-foreground">Fuel, parking, supplies</p>
+                  </div>
+                </div>
+                {/* Live profitability preview */}
+                {(foodCost !== "" || laborCost !== "" || otherCosts !== "") && (
+                  (() => {
+                    const totalCosts = (Number(foodCost) || 0) + (Number(laborCost) || 0) + (Number(otherCosts) || 0);
+                    const baseRevenue = afterFeeAmount !== null
+                      ? afterFeeAmount
+                      : (netSales !== "" ? Number(netSales) : null);
+                    if (baseRevenue === null || totalCosts === 0) return null;
+                    const profit = baseRevenue - totalCosts;
+                    const margin = baseRevenue > 0 ? (profit / baseRevenue) * 100 : null;
+                    const isPositive = profit >= 0;
+                    return (
+                      <div className={`rounded p-2 text-sm flex items-center justify-between ${isPositive ? "bg-green-50 dark:bg-green-950/20" : "bg-red-50 dark:bg-red-950/20"}`}>
+                        <span className="text-muted-foreground">
+                          Est. profit after costs:
+                        </span>
+                        <span className={`font-semibold ${isPositive ? "text-green-700 dark:text-green-400" : "text-red-600 dark:text-red-400"}`}>
+                          ${profit.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                          {margin !== null && (
+                            <span className="font-normal text-xs ml-1.5 opacity-70">
+                              ({margin.toFixed(1)}% margin)
+                            </span>
+                          )}
+                        </span>
+                      </div>
+                    );
+                  })()
                 )}
               </div>
 

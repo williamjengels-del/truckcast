@@ -13,6 +13,9 @@ const TRIAL_DAYS = 14;
 // Days before expiry to send warning emails
 const WARN_AT_DAYS = [7, 3, 1];
 
+// Match middleware.ts — hard gate only fires on/after this date
+const HARD_GATE_DATE = new Date("2026-05-01T00:00:00Z");
+
 function daysBetween(a: Date, b: Date) {
   return Math.round((b.getTime() - a.getTime()) / (1000 * 60 * 60 * 24));
 }
@@ -92,7 +95,8 @@ export async function GET(req: NextRequest) {
       if (daysLeft < 0) {
         // Trial expired — only send on day 1 after expiry to avoid spam
         if (daysSinceExpiry === 1) {
-          await sendTrialExpiredEmail(email, profile.business_name ?? "");
+          const gracePeriodActive = today < HARD_GATE_DATE;
+          await sendTrialExpiredEmail(email, profile.business_name ?? "", gracePeriodActive);
           results.expired++;
         } else {
           results.skipped++;
