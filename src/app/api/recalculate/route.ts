@@ -57,26 +57,27 @@ export async function POST() {
     // Calibrate per-user coefficients from historical data
     const calibrated = calibrateCoefficients(allEvents);
 
-    // Recalculate forecasts for upcoming events
+    // Recalculate forecasts for all future events (booked AND unbooked)
+    // Unbooked events are potential bookings — having a forecast helps decide whether to book them
     const today = new Date().toISOString().split("T")[0];
-    const upcomingEvents = allEvents.filter(
-      (e) => e.event_date >= today && e.booked
-    );
+    const futureEvents = allEvents.filter((e) => e.event_date >= today);
 
-    for (const event of upcomingEvents) {
+    let forecastsUpdated = 0;
+    for (const event of futureEvents) {
       const forecastResult = calculateForecast(event, allEvents, { calibratedCoefficients: calibrated });
       if (forecastResult) {
         await supabase
           .from("events")
           .update({ forecast_sales: forecastResult.forecast })
           .eq("id", event.id);
+        forecastsUpdated++;
       }
     }
 
     return NextResponse.json({
       success: true,
       performanceUpdated: eventNames.length,
-      forecastsUpdated: upcomingEvents.length,
+      forecastsUpdated,
     });
   } catch (err) {
     return NextResponse.json(
