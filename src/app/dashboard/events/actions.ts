@@ -77,6 +77,8 @@ export async function createEvent(formData: EventFormData) {
   }
   if (formData.net_sales !== undefined && formData.net_sales !== null)
     insertData.net_sales = formData.net_sales;
+  if (formData.invoice_revenue !== undefined && formData.invoice_revenue !== null)
+    insertData.invoice_revenue = formData.invoice_revenue;
   if (formData.event_type) insertData.event_type = formData.event_type;
   if (formData.event_tier) insertData.event_tier = formData.event_tier;
   if (formData.event_weather) insertData.event_weather = formData.event_weather;

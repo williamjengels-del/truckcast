@@ -60,6 +60,7 @@ export function EventForm({
   const [feeRate, setFeeRate] = useState<number | "">(initialData?.fee_rate ?? "");
   const [salesMinimum, setSalesMinimum] = useState<number | "">(initialData?.sales_minimum ?? "");
   const [netSales, setNetSales] = useState<number | "">(initialData?.net_sales ?? "");
+  const [invoiceRevenue, setInvoiceRevenue] = useState<number | "">(initialData?.invoice_revenue && initialData.invoice_revenue > 0 ? initialData.invoice_revenue : "");
 
   // Simple/Advanced mode
   const isEditing = !!initialData;
@@ -162,6 +163,7 @@ export function EventForm({
     setFeeRate(initialData?.fee_rate ?? "");
     setSalesMinimum(initialData?.sales_minimum ?? "");
     setNetSales(initialData?.net_sales ?? "");
+    setInvoiceRevenue(initialData?.invoice_revenue && initialData.invoice_revenue > 0 ? initialData.invoice_revenue : "");
     setCityValue(initialData?.city ?? "");
     setDateValue(initialData?.event_date ?? "");
     setWeatherValue(initialData?.event_weather ?? "");
@@ -256,6 +258,7 @@ export function EventForm({
       net_sales: form.get("net_sales")
         ? Number(form.get("net_sales"))
         : undefined,
+      invoice_revenue: invoiceRevenue !== "" ? Number(invoiceRevenue) : undefined,
       notes: (form.get("notes") as string) || undefined,
       latitude: suggestedLat ?? undefined,
       longitude: suggestedLon ?? undefined,
@@ -364,7 +367,9 @@ export function EventForm({
               {/* Show net sales in simple mode only if past event */}
               {(!advancedMode && isPastEvent) || advancedMode ? (
                 <div className="space-y-2">
-                  <Label htmlFor="net_sales">Net Sales ($)</Label>
+                  <Label htmlFor="net_sales">
+                    {eventMode === "catering" ? "On-site Sales ($)" : "Net Sales ($)"}
+                  </Label>
                   <Input
                     id="net_sales"
                     name="net_sales"
@@ -375,8 +380,28 @@ export function EventForm({
                     onChange={(e) => setNetSales(e.target.value === "" ? "" : Number(e.target.value))}
                     placeholder="Enter after event"
                   />
+                  {eventMode === "catering" && (
+                    <p className="text-xs text-muted-foreground">POS/cash sales at the event (if any)</p>
+                  )}
                 </div>
               ) : null}
+              {/* Invoice revenue — catering events only */}
+              {eventMode === "catering" && ((!advancedMode && isPastEvent) || advancedMode) && (
+                <div className="space-y-2">
+                  <Label htmlFor="invoice_revenue">Invoice Amount ($)</Label>
+                  <Input
+                    id="invoice_revenue"
+                    name="invoice_revenue"
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    value={invoiceRevenue}
+                    onChange={(e) => setInvoiceRevenue(e.target.value === "" ? "" : Number(e.target.value))}
+                    placeholder="Client invoice total"
+                  />
+                  <p className="text-xs text-muted-foreground">Revenue billed to the client for this catering job</p>
+                </div>
+              )}
             </div>
           </div>
 
