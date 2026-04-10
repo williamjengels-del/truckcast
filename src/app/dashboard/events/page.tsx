@@ -1,11 +1,12 @@
 import type { Metadata } from "next";
 export const metadata: Metadata = { title: "Events" };
 
+import { Suspense } from "react";
 import { createClient } from "@/lib/supabase/server";
 import { EventsClient } from "./events-client";
 import type { Event, Profile } from "@/lib/database.types";
 
-export default async function EventsPage() {
+async function EventsContent() {
   const supabase = await createClient();
   const {
     data: { user },
@@ -37,5 +38,13 @@ export default async function EventsPage() {
       businessName={profile?.business_name ?? ""}
       userCity={profile?.city ?? ""}
     />
+  );
+}
+
+export default function EventsPage() {
+  return (
+    <Suspense fallback={<div className="flex items-center justify-center py-24 text-muted-foreground text-sm">Loading events…</div>}>
+      <EventsContent />
+    </Suspense>
   );
 }

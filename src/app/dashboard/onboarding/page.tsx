@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { POSSetupGuide } from "@/components/pos-setup-guide";
+import { DataImportGuide } from "@/components/data-import-guide";
 import {
   Select,
   SelectContent,
@@ -224,47 +225,12 @@ export default function OnboardingPage() {
           <CardHeader>
             <CardTitle>Now let&apos;s get your events in</CardTitle>
             <p className="text-sm text-muted-foreground">
-              The more events you add, the smarter your forecasts get. Even 10
-              past events makes a big difference.
+              The more events you add, the smarter your forecasts get. Even a
+              few past events makes a big difference.
             </p>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div className="grid gap-4">
-              {/* Import CSV option */}
-              <button
-                type="button"
-                onClick={() => router.push("/dashboard/events/import")}
-                className="flex items-start gap-4 rounded-xl border-2 border-border bg-card p-5 text-left transition-colors hover:border-primary hover:bg-primary/5 focus:outline-none focus:ring-2 focus:ring-primary"
-              >
-                <div className="mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
-                  <FileSpreadsheet className="h-5 w-5" />
-                </div>
-                <div>
-                  <div className="font-semibold">Import from CSV / Spreadsheet</div>
-                  <div className="mt-1 text-sm text-muted-foreground">
-                    Have your events in Excel, Google Sheets, or Airtable? Upload
-                    them all at once.
-                  </div>
-                </div>
-              </button>
-
-              {/* Add manually option */}
-              <button
-                type="button"
-                onClick={() => router.push("/dashboard/events?new=true")}
-                className="flex items-start gap-4 rounded-xl border-2 border-border bg-card p-5 text-left transition-colors hover:border-primary hover:bg-primary/5 focus:outline-none focus:ring-2 focus:ring-primary"
-              >
-                <div className="mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
-                  <PlusCircle className="h-5 w-5" />
-                </div>
-                <div>
-                  <div className="font-semibold">Add Your First Event</div>
-                  <div className="mt-1 text-sm text-muted-foreground">
-                    Start fresh and add events one by one.
-                  </div>
-                </div>
-              </button>
-            </div>
+            <DataImportGuide onComplete={() => setStep(3)} />
 
             {/* Skip — less prominent */}
             <div className="pt-2 text-center">
@@ -277,8 +243,7 @@ export default function OnboardingPage() {
                 I&apos;ll do this later
               </button>
               <p className="mt-1.5 text-xs text-muted-foreground">
-                You can always import later from the Events page. We recommend
-                adding at least 5 past events to get started.
+                You can always import later from the Events page.
               </p>
             </div>
           </CardContent>

@@ -20,7 +20,7 @@ export interface VenueHistory {
 
 export interface ForecastResult {
   forecast: number;
-  level: 1 | 2 | 3 | 4;
+  level: number;
   levelName: string;
   signal: string;
   baseForecast: number;
@@ -37,11 +37,67 @@ export interface ForecastResult {
   calibrated: boolean;
   /** Venue familiarity bonus applied */
   venueFamiliarityApplied: boolean;
+  /** Platform cross-user data available for this event */
+  platformOperatorCount?: number;
+  platformMedianSales?: number;
 }
 
 export interface ForecastOptions {
   /** Pre-computed calibrated coefficients for this user. If not provided, defaults are used. */
   calibratedCoefficients?: CalibratedCoefficients | null;
+  /** Cross-user platform aggregate for this event, if available */
+  platformEvent?: {
+    median_sales: number | null;
+    operator_count: number;
+    total_instances: number;
+    sales_p25?: number | null;
+    sales_p75?: number | null;
+  } | null;
+}
+
+// --- Multi-day series detection ---
+
+/**
+ * Determines which day-of-series a given event date falls on for a named event.
+ *
+ * A "series" is a cluster of dates for the same event name where consecutive
+ * dates are ≤ MAX_GAP_DAYS apart. Weekly recurring events (7-day gap) are
+ * naturally excluded. Multi-day festivals like Shutterfest (1–3 day gaps) are
+ * detected and get a 1-indexed position.
+ *
+ * Returns null if the date is not part of a multi-day cluster (i.e., it stands
+ * alone or is a weekly/monthly recurring event).
+ */
+const SERIES_MAX_GAP_DAYS = 5;
+
+export function getSeriesDay(
+  targetDate: string,
+  allDatesForName: string[] // unique dates for this event name, sorted ascending
+): number | null {
+  if (allDatesForName.length < 2) return null;
+
+  // Build consecutive-day clusters
+  const clusters: string[][] = [];
+  let current: string[] = [allDatesForName[0]];
+
+  for (let i = 1; i < allDatesForName.length; i++) {
+    const prevMs = new Date(allDatesForName[i - 1] + "T00:00:00").getTime();
+    const currMs = new Date(allDatesForName[i] + "T00:00:00").getTime();
+    const gapDays = (currMs - prevMs) / (1000 * 60 * 60 * 24);
+    if (gapDays <= SERIES_MAX_GAP_DAYS) {
+      current.push(allDatesForName[i]);
+    } else {
+      clusters.push(current);
+      current = [allDatesForName[i]];
+    }
+  }
+  clusters.push(current);
+
+  // Find which cluster contains targetDate
+  const cluster = clusters.find((c) => c.includes(targetDate));
+  if (!cluster || cluster.length < 2) return null;
+
+  return cluster.indexOf(targetDate) + 1; // 1-indexed
 }
 
 // --- Recency weighting helpers ---
@@ -188,29 +244,60 @@ export function getVenueHistory(
 // --- Confidence scoring ---
 
 /**
+ * Detect the typical frequency of a set of events (in days between occurrences).
+ * Used to adjust the recency window — annual events shouldn't be penalised for
+ * data that is 12 months old when 6 months was always their natural cadence.
+ */
+function detectEventFrequencyDays(events: Event[]): number {
+  if (events.length < 2) return 365; // assume annual if only one data point
+  const sorted = [...events].sort((a, b) =>
+    new Date(a.event_date + "T00:00:00").getTime() -
+    new Date(b.event_date + "T00:00:00").getTime()
+  );
+  const gaps: number[] = [];
+  for (let i = 1; i < sorted.length; i++) {
+    const ms =
+      new Date(sorted[i].event_date + "T00:00:00").getTime() -
+      new Date(sorted[i - 1].event_date + "T00:00:00").getTime();
+    gaps.push(ms / (1000 * 60 * 60 * 24));
+  }
+  const avgGap = gaps.reduce((a, b) => a + b, 0) / gaps.length;
+  return avgGap;
+}
+
+/**
  * Calculate a numeric confidence score from 0 to 1 based on:
  * - Number of similar historical events (data depth)
- * - Data recency (how recent the data points are)
+ * - Data recency (relative to the event's natural frequency)
  * - Whether calibrated or default coefficients are used
  * - Consistency of the data
+ * - Event tier (Tier A/B events are more established)
  */
 function calculateConfidenceScore(
   dataPoints: number,
   events: Event[],
   calibrated: boolean,
   consistency: number,
-  venueFamiliar: boolean
+  venueFamiliar: boolean,
+  eventTier?: string | null
 ): number {
   // Data depth score: 0-0.3. Reaches maximum at 10+ events.
-  // log2(11)/log2(11) = 1.0, so 10 events yields full 0.3.
   const depthScore = Math.min(0.3, 0.3 * (Math.log2(dataPoints + 1) / Math.log2(11)));
 
-  // Recency score: 0-0.25 (proportion of events in last 6 months)
+  // Recency score: 0-0.2 (was 0.25, reduced to make room for tier bonus)
+  // The recency window adapts to the event's frequency so that annual events
+  // (Grub N Groove, Shutterfest) don't get zero credit for data that's 11 months old.
+  const freqDays = detectEventFrequencyDays(events);
+  // Window = 1.3× the typical recurrence period, minimum 6 months, maximum 18 months
+  const windowMs = Math.min(
+    18 * 30 * 24 * 60 * 60 * 1000,
+    Math.max(SIX_MONTHS_MS, freqDays * 1.3 * 24 * 60 * 60 * 1000)
+  );
   const recentCount = events.filter((e) => {
     const age = Date.now() - new Date(e.event_date + "T00:00:00").getTime();
-    return age <= SIX_MONTHS_MS;
+    return age <= windowMs;
   }).length;
-  const recencyScore = events.length > 0 ? 0.25 * (recentCount / events.length) : 0;
+  const recencyScore = events.length > 0 ? 0.2 * (recentCount / events.length) : 0;
 
   // Calibration bonus: 0 or 0.15
   const calibrationScore = calibrated ? 0.15 : 0;
@@ -221,7 +308,12 @@ function calculateConfidenceScore(
   // Venue familiarity bonus: 0 or 0.1
   const venueScore = venueFamiliar ? 0.1 : 0;
 
-  return Math.min(1, depthScore + recencyScore + calibrationScore + consistencyScore + venueScore);
+  // Event tier bonus: established events (A/B) get a small lift because
+  // the operator has explicitly rated them as reliable, higher-value events.
+  // A = +0.1, B = +0.05, C/D/unknown = 0
+  const tierScore = eventTier === "A" ? 0.1 : eventTier === "B" ? 0.05 : 0;
+
+  return Math.min(1, depthScore + recencyScore + calibrationScore + consistencyScore + venueScore + tierScore);
 }
 
 function confidenceScoreToLabel(score: number): "HIGH" | "MEDIUM" | "LOW" {
@@ -274,11 +366,55 @@ export function calculateForecast(
     ? getVenueHistory(target.location, historicalEvents)
     : null;
 
+  const platformEvent = options?.platformEvent ?? null;
+  const platformMedian = (platformEvent?.median_sales ?? 0) > 0 ? (platformEvent!.median_sales as number) : 0;
+  const platformOpCount = platformEvent?.operator_count ?? 0;
+
   let result: ForecastResult | null = null;
 
   // Level 1: Direct Event History
-  result = tryLevel1(target, validEvents);
+  result = tryLevel1(target, validEvents, historicalEvents);
+
+  if (result && platformMedian > 0 && platformOpCount >= 2) {
+    // Blend personal history with platform aggregate.
+    // More personal data = more weight on personal history.
+    const personalWeight =
+      result.dataPoints >= 5 ? 0.85 :
+      result.dataPoints >= 3 ? 0.75 :
+      result.dataPoints >= 2 ? 0.65 : 0.55;
+    const blended = result.forecast * personalWeight + platformMedian * (1 - personalWeight);
+    const finalResult = applyAdjustments(result, target, validEvents, calibrated, venueHistory);
+    finalResult.forecast = Math.round(blended * 100) / 100;
+    finalResult.platformOperatorCount = platformOpCount;
+    finalResult.platformMedianSales = Math.round(platformMedian * 100) / 100;
+    return finalResult;
+  }
+
   if (result) return applyAdjustments(result, target, validEvents, calibrated, venueHistory);
+
+  // Level 0: Platform registry — no personal history but platform has enough operators
+  if (platformMedian > 0 && platformOpCount >= 3) {
+    const platformResult: ForecastResult = {
+      level: 0,
+      levelName: "Platform Registry",
+      signal: "community",
+      forecast: Math.round(platformMedian * 100) / 100,
+      baseForecast: Math.round(platformMedian * 100) / 100,
+      weatherCoefficient: null,
+      weatherAdjustment: null,
+      dayOfWeekCoefficient: null,
+      dayOfWeekAdjustment: null,
+      attendanceAdjustment: null,
+      venueFamiliarityApplied: false,
+      dataPoints: platformEvent?.total_instances ?? 0,
+      confidence: platformOpCount >= 8 ? "HIGH" : platformOpCount >= 4 ? "MEDIUM" : "LOW",
+      confidenceScore: Math.min(0.9, 0.4 + (platformOpCount / 20) * 0.5),
+      calibrated: false,
+      platformOperatorCount: platformOpCount,
+      platformMedianSales: Math.round(platformMedian * 100) / 100,
+    };
+    return applyAdjustments(platformResult, target, validEvents, calibrated, venueHistory);
+  }
 
   // Level 2: Similar Event Combo (same type + city area)
   result = tryLevel2(target, validEvents);
@@ -308,16 +444,50 @@ function makeResult(
 
 function tryLevel1(
   target: Partial<Event>,
-  events: Event[]
+  events: Event[],
+  allEvents: Event[] // full unfiltered set — used for series day detection only
 ): ForecastResult | null {
   if (!target.event_name) return null;
 
   const nameNormalized = target.event_name.toLowerCase().trim();
-  const matching = events.filter(
+
+  // Determine whether this event is part of a multi-day series.
+  // We gather every date (from the full unfiltered list + the target itself)
+  // so that cluster boundaries are computed correctly even for future events.
+  const allDatesForName = [
+    ...new Set([
+      ...allEvents
+        .filter((e) => e.event_name.toLowerCase().trim() === nameNormalized)
+        .map((e) => e.event_date),
+      ...(target.event_date ? [target.event_date] : []),
+    ]),
+  ].sort();
+
+  const targetSeriesDay =
+    target.event_date && allDatesForName.length >= 2
+      ? getSeriesDay(target.event_date, allDatesForName)
+      : null;
+
+  // Filter historical events to those with recorded sales
+  let matching = events.filter(
     (e) => e.event_name.toLowerCase().trim() === nameNormalized
   );
 
   if (matching.length < 1) return null;
+
+  // If this is a multi-day series, restrict to the same day-of-series
+  // so Shutterfest Day 1 doesn't average with Day 3, etc.
+  if (targetSeriesDay !== null) {
+    const sameDayMatches = matching.filter((e) => {
+      const day = getSeriesDay(e.event_date, allDatesForName);
+      return day === targetSeriesDay;
+    });
+    // Only narrow the set if we have at least 1 same-day data point;
+    // otherwise fall through to the full set (graceful degradation).
+    if (sameDayMatches.length >= 1) {
+      matching = sameDayMatches;
+    }
+  }
 
   // Recency-weighted average
   const forecast = weightedAverage(matching);
@@ -565,7 +735,8 @@ function applyAdjustments(
     matchingEvents,
     isCalibrated,
     calculateConsistency(matchingEvents),
-    result.venueFamiliarityApplied
+    result.venueFamiliarityApplied,
+    target.event_tier
   );
 
   // Override label with score-based label for consistency
@@ -587,9 +758,27 @@ function getMatchingEventsForLevel(
     case 1: {
       if (!target.event_name) return events;
       const nameNormalized = target.event_name.toLowerCase().trim();
-      return events.filter(
+      const byName = events.filter(
         (e) => e.event_name.toLowerCase().trim() === nameNormalized
       );
+      // Apply series-day filtering if applicable (mirrors tryLevel1 logic)
+      if (target.event_date && byName.length >= 2) {
+        const allDatesForName = [
+          ...new Set([
+            ...byName.map((e) => e.event_date),
+            target.event_date,
+          ]),
+        ].sort();
+        const targetSeriesDay = getSeriesDay(target.event_date, allDatesForName);
+        if (targetSeriesDay !== null) {
+          const sameDayMatches = byName.filter((e) => {
+            const day = getSeriesDay(e.event_date, allDatesForName);
+            return day === targetSeriesDay;
+          });
+          if (sameDayMatches.length >= 1) return sameDayMatches;
+        }
+      }
+      return byName;
     }
     case 2:
       return events.filter(

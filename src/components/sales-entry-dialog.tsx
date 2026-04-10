@@ -23,8 +23,13 @@ import type { Event } from "@/lib/database.types";
 interface SalesEntryDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  event: Event;
-  onSubmit: (eventId: string, netSales: number, weather?: string) => Promise<void>;
+  event: Event | null;
+  onSubmit: (
+    eventId: string,
+    netSales: number,
+    invoiceRevenue: number,
+    weather?: string
+  ) => Promise<void>;
 }
 
 export function SalesEntryDialog({
@@ -36,6 +41,12 @@ export function SalesEntryDialog({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // When no event is selected, render the Dialog shell but nothing inside
+  // (keeps the Base UI dialog mounted so open/close transitions work)
+  if (!event) {
+    return <Dialog open={false} onOpenChange={onOpenChange}><DialogContent /></Dialog>;
+  }
+
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setLoading(true);
@@ -43,6 +54,7 @@ export function SalesEntryDialog({
 
     const form = new FormData(e.currentTarget);
     const netSales = Number(form.get("net_sales"));
+    const invoiceRevenue = Number(form.get("invoice_revenue") ?? 0) || 0;
     const weather = form.get("event_weather") as string | undefined;
 
     if (isNaN(netSales) || netSales < 0) {
@@ -52,7 +64,7 @@ export function SalesEntryDialog({
     }
 
     try {
-      await onSubmit(event.id, netSales, weather || undefined);
+      await onSubmit(event!.id, netSales, invoiceRevenue, weather || undefined);
       onOpenChange(false);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Something went wrong");
@@ -78,7 +90,7 @@ export function SalesEntryDialog({
         </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="space-y-2">
-            <Label htmlFor="net_sales">Net Sales ($)</Label>
+            <Label htmlFor="net_sales">POS Sales ($)</Label>
             <Input
               id="net_sales"
               name="net_sales"
@@ -91,7 +103,23 @@ export function SalesEntryDialog({
               required
             />
             <p className="text-xs text-muted-foreground">
-              Total sales minus tax and tips
+              Sales from your POS terminal — minus tax and tips. Used for forecasting.
+            </p>
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="invoice_revenue">Invoice Revenue ($) <span className="text-muted-foreground font-normal">(optional)</span></Label>
+            <Input
+              id="invoice_revenue"
+              name="invoice_revenue"
+              type="number"
+              step="0.01"
+              min="0"
+              defaultValue={event.invoice_revenue > 0 ? event.invoice_revenue : ""}
+              placeholder="0.00"
+            />
+            <p className="text-xs text-muted-foreground">
+              Catering deposits, net-30 payments, or any invoice paid for this event. Tracked separately — won&apos;t skew your forecast.
             </p>
           </div>
 

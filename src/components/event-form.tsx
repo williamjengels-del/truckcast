@@ -55,6 +55,7 @@ export function EventForm({
   const [error, setError] = useState<string | null>(null);
   const [isPrivate, setIsPrivate] = useState<boolean>(initialData?.is_private ?? false);
   const [bookedValue, setBookedValue] = useState<string>(initialData?.booked === false ? "false" : "true");
+  const [eventMode, setEventMode] = useState<string>(initialData?.event_mode ?? "food_truck");
   const [feeType, setFeeType] = useState<string>(initialData?.fee_type ?? "none");
   const [feeRate, setFeeRate] = useState<number | "">(initialData?.fee_rate ?? "");
   const [salesMinimum, setSalesMinimum] = useState<number | "">(initialData?.sales_minimum ?? "");
@@ -87,12 +88,15 @@ export function EventForm({
     try {
       // Geocode
       const geoRes = await fetch(
-        `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(city)}&country_code=us&count=1`
+        `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(city)}&country_code=us&count=5`
       );
       if (!geoRes.ok) return;
       const geoData = await geoRes.json();
-      const result = geoData.results?.[0];
-      if (!result) return;
+      const geoResults: Array<{ latitude: number; longitude: number; name: string; admin1?: string; population?: number }> = geoData.results ?? [];
+      if (geoResults.length === 0) return;
+
+      // Pick highest-population match to prefer major cities over small towns
+      const result = geoResults.reduce((a, b) => ((b.population ?? 0) > (a.population ?? 0) ? b : a));
 
       const lat: number = result.latitude;
       const lon: number = result.longitude;
@@ -144,6 +148,34 @@ export function EventForm({
       setWeatherFetching(false);
     }
   }, []);
+
+  // When the dialog opens (or re-opens for a different event), sync ALL state from
+  // initialData. This is required because the EventForm is always-mounted (needed for
+  // Base UI dialog animations), so useState initializers only run once with initialData=null.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    if (!open) return;
+    setIsPrivate(initialData?.is_private ?? false);
+    setBookedValue(initialData?.booked === false ? "false" : "true");
+    setEventMode(initialData?.event_mode ?? "food_truck");
+    setFeeType(initialData?.fee_type ?? "none");
+    setFeeRate(initialData?.fee_rate ?? "");
+    setSalesMinimum(initialData?.sales_minimum ?? "");
+    setNetSales(initialData?.net_sales ?? "");
+    setCityValue(initialData?.city ?? "");
+    setDateValue(initialData?.event_date ?? "");
+    setWeatherValue(initialData?.event_weather ?? "");
+    setWeatherSuggested(false);
+    setWeatherBadge(null);
+    setSuggestedLat(initialData?.latitude ?? null);
+    setSuggestedLon(initialData?.longitude ?? null);
+    // Editing an existing event always defaults to advanced mode
+    setAdvancedMode(!!initialData
+      ? true
+      : (typeof window !== "undefined" && localStorage.getItem("event_form_mode") === "advanced"));
+    setError(null);
+    setLoading(false);
+  }, [open]); // intentionally omit initialData — we only want to sync when open changes
 
   useEffect(() => {
     if (!open) return;
@@ -207,6 +239,7 @@ export function EventForm({
       event_tier: (form.get("event_tier") as string) || undefined,
       event_weather: weatherValue || (form.get("event_weather") as string) || undefined,
       anomaly_flag: (form.get("anomaly_flag") as string) || undefined,
+      event_mode: eventMode,
       expected_attendance: form.get("expected_attendance")
         ? Number(form.get("expected_attendance"))
         : undefined,
@@ -246,7 +279,33 @@ export function EventForm({
         <DialogHeader>
           <DialogTitle>{title}</DialogTitle>
         </DialogHeader>
-        <form onSubmit={handleSubmit} className="space-y-6">
+        <form key={open ? (initialData?.id ?? "new-event") : "closed"} onSubmit={handleSubmit} className="space-y-6">
+          {/* ── Event Mode ── */}
+          <div className="flex gap-1 p-1 bg-muted rounded-lg">
+            <button
+              type="button"
+              onClick={() => setEventMode("food_truck")}
+              className={`flex-1 py-1.5 px-3 rounded-md text-sm font-medium transition-colors ${
+                eventMode === "food_truck"
+                  ? "bg-background shadow-sm text-foreground"
+                  : "text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              🚚 Food Truck Event
+            </button>
+            <button
+              type="button"
+              onClick={() => setEventMode("catering")}
+              className={`flex-1 py-1.5 px-3 rounded-md text-sm font-medium transition-colors ${
+                eventMode === "catering"
+                  ? "bg-violet-600 shadow-sm text-white"
+                  : "text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              🍽️ Catering / Private
+            </button>
+          </div>
+
           {/* ── Core fields (always visible) ── */}
           <div className="space-y-4">
             <div className="grid grid-cols-2 gap-4">

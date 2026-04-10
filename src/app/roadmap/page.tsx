@@ -186,6 +186,40 @@ const PHASES: Phase[] = [
     ],
   },
   {
+    number: 10,
+    name: "Operator Community",
+    tagline: "A home base for the mobile food industry — where operators learn from each other, not from guesswork.",
+    color: "bg-teal-50 dark:bg-teal-950/20",
+    accent: "border-teal-300 dark:border-teal-700",
+    badge: "bg-teal-100 text-teal-700 dark:bg-teal-900/50 dark:text-teal-300",
+    status: "planned",
+    milestones: [
+      { label: "Community forums — ask questions, share tips, learn from operators who've been there", status: "planned" },
+      { label: "Event reviews — operators share honest intel on organizers, venues, and crowd quality", status: "planned" },
+      { label: "Benchmark sharing — opt in to see how your numbers compare to similar trucks", status: "planned" },
+      { label: "Resource library — contracts, pricing guides, health code checklists, and more", status: "planned" },
+      { label: "Regional groups — connect with other trucks in your city or market", status: "planned" },
+      { label: "Verified operator badges — build trust and reputation within the community", status: "planned" },
+    ],
+  },
+  {
+    number: 11,
+    name: "The Marketplace",
+    tagline: "Book events directly. No middlemen. No commissions. Just your subscription.",
+    color: "bg-rose-50 dark:bg-rose-950/20",
+    accent: "border-rose-300 dark:border-rose-700",
+    badge: "bg-rose-100 text-rose-700 dark:bg-rose-900/50 dark:text-rose-300",
+    status: "planned",
+    milestones: [
+      { label: "Event listings — organizers post opportunities directly on VendCast", status: "planned" },
+      { label: "Apply to events — submit your truck for consideration in a few taps", status: "planned" },
+      { label: "Company catering portal — corporate clients find and book trucks without going through an agency", status: "planned" },
+      { label: "Organizer profiles — see ratings, past events, and payment history before you commit", status: "planned" },
+      { label: "TruckCast data powers the match — your forecast history tells organizers exactly what to expect", status: "planned" },
+      { label: "No booking commissions — ever. Your subscription covers everything.", status: "planned", note: "Companies like Food Fleet take 20–30% of your revenue. We don't." },
+    ],
+  },
+  {
     number: 9,
     name: "Brand Redesign",
     tagline: "A fresh look that feels as professional as the system behind it — built for real operators.",
@@ -208,7 +242,7 @@ const STATS = [
   { label: "Phases completed", value: "7" },
   { label: "Features shipped", value: "50+" },
   { label: "POS integrations", value: "3" },
-  { label: "Automated tests", value: "90" },
+  { label: "Automated tests", value: "119" },
 ];
 
 function StatusIcon({ status }: { status: MilestoneStatus }) {

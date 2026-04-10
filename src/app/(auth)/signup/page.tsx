@@ -14,9 +14,6 @@ export default function SignupPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [businessName, setBusinessName] = useState("");
-  const [inviteCode, setInviteCode] = useState("");
-  const [inviteValid, setInviteValid] = useState<boolean | null>(null);
-  const [inviteTier, setInviteTier] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
@@ -55,15 +52,6 @@ export default function SignupPage() {
         );
     }
 
-    // Redeem invite code if provided
-    if (inviteCode.trim() && data.user) {
-      await fetch("/api/beta/redeem", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ code: inviteCode.trim() }),
-      });
-    }
-
     // Fire welcome email (non-blocking — don't await so signup isn't delayed)
     if (data.user) {
       fetch("/api/email/welcome", {
@@ -82,15 +70,6 @@ export default function SignupPage() {
     }
 
     setLoading(false);
-  }
-
-  async function handleInviteBlur() {
-    const code = inviteCode.trim();
-    if (!code) { setInviteValid(null); setInviteTier(null); return; }
-    const res = await fetch(`/api/beta/redeem?code=${encodeURIComponent(code)}`);
-    const data = await res.json();
-    setInviteValid(data.valid);
-    setInviteTier(data.valid ? data.grantedTier : null);
   }
 
   async function handleGoogleSignup() {
@@ -168,32 +147,6 @@ export default function SignupPage() {
                 required
               />
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="inviteCode">
-                Beta Invite Code{" "}
-                <span className="text-xs text-muted-foreground font-normal">(optional)</span>
-              </Label>
-              <Input
-                id="inviteCode"
-                type="text"
-                placeholder="TC-XXXXXXXX"
-                value={inviteCode}
-                onChange={(e) => { setInviteCode(e.target.value.toUpperCase()); setInviteValid(null); setInviteTier(null); }}
-                onBlur={handleInviteBlur}
-                className="font-mono"
-              />
-              {inviteValid === true && inviteTier && (
-                <p className="text-xs text-green-700 dark:text-green-400">
-                  Valid code — unlocks {inviteTier} plan for your trial
-                </p>
-              )}
-              {inviteValid === false && (
-                <p className="text-xs text-destructive">
-                  Invalid or already used code
-                </p>
-              )}
-            </div>
-
             {error && (
               <p className="text-sm text-destructive">{error}</p>
             )}

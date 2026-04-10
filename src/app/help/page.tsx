@@ -113,8 +113,8 @@ const sections = [
         a: "Go to Dashboard → Settings → Billing and click \"Manage Subscription\". This opens the Stripe billing portal where you can upgrade, downgrade, or cancel.",
       },
       {
-        q: "I have a beta invite code. Where do I enter it?",
-        a: "Enter your invite code on the sign-up page before creating your account. The code will grant you a free Pro or Premium trial for the specified period. If you've already signed up, contact support and we'll apply it manually.",
+        q: "Can I try TruckCast before paying?",
+        a: "Yes — every new account gets a 14-day free trial with no credit card required. Sign up at vendcast.co and you'll have full access from day one.",
       },
     ],
   },

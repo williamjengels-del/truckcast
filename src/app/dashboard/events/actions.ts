@@ -20,10 +20,12 @@ export type EventFormData = {
   booked?: boolean;
   is_private?: boolean;
   net_sales?: number;
+  invoice_revenue?: number;
   event_type?: string;
   event_tier?: string;
   event_weather?: string;
   anomaly_flag?: string;
+  event_mode?: string;
   expected_attendance?: number;
   other_trucks?: number;
   fee_type?: string;
@@ -79,6 +81,7 @@ export async function createEvent(formData: EventFormData) {
   if (formData.event_tier) insertData.event_tier = formData.event_tier;
   if (formData.event_weather) insertData.event_weather = formData.event_weather;
   if (formData.anomaly_flag) insertData.anomaly_flag = formData.anomaly_flag;
+  if (formData.event_mode) insertData.event_mode = formData.event_mode;
   if (formData.expected_attendance)
     insertData.expected_attendance = formData.expected_attendance;
   if (formData.other_trucks !== undefined && formData.other_trucks !== null)

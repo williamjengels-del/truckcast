@@ -120,3 +120,9 @@ export const US_STATES = [
   "NM","NY","NC","ND","OH","OK","OR","PA","RI","SC",
   "SD","TN","TX","UT","VT","VA","WA","WV","WI","WY","DC",
 ];
+
+// Event mode colors (catering = violet, food truck = existing primary)
+export const EVENT_MODE_COLORS = {
+  food_truck: "bg-primary/10 text-primary border-primary/20",
+  catering: "bg-violet-100 text-violet-800 border-violet-300",
+} as const;

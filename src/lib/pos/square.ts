@@ -119,6 +119,7 @@ export interface SquareOrderSummary {
   totalTaxMoney: number;
   totalTipMoney: number;
   netSales: number; // in dollars
+  isInvoice: boolean; // true when order originated from Square Invoices
 }
 
 /**
@@ -181,6 +182,8 @@ export async function fetchSquareOrders(
       const totalMoney = order.total_money?.amount ?? 0;
       const totalTaxMoney = order.total_tax_money?.amount ?? 0;
       const totalTipMoney = order.total_tip_money?.amount ?? 0;
+      const sourceName: string = order.source?.name ?? "";
+      const isInvoice = /invoice/i.test(sourceName);
 
       orders.push({
         orderId: order.id,
@@ -190,6 +193,7 @@ export async function fetchSquareOrders(
         totalTaxMoney,
         totalTipMoney,
         netSales: (totalMoney - totalTaxMoney - totalTipMoney) / 100,
+        isInvoice,
       });
     }
 

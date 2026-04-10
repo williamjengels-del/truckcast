@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { calculateEventPerformance } from "@/lib/event-performance";
 import { calculateForecast, calibrateCoefficients } from "@/lib/forecast-engine";
+import { updatePlatformRegistry, getPlatformEvents } from "@/lib/platform-registry";
 import type { Event } from "@/lib/database.types";
 
 /**
@@ -26,7 +27,7 @@ export async function recalculateForUser(userId: string) {
     ),
   ];
 
-  // Recalculate performance
+  // Recalculate per-user event performance
   for (const eventName of eventNames) {
     const perf = calculateEventPerformance(eventName, userId, allEvents);
     await supabase.from("event_performance").upsert(
@@ -35,17 +36,25 @@ export async function recalculateForUser(userId: string) {
     );
   }
 
+  // Update platform registry with cross-user aggregates — fire and forget (non-blocking)
+  updatePlatformRegistry(eventNames).catch(() => {});
+
   // Calibrate per-user coefficients from historical data
   const calibrated = calibrateCoefficients(allEvents);
 
-  // Recalculate forecasts for upcoming events
+  // Fetch platform event data for upcoming event names (for Level 0 blending)
   const today = new Date().toISOString().split("T")[0];
-  const upcomingEvents = allEvents.filter(
-    (e) => e.event_date >= today && e.booked
-  );
+  const upcomingEvents = allEvents.filter((e) => e.event_date >= today && e.booked);
+  const upcomingNames = [...new Set(upcomingEvents.map((e) => e.event_name))];
+  const platformMap = await getPlatformEvents(upcomingNames).catch(() => new Map<string, import("@/lib/database.types").PlatformEvent>());
 
+  // Recalculate forecasts for upcoming events
   for (const event of upcomingEvents) {
-    const result = calculateForecast(event, allEvents, { calibratedCoefficients: calibrated });
+    const platformEvent = platformMap.get(event.event_name.toLowerCase().trim()) ?? null;
+    const result = calculateForecast(event, allEvents, {
+      calibratedCoefficients: calibrated,
+      platformEvent,
+    });
     if (result) {
       await supabase
         .from("events")

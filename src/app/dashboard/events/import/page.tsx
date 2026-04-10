@@ -1091,6 +1091,12 @@ export default function ImportPage() {
           <p className="text-muted-foreground">
             Upload a CSV file to import historical events
           </p>
+          <a
+            href="/dashboard/events/import/historical"
+            className="inline-flex items-center gap-1 text-sm text-primary hover:underline mt-1"
+          >
+            Already using Square or Clover? Pull sales by date range →
+          </a>
         </div>
         <Button variant="outline" size="sm" onClick={handleDownloadTemplate} className="shrink-0 gap-2">
           <Download className="h-4 w-4" />

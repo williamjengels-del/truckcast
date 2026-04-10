@@ -57,6 +57,7 @@ import {
 import { TIER_COLORS } from "@/lib/constants";
 import type { Event } from "@/lib/database.types";
 import type { EventFormData } from "@/app/dashboard/events/actions";
+import { DataImportTrigger } from "@/components/data-import-guide";
 
 type SortField =
   | "event_date"
@@ -122,6 +123,7 @@ export function EventsClient({ initialEvents, userId = "", businessName = "", us
   const [salesEvent, setSalesEvent] = useState<Event | null>(null);
   const [search, setSearch] = useState("");
   const [yearFilter, setYearFilter] = useState<string>("all");
+  const [modeFilter, setModeFilter] = useState<"all" | "food_truck" | "catering">("all");
   const [sortField, setSortField] = useState<SortField>("event_date");
   const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
   const [deleting, setDeleting] = useState(false);
@@ -183,16 +185,18 @@ export function EventsClient({ initialEvents, userId = "", businessName = "", us
       if (!cityName) continue;
 
       try {
-        // Geocode the city
+        // Geocode the city — fetch top 5 results with US filter, pick highest population
         const geoRes = await fetch(
-          `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(cityName)}&count=1`
+          `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(cityName)}&country_code=us&count=5`
         );
         if (!geoRes.ok) continue;
         const geoData = await geoRes.json();
-        const results = geoData.results as Array<{ latitude: number; longitude: number }> | undefined;
+        const results = geoData.results as Array<{ latitude: number; longitude: number; population?: number }> | undefined;
         if (!results || results.length === 0) continue;
 
-        const { latitude, longitude } = results[0];
+        // Pick the highest-population match to avoid small towns over major cities
+        const best = results.reduce((a, b) => ((b.population ?? 0) > (a.population ?? 0) ? b : a));
+        const { latitude, longitude } = best;
 
         // Fetch forecast
         const wxRes = await fetch(
@@ -265,7 +269,9 @@ export function EventsClient({ initialEvents, userId = "", businessName = "", us
     const matchesYear =
       yearFilter === "all" ||
       new Date(e.event_date + "T00:00:00").getFullYear().toString() === yearFilter;
-    return matchesSearch && matchesYear;
+    const matchesMode =
+      modeFilter === "all" || (e.event_mode ?? "food_truck") === modeFilter;
+    return matchesSearch && matchesYear && matchesMode;
   });
 
   // Sort: upcoming/unbooked = ascending (soonest first), all/past/flagged = descending (most recent first)
@@ -387,9 +393,13 @@ export function EventsClient({ initialEvents, userId = "", businessName = "", us
   async function handleSalesEntry(
     eventId: string,
     netSales: number,
+    invoiceRevenue: number,
     weather?: string
   ) {
-    const updateData: Partial<EventFormData> = { net_sales: netSales };
+    const updateData: Partial<EventFormData> = {
+      net_sales: netSales,
+      invoice_revenue: invoiceRevenue,
+    };
     if (weather) updateData.event_weather = weather;
     await updateEvent(eventId, updateData);
     router.refresh();
@@ -661,11 +671,14 @@ export function EventsClient({ initialEvents, userId = "", businessName = "", us
                       event.event_tier
                         ? TIER_CHIP_COLORS[event.event_tier] ?? "bg-primary/10 text-primary border-primary/20"
                         : "bg-primary/10 text-primary border-primary/20";
+                    const cateringBorderClass = (event.event_mode ?? "food_truck") === "catering"
+                      ? "border-l-2 border-l-violet-500"
+                      : "border-l-2 border-l-transparent";
                     return (
                       <button
                         key={event.id}
                         onClick={() => setEditingEvent(event)}
-                        className={`text-left text-[10px] font-medium px-1 py-0.5 rounded border truncate w-full leading-tight ${chipClass} hover:opacity-80 transition-opacity`}
+                        className={`text-left text-[10px] font-medium px-1 py-0.5 rounded border truncate w-full leading-tight ${chipClass} ${cateringBorderClass} hover:opacity-80 transition-opacity`}
                         title={event.event_name}
                       >
                         {event.event_name}
@@ -907,6 +920,20 @@ export function EventsClient({ initialEvents, userId = "", businessName = "", us
               </SelectContent>
             </Select>
           )}
+          <div className="flex border rounded-md overflow-hidden text-xs">
+            <button
+              className={`px-3 py-1.5 font-medium transition-colors ${modeFilter === "all" ? "bg-primary text-primary-foreground" : "bg-background text-muted-foreground hover:text-foreground"}`}
+              onClick={() => setModeFilter("all")}
+            >All</button>
+            <button
+              className={`px-3 py-1.5 font-medium transition-colors border-x ${modeFilter === "food_truck" ? "bg-primary text-primary-foreground" : "bg-background text-muted-foreground hover:text-foreground"}`}
+              onClick={() => setModeFilter("food_truck")}
+            >🚚 Truck</button>
+            <button
+              className={`px-3 py-1.5 font-medium transition-colors ${modeFilter === "catering" ? "bg-violet-600 text-white" : "bg-background text-muted-foreground hover:text-foreground"}`}
+              onClick={() => setModeFilter("catering")}
+            >🍽️ Catering</button>
+          </div>
           {initialEvents.length > 0 && (
             <Button
               variant="ghost"
@@ -1020,13 +1047,16 @@ export function EventsClient({ initialEvents, userId = "", businessName = "", us
                   {sorted.map((event) => (
                     <TableRow
                       key={event.id}
-                      className={
-                        activeTab === "all"
-                          ? event.booked
-                            ? "border-l-[3px] border-l-green-500 bg-green-50/40 dark:bg-green-950/10"
-                            : "border-l-[3px] border-l-slate-300 dark:border-l-slate-600 bg-slate-50/60 dark:bg-slate-900/20"
-                          : ""
-                      }
+                      className={`cursor-pointer hover:bg-muted/50 transition-colors ${
+                        (event.event_mode ?? "food_truck") === "catering"
+                          ? "border-l-[3px] border-l-violet-500 bg-violet-50/30 dark:bg-violet-950/10"
+                          : activeTab === "all"
+                            ? event.booked
+                              ? "border-l-[3px] border-l-green-500 bg-green-50/40 dark:bg-green-950/10"
+                              : "border-l-[3px] border-l-slate-300 dark:border-l-slate-600 bg-slate-50/60 dark:bg-slate-900/20"
+                            : ""
+                      }`}
+                      onClick={() => setEditingEvent(event)}
                     >
                       <TableCell className="whitespace-nowrap text-sm">
                         {formatDate(event.event_date)}
@@ -1073,7 +1103,7 @@ export function EventsClient({ initialEvents, userId = "", businessName = "", us
                         {formatCurrency(event.forecast_sales)}
                       </TableCell>
                       <TableCell>
-                        <div className="flex items-center gap-1 justify-end">
+                        <div className="flex items-center gap-1 justify-end" onClick={(e) => e.stopPropagation()}>
                           {event.event_date <= today && !event.net_sales && (
                             <Button
                               variant="ghost"
@@ -1192,6 +1222,8 @@ export function EventsClient({ initialEvents, userId = "", businessName = "", us
         </div>
       </div>
 
+      <DataImportTrigger hasEvents={initialEvents.length > 0} />
+
       {viewMode === "calendar" ? (
         <Card>
           <CardHeader>
@@ -1285,26 +1317,22 @@ export function EventsClient({ initialEvents, userId = "", businessName = "", us
         onSubmit={handleCreate}
       />
 
-      {/* Edit Event Dialog */}
-      {editingEvent && (
-        <EventForm
-          open={!!editingEvent}
-          onOpenChange={(open) => !open && setEditingEvent(null)}
-          onSubmit={handleUpdate}
-          initialData={editingEvent}
-          title="Edit Event"
-        />
-      )}
+      {/* Edit Event Dialog — always mounted so Base UI dialog can open/close correctly */}
+      <EventForm
+        open={!!editingEvent}
+        onOpenChange={(open) => !open && setEditingEvent(null)}
+        onSubmit={handleUpdate}
+        initialData={editingEvent}
+        title="Edit Event"
+      />
 
-      {/* Sales Entry Dialog */}
-      {salesEvent && (
-        <SalesEntryDialog
-          open={!!salesEvent}
-          onOpenChange={(open) => !open && setSalesEvent(null)}
-          event={salesEvent}
-          onSubmit={handleSalesEntry}
-        />
-      )}
+      {/* Sales Entry Dialog — always mounted for same reason */}
+      <SalesEntryDialog
+        open={!!salesEvent}
+        onOpenChange={(open) => !open && setSalesEvent(null)}
+        event={salesEvent}
+        onSubmit={handleSalesEntry}
+      />
     </div>
   );
 }

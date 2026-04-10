@@ -35,7 +35,7 @@ export async function POST(request: Request) {
       );
     }
 
-    const { eventId, netSales } = await request.json();
+    const { eventId, netSales, invoiceRevenue = 0 } = await request.json();
 
     if (!eventId || typeof netSales !== "number") {
       return NextResponse.json(
@@ -59,10 +59,20 @@ export async function POST(request: Request) {
       );
     }
 
-    // Update sales and mark source as toast
+    // Update sales and mark source as toast.
+    // net_sales stores POS-only revenue; invoice_revenue is tracked separately
+    // so it doesn't skew event-level forecasting.
+    const updatePayload: Record<string, unknown> = {
+      net_sales: netSales,
+      pos_source: "toast",
+    };
+    if (typeof invoiceRevenue === "number" && invoiceRevenue > 0) {
+      updatePayload.invoice_revenue = invoiceRevenue;
+    }
+
     const { error: updateError } = await supabase
       .from("events")
-      .update({ net_sales: netSales, pos_source: "toast" })
+      .update(updatePayload)
       .eq("id", eventId)
       .eq("user_id", user.id);
 

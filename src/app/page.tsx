@@ -15,6 +15,10 @@ import {
   LineChart,
 } from "lucide-react";
 
+// Disable Next.js fetch caching so testimonials always load fresh from the DB
+export const revalidate = 0;
+export const dynamic = "force-dynamic";
+
 export const metadata: Metadata = {
   title: "TruckCast by VendCast — The Home Base for Your Food Truck Calendar",
   description:
@@ -48,6 +52,21 @@ const FALLBACK_TESTIMONIALS = [
   },
 ];
 
+async function getEventCount(): Promise<number> {
+  try {
+    const serviceClient = createServiceClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.SUPABASE_SERVICE_ROLE_KEY!
+    );
+    const { count } = await serviceClient
+      .from("events")
+      .select("id", { count: "exact", head: true });
+    return count ?? 351;
+  } catch {
+    return 351;
+  }
+}
+
 async function getTestimonials() {
   try {
     const serviceClient = createServiceClient(
@@ -70,7 +89,10 @@ async function getTestimonials() {
 }
 
 export default async function LandingPage() {
-  const testimonials = await getTestimonials();
+  const [testimonials, eventCount] = await Promise.all([
+    getTestimonials(),
+    getEventCount(),
+  ]);
   return (
     <div className="flex flex-col min-h-screen">
       {/* Nav */}
@@ -84,6 +106,9 @@ export default async function LandingPage() {
             </div>
           </div>
           <div className="flex items-center gap-3">
+            <Link href="/roadmap" className="hidden sm:block text-sm text-muted-foreground hover:text-foreground transition-colors">
+              Roadmap
+            </Link>
             <Link href="/login">
               <Button variant="ghost">Sign in</Button>
             </Link>
@@ -173,7 +198,7 @@ export default async function LandingPage() {
         <div className="container mx-auto px-4 py-16">
           <div className="grid gap-6 md:grid-cols-3 max-w-3xl mx-auto text-center">
             {[
-              { stat: "351+", label: "Real events used to build and validate the model" },
+              { stat: `${eventCount.toLocaleString()}+`, label: "Events analyzed — and more added every day as operators log their results" },
               { stat: "Within 16%", label: "Aggregate forecast accuracy on real event data" },
               { stat: "Zero", label: "Spreadsheets required — it's all built in" },
             ].map((s) => (
@@ -364,6 +389,7 @@ export default async function LandingPage() {
       <footer className="border-t py-8">
         <div className="container mx-auto px-4 text-center text-sm text-muted-foreground space-y-2">
           <div className="flex items-center justify-center gap-6">
+            <Link href="/roadmap" className="hover:text-foreground transition-colors">Roadmap</Link>
             <Link href="/help" className="hover:text-foreground transition-colors">Help Center</Link>
             <Link href="/signup" className="hover:text-foreground transition-colors">Get Started</Link>
             <a href="mailto:support@truckcast.app" className="hover:text-foreground transition-colors">Contact</a>

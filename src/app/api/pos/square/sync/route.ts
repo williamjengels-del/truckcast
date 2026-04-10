@@ -133,8 +133,15 @@ export async function POST(request: Request) {
       endDate
     );
 
-    // Aggregate by date and match to events
-    const dailySales = aggregateByDate(orders);
+    // Separate invoice-sourced orders so they don't skew event sales data.
+    // Invoice payments arrive on the payment date, not the event date, so
+    // matching them by date would contaminate the wrong event's net_sales.
+    const posOrders = orders.filter((o) => !o.isInvoice);
+    const invoiceOrders = orders.filter((o) => o.isInvoice);
+    const invoiceRevenueTotal = invoiceOrders.reduce((sum, o) => sum + o.netSales, 0);
+
+    // Aggregate by date and match to events (POS sales only)
+    const dailySales = aggregateByDate(posOrders);
     const updatedCount = await matchAndUpdateSales(
       user.id,
       dailySales,
@@ -146,6 +153,9 @@ export async function POST(request: Request) {
     return NextResponse.json({
       success: true,
       ordersFound: orders.length,
+      posOrdersMatched: posOrders.length,
+      invoiceOrdersExcluded: invoiceOrders.length,
+      invoiceRevenueExcluded: Math.round(invoiceRevenueTotal * 100) / 100,
       daysWithSales: dailySales.length,
       eventsUpdated: updatedCount,
       dateRange: { startDate, endDate },

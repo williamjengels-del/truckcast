@@ -398,13 +398,19 @@ function PosProviderCard({
             )}
 
             {/* Sync button */}
-            <div className="flex gap-2">
+            <div className="flex flex-wrap items-center gap-3">
               <Button onClick={onSync} disabled={syncing}>
                 {syncing ? "Syncing..." : "Sync Now"}
               </Button>
-              <p className="text-xs text-muted-foreground self-center">
+              <p className="text-xs text-muted-foreground">
                 Pulls yesterday&apos;s orders and matches to your booked events
               </p>
+              <a
+                href="/dashboard/events/import/historical"
+                className="text-xs text-primary hover:underline"
+              >
+                Import a custom date range →
+              </a>
             </div>
           </>
         )}

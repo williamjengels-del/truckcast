@@ -19,6 +19,7 @@ export type WeatherType =
   | "Storms"
   | "Snow";
 export type AnomalyFlag = "normal" | "disrupted" | "boosted";
+export type EventMode = "food_truck" | "catering";
 export type FeeType =
   | "none"
   | "flat_fee"
@@ -65,10 +66,12 @@ export interface Event {
   booked: boolean;
   is_private?: boolean;
   net_sales: number | null;
+  invoice_revenue: number;
   event_type: EventType | null;
   event_tier: EventTier | null;
   event_weather: WeatherType | null;
   anomaly_flag: AnomalyFlag;
+  event_mode: EventMode;
   expected_attendance: number | null;
   other_trucks: number | null;
   fee_type: FeeType;
@@ -194,4 +197,21 @@ export interface Feedback {
   page: string | null;
   message: string;
   created_at: string;
+}
+
+export interface PlatformEvent {
+  id: string;
+  event_name_normalized: string;
+  event_name_display: string;
+  operator_count: number;
+  total_instances: number;
+  median_sales: number | null;
+  avg_sales: number | null;
+  min_sales: number | null;
+  max_sales: number | null;
+  sales_p25: number | null;
+  sales_p75: number | null;
+  most_common_event_type: string | null;
+  most_common_city: string | null;
+  updated_at: string;
 }
