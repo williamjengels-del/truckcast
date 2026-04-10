@@ -13,6 +13,7 @@ import {
   ChevronUp,
   ChevronDown,
   Minus,
+  MapPin,
 } from "lucide-react";
 // TrendingUp used in KPI card
 import { AnalyticsControls } from "./analytics-controls";
@@ -426,6 +427,31 @@ export default async function AnalyticsPage({ searchParams }: PageProps) {
     profitByDow.sort((a, b) => dowOrder.indexOf(a.day) - dowOrder.indexOf(b.day));
   }
 
+  // Location / city breakdown — top cities by avg revenue
+  interface LocationRow {
+    location: string;
+    count: number;
+    totalRevenue: number;
+    avgRevenue: number;
+  }
+  const locationMap = new Map<string, { revenues: number[] }>();
+  for (const e of completedPeriod) {
+    const loc = e.location ?? e.city ?? null;
+    if (!loc) continue;
+    if (!locationMap.has(loc)) locationMap.set(loc, { revenues: [] });
+    locationMap.get(loc)!.revenues.push(eventRevenue(e));
+  }
+  const locationRows: LocationRow[] = Array.from(locationMap.entries())
+    .map(([location, { revenues }]) => ({
+      location,
+      count: revenues.length,
+      totalRevenue: revenues.reduce((a, b) => a + b, 0),
+      avgRevenue: revenues.reduce((a, b) => a + b, 0) / revenues.length,
+    }))
+    .filter((r) => r.count >= 1)
+    .sort((a, b) => b.totalRevenue - a.totalRevenue)
+    .slice(0, 15);
+
   // Build chart data
   const trendData = buildTrendData(
     periodEvents,
@@ -715,6 +741,45 @@ export default async function AnalyticsPage({ searchParams }: PageProps) {
                     Overall average margin: <span className="font-medium">{profitMargin.toFixed(1)}%</span> across all event types
                   </p>
                 )}
+              </CardContent>
+            </Card>
+          )}
+
+          {locationRows.length >= 3 && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2 text-base">
+                  <MapPin className="h-4 w-4" />
+                  Revenue by Location · {periodLabel}
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                {(() => {
+                  const maxRev = locationRows[0]?.totalRevenue ?? 1;
+                  return (
+                    <div className="space-y-2.5">
+                      {locationRows.map((row) => (
+                        <div key={row.location} className="flex items-center gap-3">
+                          <span className="text-sm font-medium w-48 shrink-0 truncate" title={row.location}>
+                            {row.location}
+                          </span>
+                          <div className="flex-1 bg-muted rounded-full h-4 overflow-hidden">
+                            <div
+                              className="h-full bg-primary/60 rounded-full"
+                              style={{ width: `${Math.max((row.totalRevenue / maxRev) * 100, 3)}%` }}
+                            />
+                          </div>
+                          <span className="text-sm font-semibold w-24 text-right shrink-0">
+                            {formatCurrency(row.totalRevenue)}
+                          </span>
+                          <span className="text-xs text-muted-foreground w-20 text-right shrink-0 hidden sm:block">
+                            {formatCurrency(row.avgRevenue)} avg · {row.count}×
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  );
+                })()}
               </CardContent>
             </Card>
           )}

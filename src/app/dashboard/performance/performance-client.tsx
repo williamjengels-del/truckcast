@@ -17,8 +17,9 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { BarChart3, ChevronUp, ChevronDown, ChevronsUpDown, Info, RefreshCw, ExternalLink } from "lucide-react";
+import { BarChart3, ChevronUp, ChevronDown, ChevronsUpDown, Info, RefreshCw, ExternalLink, Search, X } from "lucide-react";
 import Link from "next/link";
+import { Input } from "@/components/ui/input";
 import { CONFIDENCE_COLORS, TREND_COLORS } from "@/lib/constants";
 import type { EventPerformance } from "@/lib/database.types";
 
@@ -70,6 +71,7 @@ export function PerformanceClient({ performances }: PerformanceClientProps) {
   const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
   const [recalculating, setRecalculating] = useState(false);
   const [recalcMessage, setRecalcMessage] = useState<string | null>(null);
+  const [search, setSearch] = useState("");
 
   async function handleRecalculate() {
     setRecalculating(true);
@@ -111,7 +113,13 @@ export function PerformanceClient({ performances }: PerformanceClientProps) {
     );
   }
 
-  const sorted = [...performances].sort((a, b) => {
+  const filtered = search.trim()
+    ? performances.filter((p) =>
+        p.event_name.toLowerCase().includes(search.trim().toLowerCase())
+      )
+    : performances;
+
+  const sorted = [...filtered].sort((a, b) => {
     const dir = sortDirection === "asc" ? 1 : -1;
     switch (sortField) {
       case "event_name":
@@ -190,11 +198,36 @@ export function PerformanceClient({ performances }: PerformanceClientProps) {
         </div>
       </div>
 
+      {performances.length > 10 && (
+        <div className="relative">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
+          <Input
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder={`Search ${performances.length} events…`}
+            className="pl-9 pr-9"
+          />
+          {search && (
+            <button
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+              onClick={() => setSearch("")}
+            >
+              <X className="h-4 w-4" />
+            </button>
+          )}
+        </div>
+      )}
+
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <BarChart3 className="h-5 w-5" />
             Performance Table
+            {search && (
+              <span className="text-sm font-normal text-muted-foreground">
+                — {sorted.length} result{sorted.length !== 1 ? "s" : ""} for &ldquo;{search}&rdquo;
+              </span>
+            )}
           </CardTitle>
         </CardHeader>
         <CardContent>
@@ -215,6 +248,11 @@ export function PerformanceClient({ performances }: PerformanceClientProps) {
                   Log sales
                 </a>
               </div>
+            </div>
+          ) : sorted.length === 0 ? (
+            <div className="py-10 text-center">
+              <p className="text-sm text-muted-foreground">No events match &ldquo;{search}&rdquo;</p>
+              <button className="text-sm text-primary hover:underline mt-2" onClick={() => setSearch("")}>Clear search</button>
             </div>
           ) : (
             <div className="overflow-x-auto">
