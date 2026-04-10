@@ -41,6 +41,7 @@ import {
   CloudLightning,
   Heart,
   CopyPlus,
+  BookCheck,
 } from "lucide-react";
 import { EventForm } from "@/components/event-form";
 import { SalesEntryDialog } from "@/components/sales-entry-dialog";
@@ -133,6 +134,7 @@ export function EventsClient({ initialEvents, userId = "", businessName = "", us
   const [sortField, setSortField] = useState<SortField>("event_date");
   const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
   const [deleting, setDeleting] = useState(false);
+  const [bookingId, setBookingId] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<ViewMode>("split");
   const [activeTab, setActiveTab] = useState<TabMode>("upcoming");
   const [calendarMonth, setCalendarMonth] = useState<Date>(() => {
@@ -411,6 +413,18 @@ export function EventsClient({ initialEvents, userId = "", businessName = "", us
     if (weather) updateData.event_weather = weather;
     await updateEvent(eventId, updateData);
     router.refresh();
+  }
+
+  async function handleQuickBook(event: Event) {
+    setBookingId(event.id);
+    try {
+      await updateEvent(event.id, { booked: true });
+      router.refresh();
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "Failed to book event");
+    } finally {
+      setBookingId(null);
+    }
   }
 
   async function handleDismiss(eventId: string, reason: "disrupted" | "charity") {
@@ -1200,6 +1214,20 @@ export function EventsClient({ initialEvents, userId = "", businessName = "", us
                             </>
                           ) : (
                             <>
+                              {/* Unbooked events: show "Book It" button */}
+                              {!event.booked && event.event_date >= today && (
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  className="h-8 px-2 text-xs text-emerald-700 hover:text-emerald-900 hover:bg-emerald-50 dark:text-emerald-400 dark:hover:bg-emerald-950/30"
+                                  title="Mark as booked — moves to Upcoming"
+                                  disabled={bookingId === event.id}
+                                  onClick={() => handleQuickBook(event)}
+                                >
+                                  <BookCheck className="h-3.5 w-3.5 mr-1" />
+                                  {bookingId === event.id ? "Booking..." : "Book It"}
+                                </Button>
+                              )}
                               {event.event_date <= today && !event.net_sales && (
                                 <Button
                                   variant="ghost"
