@@ -2,7 +2,8 @@ import { createClient } from "@/lib/supabase/server";
 import { calculateEventPerformance } from "@/lib/event-performance";
 import { calculateForecast, calibrateCoefficients } from "@/lib/forecast-engine";
 import { updatePlatformRegistry, getPlatformEvents } from "@/lib/platform-registry";
-import type { Event } from "@/lib/database.types";
+import { autoClassifyWeather } from "@/lib/weather";
+import type { Event, WeatherType } from "@/lib/database.types";
 
 /**
  * Server-side recalculation of event performance and forecasts.
@@ -47,15 +48,44 @@ export async function recalculateForUser(userId: string) {
   // Calibrate per-user coefficients from historical data
   const calibrated = calibrateCoefficients(allEvents);
 
-  // Fetch platform event data for upcoming event names (for Level 0 blending)
+  // Auto-classify weather for near-term events (within 16 days) that don't have it set
   const today = new Date().toISOString().split("T")[0];
-  const upcomingEvents = allEvents.filter((e) => e.event_date >= today && e.booked);
-  const upcomingNames = [...new Set(upcomingEvents.map((e) => e.event_name))];
+  const in16Days = new Date();
+  in16Days.setDate(in16Days.getDate() + 16);
+  const in16DaysStr = in16Days.toISOString().split("T")[0];
+
+  const nearTermEvents = allEvents.filter(
+    (e) => e.event_date >= today && e.event_date <= in16DaysStr && !e.event_weather && (e.city || e.location)
+  );
+  const weatherUpdates = new Map<string, WeatherType>();
+  for (const event of nearTermEvents) {
+    const cityStr = (event.city || event.location || "").trim();
+    if (!cityStr) continue;
+    try {
+      const result = await autoClassifyWeather(cityStr, event.event_date, supabase);
+      if (result) {
+        await supabase.from("events").update({ event_weather: result.classification }).eq("id", event.id);
+        weatherUpdates.set(event.id, result.classification);
+      }
+    } catch { /* non-critical */ }
+  }
+  for (const event of allEvents) {
+    if (weatherUpdates.has(event.id)) {
+      event.event_weather = weatherUpdates.get(event.id)!;
+    }
+  }
+
+  // Fetch platform event data for booked upcoming event names (for Level 0 blending)
+  const bookedUpcoming = allEvents.filter((e) => e.event_date >= today && e.booked);
+  const upcomingNames = [...new Set(bookedUpcoming.map((e) => e.event_name))];
   const platformMap = await getPlatformEvents(upcomingNames).catch(() => new Map<string, import("@/lib/database.types").PlatformEvent>());
 
-  // Recalculate forecasts for upcoming events
-  for (const event of upcomingEvents) {
-    const platformEvent = platformMap.get(event.event_name.toLowerCase().trim()) ?? null;
+  // Recalculate forecasts for ALL future events — booked AND unbooked
+  const futureEvents = allEvents.filter((e) => e.event_date >= today);
+  for (const event of futureEvents) {
+    const platformEvent = event.booked
+      ? (platformMap.get(event.event_name.toLowerCase().trim()) ?? null)
+      : null;
     const result = calculateForecast(event, allEvents, {
       calibratedCoefficients: calibrated,
       platformEvent,
