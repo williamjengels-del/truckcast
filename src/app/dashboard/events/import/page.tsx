@@ -60,7 +60,10 @@ type FieldKey =
   | "weather_type"
   | "expected_attendance"
   | "sales_minimum"
-  | "event_mode";
+  | "event_mode"
+  | "food_cost"
+  | "labor_cost"
+  | "other_costs";
 
 interface ParsedRow {
   event_name: string;
@@ -83,6 +86,9 @@ interface ParsedRow {
   expected_attendance?: number;
   sales_minimum?: number;
   event_mode?: string;
+  food_cost?: number;
+  labor_cost?: number;
+  other_costs?: number;
   valid: boolean;
   error?: string;
   multi_day_label?: string;
@@ -135,6 +141,9 @@ const FIELD_OPTIONS: { value: FieldKey | "skip"; label: string; description: str
   { value: "expected_attendance", label: "Expected Attendance", description: "Estimated crowd size" },
   { value: "notes", label: "Notes", description: "Additional notes or comments" },
   { value: "event_mode", label: "Event Mode", description: "food_truck or catering" },
+  { value: "food_cost", label: "Food Cost", description: "Cost of food/ingredients" },
+  { value: "labor_cost", label: "Labor Cost", description: "Labor / staffing cost" },
+  { value: "other_costs", label: "Other Costs", description: "Supplies, fuel, misc costs" },
 ];
 
 // ═══════════════════════════════════════════════════════════════════════
@@ -201,6 +210,9 @@ const COLUMN_ALIASES: Record<FieldKey, string[]> = {
   expected_attendance: ["attendance", "expected attendance", "expected_attendance", "crowd size", "expected crowd"],
   sales_minimum: ["sales minimum", "sales_minimum", "minimum", "min guarantee", "guarantee"],
   event_mode: ["event_mode", "eventmode", "mode", "event mode", "truck mode", "service mode"],
+  food_cost: ["food_cost", "food cost", "food", "ingredient cost", "cogs", "cost of goods", "food expense"],
+  labor_cost: ["labor_cost", "labor cost", "labor", "labour", "staffing", "staff cost", "labor expense"],
+  other_costs: ["other_costs", "other costs", "other", "misc", "miscellaneous", "supplies", "overhead", "fuel", "other expenses"],
 };
 
 function normalizeHeader(h: string): string {
@@ -572,6 +584,19 @@ function parseWithMapping(
     const salesMinimum = rawSalesMin ? parseFloat(rawSalesMin.replace(/[$,]/g, "")) : undefined;
     const validSalesMinimum = salesMinimum !== undefined && !isNaN(salesMinimum) ? salesMinimum : undefined;
 
+    // ── Cost fields ──
+    const rawFoodCost = getValue("food_cost", values).trim();
+    const foodCost = rawFoodCost ? parseFloat(rawFoodCost.replace(/[$,]/g, "")) : undefined;
+    const validFoodCost = foodCost !== undefined && !isNaN(foodCost) && foodCost >= 0 ? foodCost : undefined;
+
+    const rawLaborCost = getValue("labor_cost", values).trim();
+    const laborCost = rawLaborCost ? parseFloat(rawLaborCost.replace(/[$,]/g, "")) : undefined;
+    const validLaborCost = laborCost !== undefined && !isNaN(laborCost) && laborCost >= 0 ? laborCost : undefined;
+
+    const rawOtherCosts = getValue("other_costs", values).trim();
+    const otherCosts = rawOtherCosts ? parseFloat(rawOtherCosts.replace(/[$,]/g, "")) : undefined;
+    const validOtherCosts = otherCosts !== undefined && !isNaN(otherCosts) && otherCosts >= 0 ? otherCosts : undefined;
+
     // ── Multi-day handling ──
     // If the event spans exactly 1 day and the end time is before 6 AM, it just ran
     // past midnight (e.g. concert ending at 1 AM) — treat as same-day, not multi-day.
@@ -607,6 +632,9 @@ function parseWithMapping(
           expected_attendance: validAttendance,
           sales_minimum: validSalesMinimum,
           event_mode: eventMode,
+          food_cost: isLast ? validFoodCost : undefined,
+          labor_cost: isLast ? validLaborCost : undefined,
+          other_costs: isLast ? validOtherCosts : undefined,
           valid: true,
           multi_day_label: `Day ${d + 1} of ${numDays + 1}`,
         });
@@ -632,6 +660,9 @@ function parseWithMapping(
         expected_attendance: validAttendance,
         sales_minimum: validSalesMinimum,
         event_mode: eventMode,
+        food_cost: validFoodCost,
+        labor_cost: validLaborCost,
+        other_costs: validOtherCosts,
         valid: true,
       });
     }
@@ -962,6 +993,9 @@ export default function ImportPage() {
       expected_attendance: r.expected_attendance ?? null,
       event_mode: (r.event_mode === "catering" ? "catering" : "food_truck") as "food_truck" | "catering",
       pos_source: "manual" as const,
+      food_cost: r.food_cost ?? null,
+      labor_cost: r.labor_cost ?? null,
+      other_costs: r.other_costs ?? null,
     }));
 
     if (insertData.length === 0) {
@@ -984,7 +1018,19 @@ export default function ImportPage() {
 
       const { error } = await supabase.from("events").insert(batch);
       if (error) {
-        errors.push(`Batch ${batchNum} (rows ${i + 1}-${i + batch.length}): ${error.message}`);
+        // Batch failed — fall back to row-by-row so one bad row doesn't kill the whole batch
+        let rowsInsertedInBatch = 0;
+        for (let j = 0; j < batch.length; j++) {
+          const { error: rowError } = await supabase.from("events").insert(batch[j]);
+          if (rowError) {
+            const rowNum = i + j + 1;
+            const eventName = (batch[j] as { event_name: string }).event_name ?? `row ${rowNum}`;
+            errors.push(`Row ${rowNum} "${eventName}": ${rowError.message}`);
+          } else {
+            rowsInsertedInBatch++;
+          }
+        }
+        totalInserted += rowsInsertedInBatch;
       } else {
         totalInserted += batch.length;
       }
@@ -1030,6 +1076,9 @@ export default function ImportPage() {
       "weather",
       "expected_attendance",
       "notes",
+      "food_cost",
+      "labor_cost",
+      "other_costs",
     ];
     const examples = [
       [
@@ -1050,6 +1099,9 @@ export default function ImportPage() {
         "Clear",
         "5000",
         "Great crowd this year",
+        "800",
+        "350",
+        "120",
       ],
       [
         "Downtown Farmers Market",
