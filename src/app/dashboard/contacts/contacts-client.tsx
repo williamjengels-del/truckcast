@@ -39,6 +39,7 @@ import {
   createContact,
   updateContact,
   deleteContact,
+  deduplicateContacts,
 } from "./actions";
 import { createClient } from "@/lib/supabase/client";
 import type { Contact } from "@/lib/database.types";
@@ -185,6 +186,7 @@ export function ContactsClient({
   const [search, setSearch] = useState("");
   const [showImport, setShowImport] = useState(false);
   const [recalculating, setRecalculating] = useState(false);
+  const [deduplicating, setDeduplicating] = useState(false);
   const router = useRouter();
 
   const filtered = initialContacts.filter(
@@ -219,6 +221,23 @@ export function ContactsClient({
     router.refresh();
   }
 
+  async function handleDeduplicate() {
+    if (!confirm("This will automatically merge duplicate contacts (same email or same name). Linked events and notes will be combined. Continue?")) return;
+    setDeduplicating(true);
+    try {
+      const { merged } = await deduplicateContacts();
+      if (merged === 0) {
+        alert("No duplicates found — your contacts are already clean.");
+      } else {
+        alert(`Merged ${merged} duplicate contact${merged !== 1 ? "s" : ""}.`);
+      }
+      router.refresh();
+    } catch {
+      alert("Failed to deduplicate. Please try again.");
+    }
+    setDeduplicating(false);
+  }
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -228,7 +247,7 @@ export function ContactsClient({
             {initialContacts.length} event organizers
           </p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex gap-2 flex-wrap justify-end">
           {isPremium && (
             <Button
               variant="outline"
@@ -238,6 +257,18 @@ export function ContactsClient({
             >
               <RefreshCw className={`h-4 w-4 ${recalculating ? "animate-spin" : ""}`} />
               {recalculating ? "Calculating..." : "Recalculate Scores"}
+            </Button>
+          )}
+          {initialContacts.length > 1 && (
+            <Button
+              variant="outline"
+              className="gap-2"
+              onClick={handleDeduplicate}
+              disabled={deduplicating}
+              title="Auto-merge contacts with the same email or name"
+            >
+              <RefreshCw className={`h-4 w-4 ${deduplicating ? "animate-spin" : ""}`} />
+              {deduplicating ? "Merging..." : "Deduplicate"}
             </Button>
           )}
           <Button
@@ -456,12 +487,42 @@ function CsvImportDialog({
       return;
     }
 
+    // Fetch existing contacts for deduplication check
+    const { data: existing } = await supabase
+      .from("contacts")
+      .select("email, name")
+      .eq("user_id", user.id);
+    const existingEmails = new Set(
+      (existing ?? [])
+        .filter((c) => c.email)
+        .map((c) => (c.email as string).toLowerCase().trim())
+    );
+    const existingNames = new Set(
+      (existing ?? []).map((c) => (c.name ?? "").toLowerCase().trim())
+    );
+
+    // Filter out rows that already exist
+    const deduped = toImport.filter((row) => {
+      if (row.email && existingEmails.has(row.email.toLowerCase().trim())) return false;
+      if (existingNames.has(row.name.toLowerCase().trim())) return false;
+      return true;
+    });
+
+    const skipped = toImport.length - deduped.length;
+
     const BATCH_SIZE = 50;
     const errors: string[] = [];
     let inserted = 0;
 
-    for (let i = 0; i < toImport.length; i += BATCH_SIZE) {
-      const batch = toImport.slice(i, i + BATCH_SIZE).map((row) => ({
+    if (deduped.length === 0) {
+      setProgress(100);
+      setStatus("done");
+      if (skipped > 0) setErrorMessages([`All ${skipped} contacts already exist — nothing was imported.`]);
+      return;
+    }
+
+    for (let i = 0; i < deduped.length; i += BATCH_SIZE) {
+      const batch = deduped.slice(i, i + BATCH_SIZE).map((row) => ({
         user_id: user.id,
         name: row.name,
         email: row.email || null,
@@ -479,7 +540,11 @@ function CsvImportDialog({
       }
 
       setImportedCount(inserted);
-      setProgress(Math.min(100, Math.round(((i + batch.length) / toImport.length) * 100)));
+      setProgress(Math.min(100, Math.round(((i + batch.length) / deduped.length) * 100)));
+    }
+
+    if (skipped > 0) {
+      errors.unshift(`Skipped ${skipped} duplicate${skipped !== 1 ? "s" : ""} (already in contacts).`);
     }
 
     if (errors.length > 0) {

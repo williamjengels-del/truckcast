@@ -90,6 +90,29 @@ export default async function DashboardPage() {
   const ytdRevenue = ytdEvents.reduce((sum, e) => sum + (e.net_sales ?? 0), 0);
   const eventsCompleted = ytdEvents.length;
   const avgTicket = eventsCompleted > 0 ? ytdRevenue / eventsCompleted : 0;
+
+  // Mode breakdown — only shown when user has both food truck and catering events
+  const ytdTruck = ytdEvents.filter((e) => e.event_mode !== "catering");
+  const ytdCatering = ytdEvents.filter((e) => e.event_mode === "catering");
+  const showModeBreakdown = ytdTruck.length > 0 && ytdCatering.length > 0;
+  const modeBreakdown = showModeBreakdown
+    ? {
+        truck: {
+          revenue: ytdTruck.reduce((s, e) => s + (e.net_sales ?? 0), 0),
+          count: ytdTruck.length,
+          avg:
+            ytdTruck.reduce((s, e) => s + (e.net_sales ?? 0), 0) /
+            ytdTruck.length,
+        },
+        catering: {
+          revenue: ytdCatering.reduce((s, e) => s + (e.net_sales ?? 0), 0),
+          count: ytdCatering.length,
+          avg:
+            ytdCatering.reduce((s, e) => s + (e.net_sales ?? 0), 0) /
+            ytdCatering.length,
+        },
+      }
+    : null;
   // Unlogged past events — booked events in the past with no sales recorded
   const unloggedEvents = bookedEvents
     .filter((e) =>
@@ -365,6 +388,73 @@ export default async function DashboardPage() {
               </Card>
             ))}
           </div>
+
+          {modeBreakdown && (
+            <div className="rounded-xl border bg-card p-4">
+              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-3">
+                Revenue by Mode — {currentYear}
+              </p>
+              <div className="grid grid-cols-2 gap-4">
+                {/* Food Truck */}
+                <div className="rounded-lg border border-border bg-muted/30 p-4 space-y-2">
+                  <div className="flex items-center gap-2">
+                    <span className="text-lg">🚚</span>
+                    <span className="text-sm font-semibold">Food Truck</span>
+                  </div>
+                  <div className="text-2xl font-bold">
+                    {formatCurrency(modeBreakdown.truck.revenue)}
+                  </div>
+                  <div className="flex gap-4 text-xs text-muted-foreground">
+                    <span>{modeBreakdown.truck.count} events</span>
+                    <span>{formatCurrency(modeBreakdown.truck.avg)} avg</span>
+                  </div>
+                  <div className="w-full bg-muted rounded-full h-1.5 mt-1">
+                    <div
+                      className="bg-orange-500 h-1.5 rounded-full"
+                      style={{
+                        width: `${Math.round(
+                          (modeBreakdown.truck.revenue /
+                            (modeBreakdown.truck.revenue +
+                              modeBreakdown.catering.revenue)) *
+                            100
+                        )}%`,
+                      }}
+                    />
+                  </div>
+                </div>
+
+                {/* Catering */}
+                <div className="rounded-lg border border-violet-200 bg-violet-50/40 dark:border-violet-800/30 dark:bg-violet-950/10 p-4 space-y-2">
+                  <div className="flex items-center gap-2">
+                    <span className="text-lg">🍽️</span>
+                    <span className="text-sm font-semibold">Catering</span>
+                  </div>
+                  <div className="text-2xl font-bold">
+                    {formatCurrency(modeBreakdown.catering.revenue)}
+                  </div>
+                  <div className="flex gap-4 text-xs text-muted-foreground">
+                    <span>{modeBreakdown.catering.count} events</span>
+                    <span>
+                      {formatCurrency(modeBreakdown.catering.avg)} avg
+                    </span>
+                  </div>
+                  <div className="w-full bg-muted rounded-full h-1.5 mt-1">
+                    <div
+                      className="bg-violet-500 h-1.5 rounded-full"
+                      style={{
+                        width: `${Math.round(
+                          (modeBreakdown.catering.revenue /
+                            (modeBreakdown.truck.revenue +
+                              modeBreakdown.catering.revenue)) *
+                            100
+                        )}%`,
+                      }}
+                    />
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
 
           <DashboardCharts monthlyData={monthlyData} typeData={typeData} />
         </>
