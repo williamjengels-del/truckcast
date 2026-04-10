@@ -414,13 +414,19 @@ export function EventsClient({ initialEvents, userId = "", businessName = "", us
     eventId: string,
     netSales: number,
     invoiceRevenue: number,
-    weather?: string
+    weather?: string,
+    costs?: { food_cost?: number; labor_cost?: number; other_costs?: number }
   ) {
     const updateData: Partial<EventFormData> = {
       net_sales: netSales,
       invoice_revenue: invoiceRevenue,
     };
     if (weather) updateData.event_weather = weather;
+    if (costs) {
+      if (costs.food_cost !== undefined) updateData.food_cost = costs.food_cost;
+      if (costs.labor_cost !== undefined) updateData.labor_cost = costs.labor_cost;
+      if (costs.other_costs !== undefined) updateData.other_costs = costs.other_costs;
+    }
     await updateEvent(eventId, updateData);
     router.refresh();
   }
