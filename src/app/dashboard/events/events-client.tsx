@@ -38,6 +38,8 @@ import {
   Copy,
   Check,
   Download,
+  CloudLightning,
+  Heart,
 } from "lucide-react";
 import { EventForm } from "@/components/event-form";
 import { SalesEntryDialog } from "@/components/sales-entry-dialog";
@@ -53,6 +55,7 @@ import {
   updateEvent,
   deleteEvent,
   deleteAllEvents,
+  dismissFlaggedEvent,
 } from "@/app/dashboard/events/actions";
 import { TIER_COLORS } from "@/lib/constants";
 import type { Event } from "@/lib/database.types";
@@ -251,8 +254,9 @@ export function EventsClient({ initialEvents, userId = "", businessName = "", us
     (e) =>
       e.event_date < today &&
       e.booked &&
-      (e.net_sales === null || e.net_sales === 0) &&
-      e.fee_type !== "pre_settled" // pre-settled events already have guaranteed payment captured in fee_rate
+      e.net_sales === null &&           // null only — $0 intentional (charity) is cleared by dismiss
+      e.anomaly_flag !== "disrupted" && // disrupted = already dismissed
+      e.fee_type !== "pre_settled"      // pre-settled = guaranteed payment, no sales entry needed
   );
 
   const activeEvents =
@@ -403,6 +407,15 @@ export function EventsClient({ initialEvents, userId = "", businessName = "", us
     if (weather) updateData.event_weather = weather;
     await updateEvent(eventId, updateData);
     router.refresh();
+  }
+
+  async function handleDismiss(eventId: string, reason: "disrupted" | "charity") {
+    try {
+      await dismissFlaggedEvent(eventId, reason);
+      router.refresh();
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "Failed to dismiss event");
+    }
   }
 
   function exportCSV() {
@@ -1104,35 +1117,81 @@ export function EventsClient({ initialEvents, userId = "", businessName = "", us
                       </TableCell>
                       <TableCell>
                         <div className="flex items-center gap-1 justify-end" onClick={(e) => e.stopPropagation()}>
-                          {event.event_date <= today && !event.net_sales && (
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="h-8 w-8 text-green-600"
-                              title="Enter sales"
-                              onClick={() => setSalesEvent(event)}
-                            >
-                              <DollarSign className="h-4 w-4" />
-                            </Button>
+                          {/* Flagged tab: show dismiss options instead of standard actions */}
+                          {activeTab === "flagged" ? (
+                            <>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-8 w-8 text-green-600"
+                                title="Enter sales"
+                                onClick={() => setSalesEvent(event)}
+                              >
+                                <DollarSign className="h-4 w-4" />
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="h-8 px-2 text-xs text-amber-700 hover:text-amber-900 hover:bg-amber-50"
+                                title="Dismiss: storm, cancellation, or no-show (excluded from forecasts)"
+                                onClick={() => handleDismiss(event.id, "disrupted")}
+                              >
+                                <CloudLightning className="h-3.5 w-3.5 mr-1" />
+                                Disrupted
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="h-8 px-2 text-xs text-pink-700 hover:text-pink-900 hover:bg-pink-50"
+                                title="Dismiss: charity or donated event (logs $0 intentionally)"
+                                onClick={() => handleDismiss(event.id, "charity")}
+                              >
+                                <Heart className="h-3.5 w-3.5 mr-1" />
+                                Charity
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-8 w-8"
+                                title="Edit event"
+                                onClick={() => setEditingEvent(event)}
+                              >
+                                <Pencil className="h-4 w-4" />
+                              </Button>
+                            </>
+                          ) : (
+                            <>
+                              {event.event_date <= today && !event.net_sales && (
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-8 w-8 text-green-600"
+                                  title="Enter sales"
+                                  onClick={() => setSalesEvent(event)}
+                                >
+                                  <DollarSign className="h-4 w-4" />
+                                </Button>
+                              )}
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-8 w-8"
+                                title="Edit event"
+                                onClick={() => setEditingEvent(event)}
+                              >
+                                <Pencil className="h-4 w-4" />
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-8 w-8 text-destructive"
+                                title="Delete event"
+                                onClick={() => handleDelete(event.id)}
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            </>
                           )}
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-8 w-8"
-                            title="Edit event"
-                            onClick={() => setEditingEvent(event)}
-                          >
-                            <Pencil className="h-4 w-4" />
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-8 w-8 text-destructive"
-                            title="Delete event"
-                            onClick={() => handleDelete(event.id)}
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
                         </div>
                       </TableCell>
                     </TableRow>

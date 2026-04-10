@@ -62,4 +62,31 @@ export async function recalculateForUser(userId: string) {
         .eq("id", event.id);
     }
   }
+
+  // Backfill forecast_sales for past events that have sales but no forecast.
+  // This covers events that were added/booked after their date passed, or events
+  // where the forecast engine ran before enough historical data existed.
+  const pastEventsNeedingForecast = allEvents.filter(
+    (e) =>
+      e.event_date < today &&
+      e.booked &&
+      e.net_sales !== null &&
+      e.net_sales > 0 &&
+      e.forecast_sales === null &&
+      e.anomaly_flag !== "disrupted"
+  );
+
+  for (const event of pastEventsNeedingForecast) {
+    // Use all events EXCEPT this one as historical context (simulate pre-event state)
+    const historicalWithout = allEvents.filter((e) => e.id !== event.id);
+    const result = calculateForecast(event, historicalWithout, {
+      calibratedCoefficients: calibrated,
+    });
+    if (result) {
+      await supabase
+        .from("events")
+        .update({ forecast_sales: result.forecast })
+        .eq("id", event.id);
+    }
+  }
 }

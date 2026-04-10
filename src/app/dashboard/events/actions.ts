@@ -219,6 +219,40 @@ export async function updateEventSales(id: string, netSales: number) {
   return data as Event;
 }
 
+/**
+ * Dismiss a "Needs Attention" event by setting its anomaly_flag and optionally net_sales.
+ * - "disrupted": storm, cancellation, no-show — excluded from forecasting
+ * - "normal" with net_sales=0: intentional zero (charity, donated)
+ */
+export async function dismissFlaggedEvent(
+  id: string,
+  reason: "disrupted" | "charity"
+) {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) throw new Error("Not authenticated");
+
+  const updateData: Record<string, unknown> =
+    reason === "disrupted"
+      ? { anomaly_flag: "disrupted" }
+      : { anomaly_flag: "normal", net_sales: 0 }; // charity: $0 is intentional
+
+  const { error } = await supabase
+    .from("events")
+    .update(updateData)
+    .eq("id", id)
+    .eq("user_id", user.id);
+
+  if (error) throw new Error(error.message);
+
+  revalidatePath("/dashboard/events");
+  revalidatePath("/dashboard");
+  recalculateForUser(user.id).catch(() => {});
+}
+
 export async function deleteAllEvents() {
   const supabase = await createClient();
   const {
