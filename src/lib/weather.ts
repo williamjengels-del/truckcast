@@ -1,6 +1,23 @@
 import type { WeatherType } from "./database.types";
 
 /**
+ * Normalize a city name before sending to Open-Meteo's geocoding API.
+ *
+ * Open-Meteo stores "St Louis, Missouri" but NOT "Saint Louis, Missouri".
+ * Searching "saint louis" returns Saint Louis, Michigan (pop 7K) first.
+ * Searching "st louis" returns St Louis, Missouri (pop 315K) first.
+ *
+ * This also strips trailing state abbreviations (", MO") so we're just
+ * sending the city name.
+ */
+export function normalizeCityForGeocoding(city: string): string {
+  return city
+    .replace(/\bsaint\b/gi, "St") // "Saint Louis" → "St Louis"
+    .replace(/,\s*[A-Za-z]{2}$/, "") // strip ", MO" / ", IL" etc.
+    .trim();
+}
+
+/**
  * Geocode a city name to latitude/longitude using Open-Meteo's free geocoding API.
  * Returns null if the city can't be found.
  */
@@ -9,14 +26,19 @@ export async function geocodeCity(
 ): Promise<{ latitude: number; longitude: number } | null> {
   if (!city.trim()) return null;
   try {
+    const normalized = normalizeCityForGeocoding(city);
     const res = await fetch(
-      `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(city.trim())}&count=1&format=json`
+      `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(normalized)}&count=10&country_code=us&format=json`
     );
     if (!res.ok) return null;
     const data = await res.json();
-    const results = data.results as Array<{ latitude: number; longitude: number }> | undefined;
+    const results = data.results as Array<{ latitude: number; longitude: number; population?: number }> | undefined;
     if (!results || results.length === 0) return null;
-    return { latitude: results[0].latitude, longitude: results[0].longitude };
+    // Pick highest-population match — avoids small towns over major cities
+    const best = results.reduce((a, b) =>
+      (b.population ?? 0) > (a.population ?? 0) ? b : a
+    );
+    return { latitude: best.latitude, longitude: best.longitude };
   } catch {
     return null;
   }

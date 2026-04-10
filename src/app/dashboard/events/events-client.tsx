@@ -59,6 +59,7 @@ import {
   dismissFlaggedEvent,
 } from "@/app/dashboard/events/actions";
 import { TIER_COLORS } from "@/lib/constants";
+import { normalizeCityForGeocoding } from "@/lib/weather";
 import type { Event } from "@/lib/database.types";
 import type { EventFormData } from "@/app/dashboard/events/actions";
 import { DataImportTrigger } from "@/components/data-import-guide";
@@ -190,9 +191,9 @@ export function EventsClient({ initialEvents, userId = "", businessName = "", us
       if (!cityName) continue;
 
       try {
-        // Geocode the city — fetch top 5 results with US filter, pick highest population
+        // Geocode the city — fetch top 10 results with US filter, pick highest population
         const geoRes = await fetch(
-          `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(cityName)}&country_code=us&count=5`
+          `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(normalizeCityForGeocoding(cityName))}&country_code=us&count=10`
         );
         if (!geoRes.ok) continue;
         const geoData = await geoRes.json();

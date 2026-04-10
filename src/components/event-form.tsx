@@ -23,7 +23,7 @@ import { Badge } from "@/components/ui/badge";
 import { EVENT_TYPES, FEE_TYPES, ANOMALY_FLAGS } from "@/lib/constants";
 import type { Event, WeatherType } from "@/lib/database.types";
 import type { EventFormData } from "@/app/dashboard/events/actions";
-import { classifyWeather } from "@/lib/weather";
+import { classifyWeather, normalizeCityForGeocoding } from "@/lib/weather";
 
 const WEATHER_OPTIONS: WeatherType[] = [
   "Clear",
@@ -92,7 +92,7 @@ export function EventForm({
     try {
       // Geocode
       const geoRes = await fetch(
-        `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(city)}&country_code=us&count=5`
+        `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(normalizeCityForGeocoding(city))}&country_code=us&count=10`
       );
       if (!geoRes.ok) return;
       const geoData = await geoRes.json();
