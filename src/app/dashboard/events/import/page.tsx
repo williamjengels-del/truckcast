@@ -993,9 +993,10 @@ export default function ImportPage() {
       expected_attendance: r.expected_attendance ?? null,
       event_mode: (r.event_mode === "catering" ? "catering" : "food_truck") as "food_truck" | "catering",
       pos_source: "manual" as const,
-      food_cost: r.food_cost ?? null,
-      labor_cost: r.labor_cost ?? null,
-      other_costs: r.other_costs ?? null,
+      // Cost fields — only included when non-null to avoid errors if migration hasn't been applied yet
+      ...(r.food_cost !== undefined ? { food_cost: r.food_cost } : {}),
+      ...(r.labor_cost !== undefined ? { labor_cost: r.labor_cost } : {}),
+      ...(r.other_costs !== undefined ? { other_costs: r.other_costs } : {}),
     }));
 
     if (insertData.length === 0) {

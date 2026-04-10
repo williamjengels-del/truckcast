@@ -89,6 +89,14 @@ export default async function AdminOverviewPage() {
     { href: "/dashboard/admin/content", label: "Content" },
   ];
 
+  // Check if Stripe is in test mode (key starts with "sk_test_")
+  const stripeKey = process.env.STRIPE_SECRET_KEY ?? "";
+  const isStripeTestMode = stripeKey.startsWith("sk_test_");
+  const STRIPE_LIVE_DEADLINE = new Date("2026-04-22T00:00:00Z");
+  const now = new Date();
+  const daysToDeadline = Math.ceil((STRIPE_LIVE_DEADLINE.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+  const deadlinePassed = now >= STRIPE_LIVE_DEADLINE;
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -100,6 +108,28 @@ export default async function AdminOverviewPage() {
           </p>
         </div>
       </div>
+
+      {/* Stripe live mode deadline banner */}
+      {isStripeTestMode && (
+        <div className={`rounded-lg border p-4 ${deadlinePassed ? "bg-red-50 border-red-300 dark:bg-red-950/20 dark:border-red-800" : "bg-amber-50 border-amber-300 dark:bg-amber-950/20 dark:border-amber-800"}`}>
+          <div className="flex items-start gap-3">
+            <span className="text-xl">{deadlinePassed ? "🚨" : "⚠️"}</span>
+            <div>
+              <p className={`font-semibold text-sm ${deadlinePassed ? "text-red-800 dark:text-red-300" : "text-amber-800 dark:text-amber-300"}`}>
+                {deadlinePassed
+                  ? "Stripe is still in TEST MODE — first trials have expired. Users cannot pay."
+                  : `Stripe is in TEST MODE — switch to live keys before April 22 (${daysToDeadline} day${daysToDeadline !== 1 ? "s" : ""} left)`}
+              </p>
+              <p className="text-xs text-muted-foreground mt-1">
+                Go to Vercel → truckcast → Settings → Environment Variables → update <code className="font-mono bg-muted px-1 rounded">STRIPE_SECRET_KEY</code>, <code className="font-mono bg-muted px-1 rounded">NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY</code>, and <code className="font-mono bg-muted px-1 rounded">STRIPE_WEBHOOK_SECRET</code> with live mode values. Redeploy after saving.
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Cost tracking migration reminder */}
+      {/* This banner will disappear once the migration is applied (food_cost column will exist) */}
 
       {/* Nav strip */}
       <div className="flex gap-1 border-b pb-0 -mb-2">
