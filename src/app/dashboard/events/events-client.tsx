@@ -77,7 +77,7 @@ type SortField =
   | "net_profit";
 type SortDirection = "asc" | "desc";
 type ViewMode = "list" | "split" | "calendar";
-type TabMode = "all" | "upcoming" | "unbooked" | "past" | "flagged";
+type TabMode = "all" | "upcoming" | "unbooked" | "past" | "past_unbooked" | "flagged";
 
 interface WeatherForecast {
   tempHigh: number;
@@ -252,10 +252,11 @@ export function EventsClient({ initialEvents, userId = "", businessName = "", us
     ),
   ].sort((a, b) => b - a);
 
-  // Split into all / upcoming (booked) / unbooked (future) / past / flagged
+  // Split into all / upcoming (booked) / unbooked (future) / past / past_unbooked / flagged
   const upcomingEvents = initialEvents.filter((e) => e.event_date >= today && e.booked);
   const unbookedEvents = initialEvents.filter((e) => e.event_date >= today && !e.booked);
-  const pastEvents = initialEvents.filter((e) => e.event_date < today);
+  const pastEvents = initialEvents.filter((e) => e.event_date < today && e.booked);
+  const pastUnbookedEvents = initialEvents.filter((e) => e.event_date < today && !e.booked);
   const flaggedEvents = initialEvents.filter(
     (e) =>
       e.event_date < today &&
@@ -270,6 +271,7 @@ export function EventsClient({ initialEvents, userId = "", businessName = "", us
     activeTab === "all" ? initialEvents :
     activeTab === "upcoming" ? upcomingEvents :
     activeTab === "unbooked" ? unbookedEvents :
+    activeTab === "past_unbooked" ? pastUnbookedEvents :
     activeTab === "flagged" ? flaggedEvents :
     pastEvents;
 
@@ -286,7 +288,7 @@ export function EventsClient({ initialEvents, userId = "", businessName = "", us
   });
 
   // Sort: upcoming/unbooked = ascending (soonest first), all/past/flagged = descending (most recent first)
-  const tabDefaultSort: SortDirection = (activeTab === "past" || activeTab === "flagged" || activeTab === "all") ? "desc" : "asc";
+  const tabDefaultSort: SortDirection = (activeTab === "past" || activeTab === "past_unbooked" || activeTab === "flagged" || activeTab === "all") ? "desc" : "asc";
 
   const sorted = [...filtered].sort((a, b) => {
     const dir = sortDirection === "asc" ? 1 : -1;
@@ -340,7 +342,7 @@ export function EventsClient({ initialEvents, userId = "", businessName = "", us
   function handleTabChange(tab: TabMode) {
     setActiveTab(tab);
     setSortField("event_date");
-    setSortDirection((tab === "past" || tab === "flagged" || tab === "all") ? "desc" : "asc");
+    setSortDirection((tab === "past" || tab === "past_unbooked" || tab === "flagged" || tab === "all") ? "desc" : "asc");
   }
 
   function handleSort(field: SortField) {
@@ -952,6 +954,18 @@ export function EventsClient({ initialEvents, userId = "", businessName = "", us
           >
             Past ({pastEvents.length})
           </button>
+          {pastUnbookedEvents.length > 0 && (
+            <button
+              className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${
+                activeTab === "past_unbooked"
+                  ? "border-slate-500 text-slate-700 dark:text-slate-300"
+                  : "border-transparent text-muted-foreground hover:text-foreground"
+              }`}
+              onClick={() => handleTabChange("past_unbooked")}
+            >
+              Past Unbooked ({pastUnbookedEvents.length})
+            </button>
+          )}
           {flaggedEvents.length > 0 && (
             <button
               className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors flex items-center gap-1.5 whitespace-nowrap ${
@@ -1023,12 +1037,19 @@ export function EventsClient({ initialEvents, userId = "", businessName = "", us
           )}
         </div>
 
+        {/* Past Unbooked explanation banner */}
+        {activeTab === "past_unbooked" && pastUnbookedEvents.length > 0 && (
+          <div className="rounded-lg border border-slate-200 bg-slate-50 dark:border-slate-700 dark:bg-slate-900/30 px-4 py-3 text-sm text-slate-700 dark:text-slate-300">
+            These events are in your history but were never marked as booked. If they actually happened and you have sales data, click <strong>Edit</strong> → mark as booked → log the sales. If they were tentatives that fell through, you can leave or delete them.
+          </div>
+        )}
+
         {/* Events Table */}
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <Calendar className="h-5 w-5" />
-              {activeTab === "all" ? "All Events" : activeTab === "upcoming" ? "Upcoming Events" : activeTab === "unbooked" ? "Unbooked Events" : activeTab === "flagged" ? "Events Needing Sales Data" : "Past Events"}
+              {activeTab === "all" ? "All Events" : activeTab === "upcoming" ? "Upcoming Events" : activeTab === "unbooked" ? "Unbooked Events" : activeTab === "past_unbooked" ? "Past Unbooked Events" : activeTab === "flagged" ? "Events Needing Sales Data" : "Past Events"}
             </CardTitle>
           </CardHeader>
           <CardContent>

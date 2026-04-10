@@ -17,6 +17,7 @@ import {
   ClipboardList,
   Upload,
   ArrowRight,
+  Sparkles,
 } from "lucide-react";
 import { DashboardCharts } from "./dashboard-charts";
 import { SetupProgress } from "@/components/setup-progress";
@@ -258,6 +259,34 @@ export default async function DashboardPage() {
       : []),
   ];
 
+  // Data completeness — only shown when user has 5+ past events
+  const pastBookedEvents = events.filter((e) => e.booked && e.event_date <= today);
+  const dataQualityGaps: { label: string; count: number; href: string; field: string }[] = [];
+  if (pastBookedEvents.length >= 5) {
+    const missingType = pastBookedEvents.filter((e) => !e.event_type).length;
+    const missingWeather = pastBookedEvents.filter((e) => !e.event_weather).length;
+    const missingTier = pastBookedEvents.filter((e) => !e.event_tier).length;
+    const missingLocation = pastBookedEvents.filter((e) => !e.location && !e.city).length;
+    if (missingType > 0) dataQualityGaps.push({ label: "Event Type", count: missingType, href: "/dashboard/events?tab=past", field: "type" });
+    if (missingWeather > 0) dataQualityGaps.push({ label: "Weather", count: missingWeather, href: "/dashboard/events?tab=past", field: "weather" });
+    if (missingTier > 0) dataQualityGaps.push({ label: "Tier (A/B/C/D)", count: missingTier, href: "/dashboard/events?tab=past", field: "tier" });
+    if (missingLocation > 0) dataQualityGaps.push({ label: "Location", count: missingLocation, href: "/dashboard/events?tab=past", field: "location" });
+    dataQualityGaps.sort((a, b) => b.count - a.count);
+  }
+  const filledFields = pastBookedEvents.length >= 5
+    ? pastBookedEvents.reduce((sum, e) => {
+        let score = 0;
+        if (e.event_type) score++;
+        if (e.event_weather) score++;
+        if (e.event_tier) score++;
+        if (e.location || e.city) score++;
+        return sum + score;
+      }, 0)
+    : 0;
+  const totalFields = pastBookedEvents.length * 4;
+  const dataScore = totalFields > 0 ? Math.round((filledFields / totalFields) * 100) : 100;
+  const showDataQuality = pastBookedEvents.length >= 5 && dataScore < 85 && dataQualityGaps.length > 0;
+
   const isNewUser = events.length === 0;
 
   return (
@@ -308,6 +337,31 @@ export default async function DashboardPage() {
                 +{unloggedEvents.length - 4} more
               </p>
             )}
+          </div>
+        </div>
+      )}
+
+      {showDataQuality && (
+        <div className="rounded-lg border border-indigo-200 bg-indigo-50 dark:border-indigo-800/40 dark:bg-indigo-950/20 p-4 space-y-3">
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex items-center gap-2">
+              <Sparkles className="h-4 w-4 text-indigo-600 dark:text-indigo-400 shrink-0" />
+              <p className="text-sm font-medium text-indigo-900 dark:text-indigo-300">
+                Forecast accuracy improves with better data — yours is {dataScore}% complete
+              </p>
+            </div>
+            <Link href="/dashboard/events?tab=past">
+              <Button variant="outline" size="sm" className="text-xs border-indigo-300 hover:bg-indigo-100 dark:border-indigo-700 dark:hover:bg-indigo-900/30 shrink-0">
+                Fill gaps
+              </Button>
+            </Link>
+          </div>
+          <div className="flex flex-wrap gap-x-6 gap-y-1">
+            {dataQualityGaps.slice(0, 4).map((gap) => (
+              <Link key={gap.field} href={gap.href} className="text-xs text-indigo-700 dark:text-indigo-400 hover:underline">
+                {gap.count} event{gap.count !== 1 ? "s" : ""} missing <span className="font-medium">{gap.label}</span>
+              </Link>
+            ))}
           </div>
         </div>
       )}
