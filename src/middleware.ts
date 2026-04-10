@@ -68,19 +68,26 @@ export async function middleware(request: NextRequest) {
   ) {
     const { data: profile } = await supabase
       .from("profiles")
-      .select("created_at, stripe_subscription_id")
+      .select("created_at, stripe_subscription_id, trial_extended_until")
       .eq("id", user.id)
       .single();
 
     if (profile && !profile.stripe_subscription_id) {
-      const trialEnd = new Date(
-        new Date(profile.created_at).getTime() +
-          TRIAL_DAYS * 24 * 60 * 60 * 1000
-      );
-      if (new Date() > trialEnd) {
-        const url = request.nextUrl.clone();
-        url.pathname = "/dashboard/upgrade";
-        return NextResponse.redirect(url);
+      const now = new Date();
+
+      // Admin-granted trial extension takes priority over created_at calculation
+      if (profile.trial_extended_until && new Date(profile.trial_extended_until) > now) {
+        // Extended trial still active — allow through
+      } else {
+        const trialEnd = new Date(
+          new Date(profile.created_at).getTime() +
+            TRIAL_DAYS * 24 * 60 * 60 * 1000
+        );
+        if (now > trialEnd) {
+          const url = request.nextUrl.clone();
+          url.pathname = "/dashboard/upgrade";
+          return NextResponse.redirect(url);
+        }
       }
     }
   }

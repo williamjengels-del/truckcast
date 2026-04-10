@@ -25,6 +25,8 @@ interface AdminUser {
   state: string | null;
   subscription_tier: string;
   stripe_customer_id: string | null;
+  stripe_subscription_id: string | null;
+  trial_extended_until: string | null;
   data_sharing_enabled: boolean;
   onboarding_completed: boolean;
   event_count: number;
@@ -46,6 +48,7 @@ export default function AdminUsersPage() {
   const [saving, setSaving] = useState<string | null>(null);
   const [saved, setSaved] = useState<string | null>(null);
   const [deleting, setDeleting] = useState<string | null>(null);
+  const [extending, setExtending] = useState<string | null>(null);
 
   async function load() {
     setLoading(true);
@@ -75,6 +78,25 @@ export default function AdminUsersPage() {
       alert("Delete failed: " + (data.error ?? "Unknown error"));
     }
     setDeleting(null);
+  }
+
+  async function handleExtendTrial(userId: string, name: string) {
+    const days = prompt(`Extend trial for "${name || "user"}" by how many days?`, "30");
+    if (!days || isNaN(parseInt(days))) return;
+    setExtending(userId);
+    const res = await fetch("/api/admin/users", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ userId, extend_trial_days: parseInt(days) }),
+    });
+    if (res.ok) {
+      alert(`Trial extended by ${days} days.`);
+      load();
+    } else {
+      const data = await res.json();
+      alert("Failed: " + (data.error ?? "Unknown error"));
+    }
+    setExtending(null);
   }
 
   async function handleTierChange(userId: string, tier: string) {
@@ -253,15 +275,31 @@ export default function AdminUsersPage() {
                         {new Date(user.created_at).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
                       </td>
                       <td className="p-3">
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-7 w-7 text-muted-foreground hover:text-destructive"
-                          disabled={deleting === user.id}
-                          onClick={() => handleDelete(user.id, user.business_name ?? user.email ?? "")}
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
+                        <div className="flex items-center gap-1">
+                          {!user.stripe_subscription_id && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-7 px-2 text-xs text-muted-foreground hover:text-blue-600"
+                              disabled={extending === user.id}
+                              title={user.trial_extended_until ? `Extended until ${new Date(user.trial_extended_until).toLocaleDateString()}` : "Extend trial period"}
+                              onClick={() => handleExtendTrial(user.id, user.business_name ?? user.email ?? "")}
+                            >
+                              {user.trial_extended_until && new Date(user.trial_extended_until) > new Date()
+                                ? "⏰"
+                                : "+Trial"}
+                            </Button>
+                          )}
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-7 w-7 text-muted-foreground hover:text-destructive"
+                            disabled={deleting === user.id}
+                            onClick={() => handleDelete(user.id, user.business_name ?? user.email ?? "")}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </div>
                       </td>
                     </tr>
                   ))

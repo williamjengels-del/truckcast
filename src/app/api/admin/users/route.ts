@@ -20,7 +20,7 @@ export async function GET() {
 
   const { data: profiles, error } = await service
     .from("profiles")
-    .select("id, business_name, city, state, subscription_tier, stripe_customer_id, data_sharing_enabled, onboarding_completed, created_at")
+    .select("id, business_name, city, state, subscription_tier, stripe_customer_id, stripe_subscription_id, trial_extended_until, data_sharing_enabled, onboarding_completed, created_at")
     .order("created_at", { ascending: false });
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
@@ -97,20 +97,42 @@ export async function PATCH(request: NextRequest) {
   const service = await getServiceClient();
   if (!service) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
-  const { userId, subscription_tier } = await request.json();
+  const body = await request.json();
+  const { userId } = body;
 
-  if (!userId || !subscription_tier) {
-    return NextResponse.json({ error: "userId and subscription_tier required" }, { status: 400 });
+  if (!userId) {
+    return NextResponse.json({ error: "userId required" }, { status: 400 });
   }
 
-  const validTiers = ["starter", "pro", "premium"];
-  if (!validTiers.includes(subscription_tier)) {
-    return NextResponse.json({ error: "Invalid tier" }, { status: 400 });
+  const updateData: Record<string, unknown> = {};
+
+  // Update subscription tier
+  if (body.subscription_tier !== undefined) {
+    const validTiers = ["starter", "pro", "premium"];
+    if (!validTiers.includes(body.subscription_tier)) {
+      return NextResponse.json({ error: "Invalid tier" }, { status: 400 });
+    }
+    updateData.subscription_tier = body.subscription_tier;
+  }
+
+  // Extend trial by N days (admin tool for beta users)
+  if (body.extend_trial_days !== undefined) {
+    const days = parseInt(body.extend_trial_days, 10);
+    if (isNaN(days) || days < 1 || days > 365) {
+      return NextResponse.json({ error: "extend_trial_days must be 1–365" }, { status: 400 });
+    }
+    const extendUntil = new Date();
+    extendUntil.setDate(extendUntil.getDate() + days);
+    updateData.trial_extended_until = extendUntil.toISOString();
+  }
+
+  if (Object.keys(updateData).length === 0) {
+    return NextResponse.json({ error: "Nothing to update" }, { status: 400 });
   }
 
   const { error } = await service
     .from("profiles")
-    .update({ subscription_tier })
+    .update(updateData)
     .eq("id", userId);
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });

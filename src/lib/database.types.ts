@@ -46,6 +46,7 @@ export interface Profile {
   onboarding_completed: boolean;
   data_sharing_enabled: boolean;
   team_share_token?: string | null;
+  trial_extended_until?: string | null;
   created_at: string;
   updated_at: string;
 }
