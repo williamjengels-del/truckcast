@@ -39,7 +39,7 @@ export async function GET(req: NextRequest) {
   // Fetch all starter-tier users who haven't upgraded (no stripe_subscription_id)
   const { data: profiles, error } = await service
     .from("profiles")
-    .select("id, business_name, created_at")
+    .select("id, business_name, created_at, trial_extended_until")
     .eq("subscription_tier", "starter")
     .is("stripe_subscription_id", null);
 
@@ -71,16 +71,27 @@ export async function GET(req: NextRequest) {
     const email = emailMap[profile.id];
     if (!email) { results.skipped++; continue; }
 
-    const signupDate = new Date(profile.created_at);
-    signupDate.setHours(0, 0, 0, 0);
+    // Determine effective trial end — use extended date if set and in future, otherwise created_at + TRIAL_DAYS
+    let trialEndDate: Date;
+    if (
+      profile.trial_extended_until &&
+      new Date(profile.trial_extended_until) > today
+    ) {
+      trialEndDate = new Date(profile.trial_extended_until);
+      trialEndDate.setHours(0, 0, 0, 0);
+    } else {
+      const signupDate = new Date(profile.created_at);
+      signupDate.setHours(0, 0, 0, 0);
+      trialEndDate = new Date(signupDate.getTime() + TRIAL_DAYS * 24 * 60 * 60 * 1000);
+    }
 
-    const daysSinceSignup = daysBetween(signupDate, today);
-    const daysLeft = TRIAL_DAYS - daysSinceSignup;
+    const daysLeft = daysBetween(today, trialEndDate);
+    const daysSinceExpiry = daysLeft < 0 ? Math.abs(daysLeft) : 0;
 
     try {
       if (daysLeft < 0) {
-        // Trial expired — only send on day 15 (1 day after expiry) to avoid spam
-        if (daysSinceSignup === TRIAL_DAYS + 1) {
+        // Trial expired — only send on day 1 after expiry to avoid spam
+        if (daysSinceExpiry === 1) {
           await sendTrialExpiredEmail(email, profile.business_name ?? "");
           results.expired++;
         } else {
