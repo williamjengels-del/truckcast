@@ -16,7 +16,7 @@ export async function TrialBanner() {
 
     const { data: profile } = await supabase
       .from("profiles")
-      .select("created_at, stripe_subscription_id, subscription_tier")
+      .select("created_at, stripe_subscription_id, subscription_tier, trial_extended_until")
       .eq("id", user.id)
       .single();
 
@@ -25,9 +25,17 @@ export async function TrialBanner() {
   // Paid subscribers — no banner
   if (profile.stripe_subscription_id) return null;
 
-  const createdAt = new Date(profile.created_at);
-  const trialEnd = new Date(createdAt.getTime() + TRIAL_DAYS * 24 * 60 * 60 * 1000);
   const now = new Date();
+
+  // Use extended trial end if set and in the future; otherwise use created_at + 14 days
+  let trialEnd: Date;
+  if (profile.trial_extended_until && new Date(profile.trial_extended_until) > now) {
+    trialEnd = new Date(profile.trial_extended_until);
+  } else {
+    const createdAt = new Date(profile.created_at);
+    trialEnd = new Date(createdAt.getTime() + TRIAL_DAYS * 24 * 60 * 60 * 1000);
+  }
+
   const msLeft = trialEnd.getTime() - now.getTime();
   const daysLeft = Math.ceil(msLeft / (1000 * 60 * 60 * 24));
 
