@@ -16,6 +16,7 @@ import Link from "next/link";
 import { CloudSun, Calculator } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { calculateForecast, calibrateCoefficients } from "@/lib/forecast-engine";
+import { getPlatformEvents } from "@/lib/platform-registry";
 import { TIER_COLORS } from "@/lib/constants";
 import type { Event } from "@/lib/database.types";
 import { ForecastExplainer } from "./forecast-explainer";
@@ -62,6 +63,12 @@ export default async function ForecastsPage() {
   // Calibrate per-user coefficients
   const calibrated = calibrateCoefficients(events);
 
+  // Fetch platform data for upcoming events (matches recalculate.ts for consistency)
+  const upcomingNames = [...new Set(upcomingEvents.map((e) => e.event_name))];
+  const platformMap = await getPlatformEvents(upcomingNames).catch(
+    () => new Map<string, import("@/lib/database.types").PlatformEvent>()
+  );
+
   // Calculate event-type averages from historical data (for What-If panel)
   const eventTypeAvgs: Record<string, number> = {};
   const pastEvents = events.filter(
@@ -78,9 +85,13 @@ export default async function ForecastsPage() {
     eventTypeAvgs[type] = Math.round(sales.reduce((a, b) => a + b, 0) / sales.length);
   }
 
-  // Calculate forecasts with details
+  // Calculate forecasts with details — include platform data so numbers match stored forecast_sales
   const forecastDetails = upcomingEvents.map((event) => {
-    const result = calculateForecast(event, events, { calibratedCoefficients: calibrated });
+    const platformEvent = platformMap.get(event.event_name.toLowerCase().trim()) ?? null;
+    const result = calculateForecast(event, events, {
+      calibratedCoefficients: calibrated,
+      platformEvent,
+    });
     return {
       event,
       forecast: result,
@@ -249,6 +260,19 @@ export default async function ForecastsPage() {
                           </span>
                         </div>
                       )}
+                      {forecast.platformOperatorCount != null &&
+                        forecast.platformOperatorCount >= 2 && (
+                          <div className="col-span-2">
+                            <span className="text-muted-foreground">
+                              Platform benchmark:{" "}
+                            </span>
+                            <span className="font-medium text-blue-700 dark:text-blue-400">
+                              {forecast.platformOperatorCount} operators, median{" "}
+                              {formatCurrency(forecast.platformMedianSales ?? null)}
+                              {forecast.level === 0 ? " (base)" : " (blended)"}
+                            </span>
+                          </div>
+                        )}
                     </div>
                   )}
 
