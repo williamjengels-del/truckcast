@@ -1,4 +1,8 @@
 import type { Metadata } from "next";
+
+// All dashboard pages require auth and call Supabase — never prerender during build
+export const dynamic = "force-dynamic";
+
 import { Sidebar } from "@/components/sidebar";
 import { Header } from "@/components/header";
 import { FeedbackDialog } from "@/components/feedback-dialog";
