@@ -13,7 +13,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import Link from "next/link";
-import { CloudSun, Calculator } from "lucide-react";
+import { CloudSun, Calculator, ClipboardList } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { calculateForecast, calibrateCoefficients } from "@/lib/forecast-engine";
 import { getPlatformEvents } from "@/lib/platform-registry";
@@ -59,6 +59,11 @@ export default async function ForecastsPage() {
   const upcomingEvents = events.filter(
     (e) => e.event_date >= today && e.booked
   );
+
+  // Unbooked potential events — sorted soonest first
+  const unbookedEvents = events
+    .filter((e) => e.event_date >= today && !e.booked)
+    .sort((a, b) => a.event_date.localeCompare(b.event_date));
 
   // Calibrate per-user coefficients
   const calibrated = calibrateCoefficients(events);
@@ -309,6 +314,78 @@ export default async function ForecastsPage() {
           )}
         </CardContent>
       </Card>
+
+      {/* Potential Bookings — unbooked future events with forecasts */}
+      {unbookedEvents.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <ClipboardList className="h-5 w-5 text-muted-foreground" />
+              Potential Bookings
+              <span className="text-sm font-normal text-muted-foreground ml-1">
+                ({unbookedEvents.length} unconfirmed — click &quot;Book It&quot; in Events to confirm)
+              </span>
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Event</TableHead>
+                  <TableHead className="hidden md:table-cell">Date</TableHead>
+                  <TableHead className="hidden md:table-cell">Type</TableHead>
+                  <TableHead className="text-right">Forecast</TableHead>
+                  <TableHead className="text-right hidden sm:table-cell">Confidence</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {unbookedEvents.map((event) => {
+                  const result = calculateForecast(event, events, { calibratedCoefficients: calibrated });
+                  const forecastVal = result?.forecast ?? event.forecast_sales;
+                  return (
+                    <TableRow key={event.id} className="opacity-75">
+                      <TableCell>
+                        <div className="font-medium">{event.event_name}</div>
+                        <div className="text-xs text-muted-foreground md:hidden">{formatDate(event.event_date)}</div>
+                        {(event.location || event.city) && (
+                          <div className="text-xs text-muted-foreground">{event.location ?? event.city}</div>
+                        )}
+                      </TableCell>
+                      <TableCell className="hidden md:table-cell text-sm text-muted-foreground">
+                        {formatDate(event.event_date)}
+                      </TableCell>
+                      <TableCell className="hidden md:table-cell">
+                        {event.event_type ? (
+                          <Badge variant="outline" className="text-xs">{event.event_type}</Badge>
+                        ) : "—"}
+                      </TableCell>
+                      <TableCell className="text-right font-semibold">
+                        {formatCurrency(forecastVal)}
+                      </TableCell>
+                      <TableCell className="text-right hidden sm:table-cell">
+                        {result ? (
+                          <Badge
+                            variant="secondary"
+                            className={
+                              result.confidence === "HIGH"
+                                ? "bg-green-100 text-green-800 text-xs"
+                                : result.confidence === "MEDIUM"
+                                  ? "bg-yellow-100 text-yellow-800 text-xs"
+                                  : "bg-red-100 text-red-800 text-xs"
+                            }
+                          >
+                            {result.confidence}
+                          </Badge>
+                        ) : "—"}
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
+              </TableBody>
+            </Table>
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 }
