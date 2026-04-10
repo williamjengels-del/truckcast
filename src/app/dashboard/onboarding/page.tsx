@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -40,6 +40,30 @@ export default function OnboardingPage() {
   });
   const router = useRouter();
   const supabase = createClient();
+
+  // Pre-populate form with any existing profile data (helps returning users who
+  // were redirected back to onboarding before completing step 1)
+  useEffect(() => {
+    async function loadProfile() {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+      const { data } = await supabase
+        .from("profiles")
+        .select("business_name, city, state, timezone")
+        .eq("id", user.id)
+        .single();
+      if (data) {
+        setProfile({
+          business_name: data.business_name ?? "",
+          city: data.city ?? "",
+          state: data.state ?? "",
+          timezone: data.timezone ?? "America/Chicago",
+        });
+      }
+    }
+    loadProfile();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   async function handleSaveProfile() {
     setLoading(true);

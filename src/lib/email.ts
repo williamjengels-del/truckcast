@@ -79,8 +79,8 @@ export async function sendWelcomeEmail(to: string, businessName: string) {
         </div>
       </div>
 
-      <a href="${APP_URL}/dashboard" style="display:inline-block;background:#f97316;color:white;font-weight:600;font-size:15px;padding:12px 28px;border-radius:8px;text-decoration:none;">
-        Open TruckCast →
+      <a href="${APP_URL}/dashboard/onboarding" style="display:inline-block;background:#f97316;color:white;font-weight:600;font-size:15px;padding:12px 28px;border-radius:8px;text-decoration:none;">
+        Finish setup (2 min) →
       </a>
 
       <p style="margin:32px 0 0;font-size:13px;color:#9ca3af;line-height:1.5;">
@@ -180,6 +180,80 @@ export async function sendSalesReminderEmail(
     </div>
     <div style="padding:20px 40px;border-top:1px solid #f3f4f6;">
       <p style="margin:0;font-size:12px;color:#9ca3af;">TruckCast by VendCast · <a href="${APP_URL}/dashboard/settings" style="color:#9ca3af;">Manage preferences</a></p>
+    </div>
+  </div>
+</body>
+</html>
+    `.trim(),
+  });
+}
+
+// ─── Onboarding Nudge Email ────────────────────────────────────────────────
+
+/**
+ * Sent ~24h after signup if the user hasn't completed onboarding.
+ * Goal: bring them back to the setup wizard with a low-pressure reminder.
+ */
+export async function sendOnboardingNudgeEmail(to: string) {
+  if (!process.env.RESEND_API_KEY) return;
+  const resend = getResend();
+
+  await resend.emails.send({
+    from: FROM,
+    to,
+    subject: "One quick step left to set up TruckCast",
+    html: `
+<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
+<body style="margin:0;padding:0;background:#f9fafb;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;">
+  <div style="max-width:560px;margin:40px auto;background:#fff;border-radius:12px;overflow:hidden;border:1px solid #e5e7eb;">
+
+    <!-- Header -->
+    <div style="background:#f97316;padding:32px 40px;">
+      <div style="color:white;font-size:28px;font-weight:800;letter-spacing:-1px;">TruckCast</div>
+      <div style="color:rgba(255,255,255,0.8);font-size:12px;margin-top:2px;font-weight:500;letter-spacing:0.5px;">by VendCast</div>
+    </div>
+
+    <!-- Body -->
+    <div style="padding:40px;">
+      <h1 style="margin:0 0 16px;font-size:22px;font-weight:700;color:#111827;">You're almost in 👋</h1>
+      <p style="margin:0 0 20px;font-size:15px;line-height:1.6;color:#374151;">
+        You signed up for TruckCast but haven't finished setting up your account yet.
+        It takes about 2 minutes — just your truck name and you're in.
+      </p>
+
+      <div style="background:#fff7ed;border:1px solid #fed7aa;border-radius:8px;padding:20px;margin-bottom:24px;">
+        <div style="font-weight:600;color:#9a3412;font-size:14px;margin-bottom:8px;">What you'll unlock:</div>
+        <div style="display:flex;gap:10px;margin-bottom:10px;">
+          <div style="color:#f97316;font-size:16px;flex-shrink:0;">📅</div>
+          <div style="font-size:14px;color:#374151;">Event calendar with revenue forecasts for every booking</div>
+        </div>
+        <div style="display:flex;gap:10px;margin-bottom:10px;">
+          <div style="color:#f97316;font-size:16px;flex-shrink:0;">📊</div>
+          <div style="font-size:14px;color:#374151;">Import your past events to calibrate predictions to your truck</div>
+        </div>
+        <div style="display:flex;gap:10px;">
+          <div style="color:#f97316;font-size:16px;flex-shrink:0;">🎯</div>
+          <div style="font-size:14px;color:#374151;">Know which events are worth doing before you commit</div>
+        </div>
+      </div>
+
+      <a href="${APP_URL}/dashboard/onboarding" style="display:inline-block;background:#f97316;color:white;font-weight:600;font-size:15px;padding:12px 28px;border-radius:8px;text-decoration:none;">
+        Finish setup (2 min) →
+      </a>
+
+      <p style="margin:32px 0 0;font-size:13px;color:#9ca3af;line-height:1.5;">
+        Questions? Just reply — it goes straight to Julian, the food truck operator who built this.
+      </p>
+    </div>
+
+    <!-- Footer -->
+    <div style="padding:20px 40px;border-top:1px solid #f3f4f6;">
+      <p style="margin:0;font-size:12px;color:#9ca3af;">
+        TruckCast by VendCast · Built by Wok-O Taco, St. Louis MO ·
+        <a href="${APP_URL}/dashboard/settings" style="color:#9ca3af;">Manage preferences</a>
+      </p>
     </div>
   </div>
 </body>

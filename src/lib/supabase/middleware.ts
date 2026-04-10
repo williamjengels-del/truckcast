@@ -71,19 +71,28 @@ export async function updateSession(request: NextRequest) {
     return NextResponse.redirect(url);
   }
 
-  // Trial gate — dashboard routes only, skip exempt paths (upgrade, settings, admin)
-  if (
-    user &&
-    isDashboard &&
-    !TRIAL_GATE_EXEMPT.some((p) => pathname.startsWith(p))
-  ) {
+  // Onboarding + trial gates — dashboard routes only
+  if (user && isDashboard) {
+    const isOnboardingRoute = pathname.startsWith("/dashboard/onboarding");
+    const isTrialExempt = TRIAL_GATE_EXEMPT.some((p) => pathname.startsWith(p));
+
+    // Single profile fetch covers both gates
     const { data: profile } = await supabase
       .from("profiles")
-      .select("created_at, stripe_subscription_id, trial_extended_until")
+      .select("created_at, stripe_subscription_id, trial_extended_until, onboarding_completed")
       .eq("id", user.id)
       .single();
 
-    if (profile && !profile.stripe_subscription_id) {
+    // 1. Onboarding gate — if setup never completed, send them back to the wizard
+    //    (exempt the onboarding page itself so we don't loop)
+    if (profile && !profile.onboarding_completed && !isOnboardingRoute) {
+      const url = request.nextUrl.clone();
+      url.pathname = "/dashboard/onboarding";
+      return NextResponse.redirect(url);
+    }
+
+    // 2. Trial gate — skip for exempt paths and the onboarding wizard
+    if (profile && !profile.stripe_subscription_id && !isTrialExempt && !isOnboardingRoute) {
       const now = new Date();
 
       // Admin-granted trial extension takes priority over created_at calculation

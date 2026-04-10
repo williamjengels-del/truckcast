@@ -20,7 +20,7 @@ export async function GET() {
 
   const { data: profiles, error } = await service
     .from("profiles")
-    .select("id, business_name, city, state, subscription_tier, stripe_customer_id, stripe_subscription_id, data_sharing_enabled, onboarding_completed, created_at")
+    .select("id, business_name, city, state, subscription_tier, stripe_customer_id, stripe_subscription_id, trial_extended_until, data_sharing_enabled, onboarding_completed, created_at")
     .order("created_at", { ascending: false });
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
@@ -58,7 +58,7 @@ export async function GET() {
     booked_count: bookedMap[p.id] ?? 0,
     sales_count: salesMap[p.id] ?? 0,
     last_event_date: lastEventMap[p.id] ?? null,
-    trial_extended_until: null, // column not yet in schema
+    trial_extended_until: p.trial_extended_until ?? null,
   }));
 
   return NextResponse.json({ users });
