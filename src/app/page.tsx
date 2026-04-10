@@ -52,40 +52,53 @@ const FALLBACK_TESTIMONIALS = [
   },
 ];
 
+/** Wraps a promise with a hard timeout — if Supabase doesn't respond in time
+ *  (e.g. during Vercel build probing), we bail immediately to the fallback. */
+function withTimeout<T>(promise: PromiseLike<T>, ms: number, fallback: T): Promise<T> {
+  return Promise.race([
+    Promise.resolve(promise),
+    new Promise<T>((resolve) => setTimeout(() => resolve(fallback), ms)),
+  ]);
+}
+
 async function getEventCount(): Promise<number> {
+  if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
+    return 351;
+  }
   try {
     const serviceClient = createServiceClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.SUPABASE_SERVICE_ROLE_KEY!
+      process.env.NEXT_PUBLIC_SUPABASE_URL,
+      process.env.SUPABASE_SERVICE_ROLE_KEY
     );
-    const { count } = await serviceClient
+    const query = serviceClient
       .from("events")
-      .select("id", { count: "exact", head: true });
-    return count ?? 351;
+      .select("id", { count: "exact", head: true })
+      .then(({ count }) => count ?? 351);
+    return await withTimeout(query, 3000, 351);
   } catch {
     return 351;
   }
 }
 
 async function getTestimonials() {
+  if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
+    return FALLBACK_TESTIMONIALS;
+  }
   try {
     const serviceClient = createServiceClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.SUPABASE_SERVICE_ROLE_KEY!
+      process.env.NEXT_PUBLIC_SUPABASE_URL,
+      process.env.SUPABASE_SERVICE_ROLE_KEY
     );
-    const { data } = await serviceClient
+    const query = serviceClient
       .from("testimonials")
       .select("id, author_name, author_title, content, rating")
       .eq("is_active", true)
-      .order("display_order", { ascending: true });
-
-    if (data && data.length > 0) {
-      return data as typeof FALLBACK_TESTIMONIALS;
-    }
+      .order("display_order", { ascending: true })
+      .then(({ data }) => (data && data.length > 0 ? (data as typeof FALLBACK_TESTIMONIALS) : FALLBACK_TESTIMONIALS));
+    return await withTimeout(query, 3000, FALLBACK_TESTIMONIALS);
   } catch {
-    // Fall through to hardcoded
+    return FALLBACK_TESTIMONIALS;
   }
-  return FALLBACK_TESTIMONIALS;
 }
 
 export default async function LandingPage() {
