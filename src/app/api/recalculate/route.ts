@@ -2,7 +2,8 @@ import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { calculateEventPerformance } from "@/lib/event-performance";
 import { calculateForecast, calibrateCoefficients } from "@/lib/forecast-engine";
-import type { Event } from "@/lib/database.types";
+import { autoClassifyWeather } from "@/lib/weather";
+import type { Event, WeatherType } from "@/lib/database.types";
 
 /**
  * POST /api/recalculate
@@ -57,9 +58,50 @@ export async function POST() {
     // Calibrate per-user coefficients from historical data
     const calibrated = calibrateCoefficients(allEvents);
 
+    // Auto-classify weather for upcoming events within 16 days that have a city/location
+    // This improves forecast accuracy for near-term events
+    const today = new Date().toISOString().split("T")[0];
+    const in16Days = new Date();
+    in16Days.setDate(in16Days.getDate() + 16);
+    const in16DaysStr = in16Days.toISOString().split("T")[0];
+
+    const nearTermEvents = allEvents.filter(
+      (e) =>
+        e.event_date >= today &&
+        e.event_date <= in16DaysStr &&
+        !e.event_weather && // only classify if not already set
+        (e.city || e.location)
+    );
+
+    // Keep an in-memory map of updated weather so forecasts below use the latest values
+    const weatherUpdates = new Map<string, WeatherType>();
+
+    for (const event of nearTermEvents) {
+      const cityStr = (event.city || event.location || "").trim();
+      if (!cityStr) continue;
+      try {
+        const result = await autoClassifyWeather(cityStr, event.event_date, supabase);
+        if (result) {
+          await supabase
+            .from("events")
+            .update({ event_weather: result.classification })
+            .eq("id", event.id);
+          weatherUpdates.set(event.id, result.classification);
+        }
+      } catch {
+        // Non-critical — weather classification failure should not block forecast
+      }
+    }
+
+    // Apply weather updates to allEvents array so forecasts below see them
+    for (const event of allEvents) {
+      if (weatherUpdates.has(event.id)) {
+        event.event_weather = weatherUpdates.get(event.id)!;
+      }
+    }
+
     // Recalculate forecasts for all future events (booked AND unbooked)
     // Unbooked events are potential bookings — having a forecast helps decide whether to book them
-    const today = new Date().toISOString().split("T")[0];
     const futureEvents = allEvents.filter((e) => e.event_date >= today);
 
     let forecastsUpdated = 0;
@@ -77,6 +119,7 @@ export async function POST() {
     return NextResponse.json({
       success: true,
       performanceUpdated: eventNames.length,
+      weatherClassified: weatherUpdates.size,
       forecastsUpdated,
     });
   } catch (err) {
