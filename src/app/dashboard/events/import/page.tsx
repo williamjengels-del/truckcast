@@ -398,18 +398,23 @@ function addDays(dateStr: string, days: number): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
 
-function normalizeWeather(raw: string): string {
+function normalizeWeather(raw: string): string | undefined {
   const s = raw.trim().toLowerCase();
-  if (s === "rain before" || s === "rain before event") return "Rain Before Event";
-  if (s === "rain during" || s === "rain during event") return "Rain During Event";
-  if (s === "clear") return "Clear";
-  if (s === "overcast" || s === "cloudy") return "Overcast";
+  if (!s) return undefined;
+  if (s === "clear" || s === "sunny") return "Clear";
+  if (s === "overcast" || s === "cloudy" || s === "partly cloudy") return "Overcast";
   if (s === "hot") return "Hot";
   if (s === "cold") return "Cold";
-  if (s === "storms" || s === "storm" || s === "thunderstorm") return "Storms";
-  if (s === "snow" || s === "snowy") return "Snow";
-  // Return as-is if unrecognized — DB will reject invalid enums but this covers Airtable variants
-  return raw.trim();
+  if (s === "rain before" || s === "rain before event") return "Rain Before Event";
+  if (s === "rain during" || s === "rain during event") return "Rain During Event";
+  // "Possible Rain", "light rain", "chance of rain", "drizzle" → Rain Before Event
+  if (s.includes("possible rain") || s.includes("chance of rain") || s.includes("light rain") || s.includes("drizzle")) return "Rain Before Event";
+  // Any other "rain" → Rain During Event
+  if (s.includes("rain")) return "Rain During Event";
+  if (s === "storms" || s === "storm" || s === "thunderstorm" || s.includes("thunder")) return "Storms";
+  if (s === "snow" || s === "snowy" || s.includes("snow")) return "Snow";
+  // Unrecognized — skip rather than send an invalid enum to the DB
+  return undefined;
 }
 
 // ═══════════════════════════════════════════════════════════════════════
@@ -950,7 +955,7 @@ export default function ImportPage() {
       sales_minimum: r.sales_minimum ?? 0,
       forecast_sales: r.forecast_sales ?? null,
       notes: r.notes ?? null,
-      booked: r.booked !== undefined ? r.booked : false,
+      booked: r.booked !== undefined ? r.booked : true, // default true — historical imports are confirmed events
       event_tier: r.event_tier ?? null,
       anomaly_flag: r.anomaly_flag ?? "normal",
       event_weather: r.weather_type ?? null,
