@@ -153,8 +153,16 @@ export function DashboardCharts({
                 )}
                 <Bar
                   dataKey="revenue"
-                  shape={(props: Record<string, unknown>) => (
-                    <RollingBar {...props} isFuture={props.isFuture as boolean} />
+                  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                  shape={(props: any) => (
+                    <RollingBar
+                      x={props.x}
+                      y={props.y}
+                      width={props.width}
+                      height={props.height}
+                      value={props.value}
+                      isFuture={props.isFuture}
+                    />
                   )}
                   radius={[3, 3, 0, 0]}
                 />
