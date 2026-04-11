@@ -63,7 +63,7 @@ function withTimeout<T>(promise: PromiseLike<T>, ms: number, fallback: T): Promi
 
 async function getEventCount(): Promise<number> {
   if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
-    return 351;
+    return 1983;
   }
   try {
     const serviceClient = createServiceClient(
@@ -73,10 +73,10 @@ async function getEventCount(): Promise<number> {
     const query = serviceClient
       .from("events")
       .select("id", { count: "exact", head: true })
-      .then(({ count }) => count ?? 351);
-    return await withTimeout(query, 3000, 351);
+      .then(({ count }) => count ?? 1983);
+    return await withTimeout(query, 3000, 1983);
   } catch {
-    return 351;
+    return 1983;
   }
 }
 
