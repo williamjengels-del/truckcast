@@ -15,7 +15,16 @@ jobs:
         run: npm install --global vercel@latest
 
       - name: Deploy to Production
-        run: vercel --prod --token=${{ secrets.VERCEL_TOKEN }} --yes
+        id: deploy
+        run: |
+          DEPLOYMENT_URL=$(vercel --prod --token=${{ secrets.VERCEL_TOKEN }} --yes 2>&1 | grep -Eo 'https://truckcast-[a-z0-9]+-williamjengels-3711s-projects\.vercel\.app' | tail -1)
+          echo "url=$DEPLOYMENT_URL" >> $GITHUB_OUTPUT
+        env:
+          VERCEL_ORG_ID: team_CCyAXGUAVGcHdMkx89WY3JoJ
+          VERCEL_PROJECT_ID: prj_rsbYIGAbv90kawXEqZ1LOgtlnh9i
+
+      - name: Alias to vendcast.co
+        run: vercel alias set ${{ steps.deploy.outputs.url }} vendcast.co --token=${{ secrets.VERCEL_TOKEN }} --yes
         env:
           VERCEL_ORG_ID: team_CCyAXGUAVGcHdMkx89WY3JoJ
           VERCEL_PROJECT_ID: prj_rsbYIGAbv90kawXEqZ1LOgtlnh9i
