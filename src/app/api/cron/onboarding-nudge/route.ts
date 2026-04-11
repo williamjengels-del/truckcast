@@ -37,10 +37,12 @@ export async function GET(req: NextRequest) {
   const windowEnd = new Date(now.getTime() - 20 * 60 * 60 * 1000);   // 20h ago
 
   // Find profiles that are incomplete and were created in the nudge window
+  // email_reminders_enabled != false means null (default) or true both get the nudge
   const { data: profiles, error } = await service
     .from("profiles")
-    .select("id, business_name, created_at")
+    .select("id, business_name, created_at, email_reminders_enabled")
     .eq("onboarding_completed", false)
+    .neq("email_reminders_enabled", false)
     .gte("created_at", windowStart.toISOString())
     .lte("created_at", windowEnd.toISOString());
 

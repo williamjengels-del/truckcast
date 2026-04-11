@@ -45,6 +45,7 @@ export interface Profile {
   stripe_subscription_id: string | null;
   onboarding_completed: boolean;
   data_sharing_enabled: boolean;
+  email_reminders_enabled?: boolean | null;
   team_share_token?: string | null;
   trial_extended_until?: string | null;
   created_at: string;

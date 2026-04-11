@@ -259,6 +259,34 @@ export default async function DashboardPage() {
       : []),
   ];
 
+  // Rolling 12-week data: 8 past weeks + current week + 3 future weeks
+  function getMonday(d: Date): Date {
+    const day = d.getDay();
+    const diff = d.getDate() - day + (day === 0 ? -6 : 1);
+    return new Date(d.getFullYear(), d.getMonth(), diff);
+  }
+  const rollingWeekData: { label: string; actual: number; forecast: number; isFuture: boolean }[] = [];
+  const todayDateObj = new Date(today + "T00:00:00");
+  const currentMonday = getMonday(todayDateObj);
+  for (let w = -8; w <= 3; w++) {
+    const weekStart = new Date(currentMonday);
+    weekStart.setDate(currentMonday.getDate() + w * 7);
+    const weekEnd = new Date(weekStart);
+    weekEnd.setDate(weekStart.getDate() + 6);
+    const wsStr = weekStart.toISOString().split("T")[0];
+    const weStr = weekEnd.toISOString().split("T")[0];
+    const isFuture = wsStr > today;
+    const weekEvents = bookedEvents.filter((e) => e.event_date >= wsStr && e.event_date <= weStr);
+    const actual = isFuture ? 0 : weekEvents.filter((e) => hasRevenue(e)).reduce((s, e) => s + eventRevenue(e), 0);
+    const forecast = weekEvents.reduce((s, e) => s + (e.forecast_sales ?? 0), 0);
+    rollingWeekData.push({
+      label: weekStart.toLocaleDateString("en-US", { month: "short", day: "numeric" }),
+      actual,
+      forecast,
+      isFuture,
+    });
+  }
+
   // Data completeness — only shown when user has 5+ past events
   const pastBookedEvents = events.filter((e) => e.booked && e.event_date <= today);
   const dataQualityGaps: { label: string; count: number; href: string; field: string }[] = [];
@@ -466,6 +494,50 @@ export default async function DashboardPage() {
         </div>
       ) : (
         <>
+          {/* ── Season Progress Hero ── */}
+          <div className="rounded-xl border bg-gradient-to-br from-orange-50 to-amber-50 dark:from-orange-950/20 dark:to-amber-950/10 p-5 md:p-6">
+            <div className="flex items-center justify-between mb-4">
+              <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">
+                Season Progress · {currentYear}
+              </p>
+              <p className="text-xs text-muted-foreground">
+                {eventsCompleted} done · {upcomingCount} upcoming
+              </p>
+            </div>
+            <div className="grid grid-cols-2 gap-6 mb-5">
+              <div>
+                <div className="text-3xl font-bold tracking-tight">
+                  {formatCurrency(ytdRevenue)}
+                </div>
+                <p className="text-sm text-muted-foreground mt-0.5">Revenue so far</p>
+              </div>
+              <div>
+                <div className="text-3xl font-bold tracking-tight text-muted-foreground">
+                  {formatCurrency(projectedSeason)}
+                </div>
+                <p className="text-sm text-muted-foreground mt-0.5">Projected total</p>
+              </div>
+            </div>
+            {projectedSeason > 0 && (
+              <div>
+                <div className="w-full bg-orange-200/60 dark:bg-orange-900/30 rounded-full h-2.5 overflow-hidden">
+                  <div
+                    className="bg-orange-500 h-2.5 rounded-full transition-all duration-500"
+                    style={{
+                      width: `${Math.min(100, Math.round((ytdRevenue / projectedSeason) * 100))}%`,
+                    }}
+                  />
+                </div>
+                <p className="text-xs text-muted-foreground mt-1.5">
+                  {Math.round((ytdRevenue / projectedSeason) * 100)}% of projected season earned
+                  {upcomingForecastSum > 0 && (
+                    <span className="ml-1">· {formatCurrency(upcomingForecastSum)} in upcoming forecasts</span>
+                  )}
+                </p>
+              </div>
+            )}
+          </div>
+
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {kpis.map((kpi) => (
               <Card key={kpi.label}>
@@ -552,7 +624,7 @@ export default async function DashboardPage() {
             </div>
           )}
 
-          <DashboardCharts monthlyData={monthlyData} typeData={typeData} />
+          <DashboardCharts monthlyData={monthlyData} typeData={typeData} rollingWeekData={rollingWeekData} />
         </>
       )}
     </div>

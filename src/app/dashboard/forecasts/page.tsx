@@ -13,7 +13,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import Link from "next/link";
-import { CloudSun, Calculator, ClipboardList } from "lucide-react";
+import { CloudSun, Calculator, ClipboardList, CloudRain, Sun, Cloud, Thermometer, Wind } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { calculateForecast, calibrateCoefficients } from "@/lib/forecast-engine";
 import { getPlatformEvents } from "@/lib/platform-registry";
@@ -181,12 +181,24 @@ export default async function ForecastsPage() {
                         {event.location && ` at ${event.location}`}
                       </p>
                     </div>
-                    <div className="text-right">
+                    <div className="text-right space-y-1">
                       <div className="text-xl font-bold">
                         {formatCurrency(
                           forecast?.forecast ?? event.forecast_sales
                         )}
                       </div>
+                      {/* Weather impact badge — shown prominently when it's meaningfully adjusting the forecast */}
+                      {forecast?.weatherCoefficient && forecast.weatherCoefficient !== 1 && (
+                        <div className={`inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full ${
+                          forecast.weatherCoefficient > 1
+                            ? "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400"
+                            : "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400"
+                        }`}>
+                          <CloudSun className="h-3 w-3" />
+                          {forecast.weatherCoefficient > 1 ? "+" : ""}
+                          {formatCurrency(forecast.weatherAdjustment ?? 0)} weather
+                        </div>
+                      )}
                       {forecast && (
                         <div className="flex flex-col items-end gap-1">
                           <Badge
@@ -208,6 +220,14 @@ export default async function ForecastsPage() {
                       )}
                     </div>
                   </div>
+
+                  {/* Weather not set nudge — for upcoming events with no weather data */}
+                  {!event.event_weather && (
+                    <div className="flex items-center gap-1.5 text-xs text-muted-foreground bg-muted/40 rounded px-2.5 py-1.5">
+                      <CloudSun className="h-3.5 w-3.5 shrink-0" />
+                      <span>No weather set — <a href={`/dashboard/events?edit=${event.id}`} className="underline underline-offset-2 hover:text-foreground">add it</a> for a more accurate forecast</span>
+                    </div>
+                  )}
 
                   {forecast && (
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">

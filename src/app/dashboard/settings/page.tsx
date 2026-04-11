@@ -298,6 +298,13 @@ function SettingsContent() {
         />
       )}
 
+      <NotificationsCard
+        profile={profile}
+        onToggle={(val) =>
+          setProfile((p) => (p ? { ...p, email_reminders_enabled: val } : p))
+        }
+      />
+
       <DataPrivacyCard
         profile={profile}
         onToggle={(val) =>
@@ -429,6 +436,65 @@ function PlanCards({ profile }: { profile: Profile | null }) {
         </div>
       )}
     </div>
+  );
+}
+
+function NotificationsCard({
+  profile,
+  onToggle,
+}: {
+  profile: Profile | null;
+  onToggle: (val: boolean) => void;
+}) {
+  const [saving, setSaving] = useState(false);
+  const supabase = createClient();
+
+  // Default true when column not yet present (null)
+  const enabled = profile?.email_reminders_enabled ?? true;
+
+  async function handleToggle() {
+    if (!profile) return;
+    const next = !enabled;
+    setSaving(true);
+    await supabase
+      .from("profiles")
+      .update({ email_reminders_enabled: next })
+      .eq("id", profile.id);
+    onToggle(next);
+    setSaving(false);
+  }
+
+  return (
+    <Card className="max-w-2xl" id="notifications">
+      <CardHeader>
+        <CardTitle>Notifications</CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <div className="flex items-start justify-between gap-6">
+          <div className="space-y-1">
+            <p className="text-sm font-medium">Sales reminder emails</p>
+            <p className="text-sm text-muted-foreground">
+              Receive an email when a past event has no sales logged. Sent
+              once, 1–3 days after the event date.
+            </p>
+          </div>
+          <Button
+            variant={enabled ? "default" : "outline"}
+            size="sm"
+            onClick={handleToggle}
+            disabled={saving}
+            className="shrink-0"
+          >
+            {saving ? "Saving..." : enabled ? "On" : "Off"}
+          </Button>
+        </div>
+        {!enabled && (
+          <p className="text-xs text-muted-foreground rounded border border-dashed p-3">
+            Sales reminder emails are turned off. You can re-enable at any time.
+          </p>
+        )}
+      </CardContent>
+    </Card>
   );
 }
 

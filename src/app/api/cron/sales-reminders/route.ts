@@ -83,14 +83,17 @@ export async function GET(req: NextRequest) {
     if (userIds.includes(u.id) && u.email) emailMap.set(u.id, u.email);
   }
 
-  // Fetch business names for affected users
+  // Fetch business names + email preferences for affected users
   const { data: profiles } = await service
     .from("profiles")
-    .select("id, business_name")
+    .select("id, business_name, email_reminders_enabled")
     .in("id", userIds);
   const nameMap = new Map<string, string>();
+  const remindersEnabledMap = new Map<string, boolean>();
   for (const p of profiles ?? []) {
     nameMap.set(p.id, p.business_name ?? "");
+    // Treat null as true (default) — only skip if explicitly false
+    remindersEnabledMap.set(p.id, p.email_reminders_enabled !== false);
   }
 
   const results: { userId: string; status: string }[] = [];
@@ -99,6 +102,12 @@ export async function GET(req: NextRequest) {
     const email = emailMap.get(userId);
     if (!email) {
       results.push({ userId, status: "no_email" });
+      continue;
+    }
+
+    // Skip users who opted out of reminders
+    if (remindersEnabledMap.get(userId) === false) {
+      results.push({ userId, status: "opted_out" });
       continue;
     }
 
