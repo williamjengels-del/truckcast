@@ -20,7 +20,7 @@ import {
 } from "@/components/ui/dialog";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
-import { EVENT_TYPES, FEE_TYPES, ANOMALY_FLAGS } from "@/lib/constants";
+import { EVENT_TYPES, FEE_TYPES, ANOMALY_FLAGS, CANCELLATION_REASONS } from "@/lib/constants";
 import type { Event, WeatherType } from "@/lib/database.types";
 import type { EventFormData } from "@/app/dashboard/events/actions";
 import { classifyWeather, normalizeCityForGeocoding } from "@/lib/weather";
@@ -55,6 +55,7 @@ export function EventForm({
   const [error, setError] = useState<string | null>(null);
   const [isPrivate, setIsPrivate] = useState<boolean>(initialData?.is_private ?? false);
   const [bookedValue, setBookedValue] = useState<string>(initialData?.booked === false ? "false" : "true");
+  const [cancellationReason, setCancellationReason] = useState<string>(initialData?.cancellation_reason ?? "");
   const [eventMode, setEventMode] = useState<string>(initialData?.event_mode ?? "food_truck");
   const [feeType, setFeeType] = useState<string>(initialData?.fee_type ?? "none");
   const [feeRate, setFeeRate] = useState<number | "">(initialData?.fee_rate ?? "");
@@ -161,6 +162,7 @@ export function EventForm({
     if (!open) return;
     setIsPrivate(initialData?.is_private ?? false);
     setBookedValue(initialData?.booked === false ? "false" : "true");
+    setCancellationReason(initialData?.cancellation_reason ?? "");
     setEventMode(initialData?.event_mode ?? "food_truck");
     setFeeType(initialData?.fee_type ?? "none");
     setFeeRate(initialData?.fee_rate ?? "");
@@ -271,6 +273,7 @@ export function EventForm({
       notes: (form.get("notes") as string) || undefined,
       latitude: suggestedLat ?? undefined,
       longitude: suggestedLon ?? undefined,
+      cancellation_reason: cancellationReason || null,
     };
 
     try {
@@ -346,18 +349,47 @@ export function EventForm({
                 <Label htmlFor="booked">Status</Label>
                 <Select
                   name="booked"
-                  value={bookedValue}
-                  onValueChange={(v) => setBookedValue(v ?? "true")}
+                  value={cancellationReason ? "cancelled" : bookedValue}
+                  onValueChange={(v) => {
+                    if (v === "cancelled") {
+                      setBookedValue("true");
+                      setCancellationReason("weather");
+                    } else {
+                      setBookedValue(v ?? "true");
+                      setCancellationReason("");
+                    }
+                  }}
                 >
                   <SelectTrigger>
-                    <SelectValue>{bookedValue === "true" ? "Booked" : "Not Booked"}</SelectValue>
+                    <SelectValue>
+                      {cancellationReason ? "Cancelled" : bookedValue === "true" ? "Booked" : "Not Booked"}
+                    </SelectValue>
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="true">Booked</SelectItem>
+                    <SelectItem value="cancelled">Cancelled</SelectItem>
                     <SelectItem value="false">Not Booked</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
+              {cancellationReason && (
+                <div className="space-y-2">
+                  <Label>Cancellation Reason</Label>
+                  <Select
+                    value={cancellationReason}
+                    onValueChange={(v) => setCancellationReason(v ?? "other")}
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {Object.entries(CANCELLATION_REASONS).map(([value, label]) => (
+                        <SelectItem key={value} value={value}>{label}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
               <div className="col-span-2 space-y-2">
                 <Label htmlFor="city">City</Label>
                 <Input

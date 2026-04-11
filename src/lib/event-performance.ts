@@ -20,6 +20,7 @@ export function calculateEventPerformance(
     (e) =>
       e.event_name.toLowerCase().trim() === eventName.toLowerCase().trim() &&
       e.booked &&
+      !e.cancellation_reason &&
       ((e.net_sales !== null && e.net_sales > 0) ||
         (e.event_mode === "catering" && e.invoice_revenue > 0))
   );

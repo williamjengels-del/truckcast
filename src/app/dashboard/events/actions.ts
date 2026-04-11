@@ -37,6 +37,7 @@ export type EventFormData = {
   other_costs?: number;
   notes?: string;
   pos_source?: string;
+  cancellation_reason?: string | null;
 };
 
 export async function createEvent(formData: EventFormData) {

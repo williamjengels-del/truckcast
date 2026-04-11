@@ -77,7 +77,7 @@ type SortField =
   | "net_profit";
 type SortDirection = "asc" | "desc";
 type ViewMode = "list" | "split" | "calendar";
-type TabMode = "all" | "upcoming" | "unbooked" | "past" | "past_unbooked" | "flagged";
+type TabMode = "all" | "upcoming" | "unbooked" | "past" | "past_unbooked" | "flagged" | "cancelled";
 
 interface WeatherForecast {
   tempHigh: number;
@@ -252,15 +252,17 @@ export function EventsClient({ initialEvents, userId = "", businessName = "", us
     ),
   ].sort((a, b) => b - a);
 
-  // Split into all / upcoming (booked) / unbooked (future) / past / past_unbooked / flagged
-  const upcomingEvents = initialEvents.filter((e) => e.event_date >= today && e.booked);
-  const unbookedEvents = initialEvents.filter((e) => e.event_date >= today && !e.booked);
-  const pastEvents = initialEvents.filter((e) => e.event_date < today && e.booked);
-  const pastUnbookedEvents = initialEvents.filter((e) => e.event_date < today && !e.booked);
+  // Split into all / upcoming (booked) / unbooked (future) / past / past_unbooked / flagged / cancelled
+  const cancelledEvents = initialEvents.filter((e) => !!e.cancellation_reason);
+  const upcomingEvents = initialEvents.filter((e) => e.event_date >= today && e.booked && !e.cancellation_reason);
+  const unbookedEvents = initialEvents.filter((e) => e.event_date >= today && !e.booked && !e.cancellation_reason);
+  const pastEvents = initialEvents.filter((e) => e.event_date < today && e.booked && !e.cancellation_reason);
+  const pastUnbookedEvents = initialEvents.filter((e) => e.event_date < today && !e.booked && !e.cancellation_reason);
   const flaggedEvents = initialEvents.filter(
     (e) =>
       e.event_date < today &&
       e.booked &&
+      !e.cancellation_reason &&                                   // cancelled events don't need sales logged
       e.net_sales === null &&                                    // null only — $0 intentional (charity) is cleared by dismiss
       !(e.event_mode === "catering" && e.invoice_revenue > 0) && // catering with invoice = not missing
       e.anomaly_flag !== "disrupted" &&                          // disrupted = already dismissed
@@ -273,6 +275,7 @@ export function EventsClient({ initialEvents, userId = "", businessName = "", us
     activeTab === "unbooked" ? unbookedEvents :
     activeTab === "past_unbooked" ? pastUnbookedEvents :
     activeTab === "flagged" ? flaggedEvents :
+    activeTab === "cancelled" ? cancelledEvents :
     pastEvents;
 
   const filtered = activeEvents.filter((e) => {
@@ -288,7 +291,7 @@ export function EventsClient({ initialEvents, userId = "", businessName = "", us
   });
 
   // Sort: upcoming/unbooked = ascending (soonest first), all/past/flagged = descending (most recent first)
-  const tabDefaultSort: SortDirection = (activeTab === "past" || activeTab === "past_unbooked" || activeTab === "flagged" || activeTab === "all") ? "desc" : "asc";
+  const tabDefaultSort: SortDirection = (activeTab === "past" || activeTab === "past_unbooked" || activeTab === "flagged" || activeTab === "all" || activeTab === "cancelled") ? "desc" : "asc";
 
   const sorted = [...filtered].sort((a, b) => {
     const dir = sortDirection === "asc" ? 1 : -1;
@@ -342,7 +345,7 @@ export function EventsClient({ initialEvents, userId = "", businessName = "", us
   function handleTabChange(tab: TabMode) {
     setActiveTab(tab);
     setSortField("event_date");
-    setSortDirection((tab === "past" || tab === "past_unbooked" || tab === "flagged" || tab === "all") ? "desc" : "asc");
+    setSortDirection((tab === "past" || tab === "past_unbooked" || tab === "flagged" || tab === "all" || tab === "cancelled") ? "desc" : "asc");
   }
 
   function handleSort(field: SortField) {
@@ -472,7 +475,7 @@ export function EventsClient({ initialEvents, userId = "", businessName = "", us
   function exportCSV() {
     const headers = [
       "Event Name", "Date", "Mode", "Type", "Tier", "Location", "City",
-      "Booked", "Net Sales", "Invoice Revenue", "After Fees", "Forecast",
+      "Booked", "Cancelled", "Cancellation Reason", "Net Sales", "Invoice Revenue", "After Fees", "Forecast",
       "Food Cost", "Labor Cost", "Other Costs", "Net Profit",
       "Fee Type", "Fee Rate", "Sales Minimum", "Weather", "Anomaly", "Notes",
     ];
@@ -490,6 +493,8 @@ export function EventsClient({ initialEvents, userId = "", businessName = "", us
         e.location ?? "",
         e.city ?? "",
         e.booked ? "Yes" : "No",
+        e.cancellation_reason ? "Yes" : "No",
+        e.cancellation_reason ?? "",
         e.net_sales ?? "",
         e.invoice_revenue > 0 ? e.invoice_revenue : "",
         e.net_after_fees ?? "",
@@ -981,6 +986,18 @@ export function EventsClient({ initialEvents, userId = "", businessName = "", us
               </span>
             </button>
           )}
+          {cancelledEvents.length > 0 && (
+            <button
+              className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${
+                activeTab === "cancelled"
+                  ? "border-slate-500 text-slate-700 dark:text-slate-300"
+                  : "border-transparent text-muted-foreground hover:text-foreground"
+              }`}
+              onClick={() => handleTabChange("cancelled")}
+            >
+              Cancelled ({cancelledEvents.length})
+            </button>
+          )}
         </div>
 
         {/* Filters */}
@@ -1165,7 +1182,12 @@ export function EventsClient({ initialEvents, userId = "", businessName = "", us
                     >
                       <TableCell className="whitespace-nowrap text-sm">
                         {formatDate(event.event_date)}
-                        {!event.booked && (
+                        {event.cancellation_reason && (
+                          <Badge variant="outline" className="ml-2 text-xs text-red-600 border-red-300 dark:text-red-400 dark:border-red-700">
+                            Cancelled
+                          </Badge>
+                        )}
+                        {!event.booked && !event.cancellation_reason && (
                           <Badge variant="outline" className="ml-2 text-xs">
                             Unbooked
                           </Badge>

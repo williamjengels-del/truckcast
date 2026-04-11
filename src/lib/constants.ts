@@ -39,6 +39,14 @@ export const FEE_TYPES = {
   pre_settled: "Pre-Settled",
 } as const;
 
+// Cancellation Reasons
+export const CANCELLATION_REASONS = {
+  weather: "Weather (rain, heat, etc.)",
+  truck_breakdown: "Truck / Equipment Issue",
+  organizer_cancelled: "Organizer Cancelled",
+  other: "Other",
+} as const;
+
 // Anomaly Flags
 export const ANOMALY_FLAGS = {
   normal: "Normal",

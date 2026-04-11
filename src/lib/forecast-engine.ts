@@ -145,6 +145,7 @@ export function calibrateCoefficients(
   const validEvents = historicalEvents.filter(
     (e) =>
       e.booked &&
+      !e.cancellation_reason &&
       hasRevenue(e) &&
       e.anomaly_flag !== "disrupted"
   );
@@ -237,6 +238,7 @@ export function getVenueHistory(
       e.location &&
       e.location.toLowerCase().trim() === normalized &&
       e.booked &&
+      !e.cancellation_reason &&
       hasRevenue(e) &&
       e.anomaly_flag !== "disrupted"
   );
@@ -361,6 +363,7 @@ export function calculateForecast(
   const validEvents = historicalEvents.filter(
     (e) =>
       e.booked &&
+      !e.cancellation_reason &&
       hasRevenue(e) &&
       e.anomaly_flag !== "disrupted"
   );

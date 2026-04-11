@@ -19,6 +19,7 @@ export type WeatherType =
   | "Storms"
   | "Snow";
 export type AnomalyFlag = "normal" | "disrupted" | "boosted";
+export type CancellationReason = "weather" | "truck_breakdown" | "organizer_cancelled" | "other";
 export type EventMode = "food_truck" | "catering";
 export type FeeType =
   | "none"
@@ -86,6 +87,7 @@ export interface Event {
   other_costs: number | null;
   notes: string | null;
   pos_source: PosSource;
+  cancellation_reason: CancellationReason | null;
   created_at: string;
   updated_at: string;
 }
