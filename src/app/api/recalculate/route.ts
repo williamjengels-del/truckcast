@@ -116,6 +116,25 @@ export async function POST() {
       }
     }
 
+    // Backfill forecasts for past events that were imported or created before forecasting was available
+    const pastEventsWithoutForecast = allEvents.filter(
+      (e) =>
+        e.event_date < today &&
+        e.forecast_sales === null &&
+        e.booked &&
+        !e.cancellation_reason
+    );
+    for (const event of pastEventsWithoutForecast) {
+      const forecastResult = calculateForecast(event, allEvents, { calibratedCoefficients: calibrated });
+      if (forecastResult) {
+        await supabase
+          .from("events")
+          .update({ forecast_sales: forecastResult.forecast })
+          .eq("id", event.id);
+        forecastsUpdated++;
+      }
+    }
+
     return NextResponse.json({
       success: true,
       performanceUpdated: eventNames.length,

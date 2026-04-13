@@ -1145,7 +1145,7 @@ export function EventsClient({ initialEvents, userId = "", businessName = "", us
                       </span>
                     </TableHead>
                     <TableHead
-                      className="hidden lg:table-cell cursor-pointer select-none text-right"
+                      className="hidden md:table-cell cursor-pointer select-none text-right"
                       onClick={() => handleSort("forecast_sales")}
                     >
                       <span className="inline-flex items-center justify-end">
@@ -1154,7 +1154,7 @@ export function EventsClient({ initialEvents, userId = "", businessName = "", us
                       </span>
                     </TableHead>
                     <TableHead
-                      className="hidden xl:table-cell cursor-pointer select-none text-right"
+                      className="hidden lg:table-cell cursor-pointer select-none text-right"
                       onClick={() => handleSort("net_profit")}
                     >
                       <span className="inline-flex items-center justify-end">
@@ -1233,10 +1233,10 @@ export function EventsClient({ initialEvents, userId = "", businessName = "", us
                       <TableCell className="hidden md:table-cell text-right text-sm">
                         {formatCurrency(event.net_after_fees)}
                       </TableCell>
-                      <TableCell className="hidden lg:table-cell text-right text-sm text-muted-foreground">
+                      <TableCell className="hidden md:table-cell text-right text-sm text-muted-foreground">
                         {formatCurrency(event.forecast_sales)}
                       </TableCell>
-                      <TableCell className="hidden xl:table-cell text-right text-sm font-medium">
+                      <TableCell className="hidden lg:table-cell text-right text-sm font-medium">
                         {(() => {
                           const hasCost = event.food_cost !== null || event.labor_cost !== null || event.other_costs !== null;
                           if (!hasCost) return <span className="text-muted-foreground">—</span>;
