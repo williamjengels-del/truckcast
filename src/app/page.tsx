@@ -20,7 +20,7 @@ export const revalidate = 0;
 export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
-  title: "TruckCast by VendCast — The Home Base for Your Food Truck Calendar",
+  title: "VendCast — The Home Base for Your Food Truck Calendar",
   description:
     "Track every event, know your schedule at a glance — and the only tool that tells you which bookings are actually worth taking. Built for food truck operators by VendCast.",
 };
