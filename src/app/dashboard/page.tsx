@@ -128,11 +128,16 @@ export default async function DashboardPage() {
         },
       }
     : null;
-  // Unlogged past events — booked events in the past with no revenue recorded
-  const unloggedEvents = bookedEvents
+  // Unlogged past events — exactly mirrors the Needs Attention tab filter in events-client.tsx
+  // net_sales === null (not just falsy) so explicitly logged $0 events are excluded
+  const unloggedEvents = events
     .filter((e) =>
       e.event_date < today &&
-      !hasRevenue(e) &&
+      e.booked &&
+      !e.cancellation_reason &&
+      e.net_sales === null &&
+      !(e.event_mode === "catering" && e.invoice_revenue > 0) &&
+      e.anomaly_flag !== "disrupted" &&
       e.fee_type !== "pre_settled"
     )
     .sort((a, b) => b.event_date.localeCompare(a.event_date)); // most recent first
