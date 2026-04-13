@@ -12,8 +12,8 @@ import { WelcomeTour } from "@/components/welcome-tour";
 
 export const metadata: Metadata = {
   title: {
-    default: "Dashboard — TruckCast",
-    template: "%s — TruckCast",
+    default: "Dashboard — VendCast",
+    template: "%s — VendCast",
   },
   description: "Manage your food truck events, forecasts, and performance analytics.",
 };
