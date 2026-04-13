@@ -1104,23 +1104,11 @@ export function EventsClient({ initialEvents, userId = "", businessName = "", us
                 {/* Right-edge fade — signals horizontal scroll without requiring user to find the scrollbar */}
                 <div className="pointer-events-none absolute inset-y-0 right-0 w-8 bg-gradient-to-l from-background to-transparent z-10" />
               <div className="overflow-x-auto scroll-smooth">
-              <Table className="table-fixed w-full min-w-[640px]">
-                <colgroup>
-                  <col className="w-[100px]" />         {/* Date */}
-                  <col />                                {/* Event — takes remaining space */}
-                  <col className="w-[110px] hidden md:table-column" /> {/* Type */}
-                  <col className="w-[60px] hidden md:table-column" />  {/* Tier */}
-                  <col className="w-[130px] hidden xl:table-column" /> {/* Location */}
-                  <col className="w-[90px]" />           {/* Net Sales */}
-                  <col className="w-[90px] hidden md:table-column" />  {/* After Fees */}
-                  <col className="w-[90px] hidden md:table-column" />  {/* Forecast */}
-                  <col className="w-[85px] hidden lg:table-column" />  {/* Profit */}
-                  <col className="w-[100px]" />          {/* Actions */}
-                </colgroup>
+              <Table className="w-full min-w-[640px]">
                 <TableHeader className="sticky top-0 z-20 bg-background">
                   <TableRow>
                     <TableHead
-                      className="cursor-pointer select-none whitespace-nowrap"
+                      className="w-[100px] cursor-pointer select-none whitespace-nowrap"
                       onClick={() => handleSort("event_date")}
                     >
                       <span className="inline-flex items-center">
@@ -1138,7 +1126,7 @@ export function EventsClient({ initialEvents, userId = "", businessName = "", us
                       </span>
                     </TableHead>
                     <TableHead
-                      className="hidden md:table-cell cursor-pointer select-none whitespace-nowrap"
+                      className="hidden md:table-cell w-[110px] cursor-pointer select-none whitespace-nowrap"
                       onClick={() => handleSort("event_type")}
                     >
                       <span className="inline-flex items-center">
@@ -1147,7 +1135,7 @@ export function EventsClient({ initialEvents, userId = "", businessName = "", us
                       </span>
                     </TableHead>
                     <TableHead
-                      className="hidden md:table-cell cursor-pointer select-none"
+                      className="hidden md:table-cell w-[60px] cursor-pointer select-none"
                       onClick={() => handleSort("event_tier")}
                     >
                       <span className="inline-flex items-center">
@@ -1156,7 +1144,7 @@ export function EventsClient({ initialEvents, userId = "", businessName = "", us
                       </span>
                     </TableHead>
                     <TableHead
-                      className="hidden xl:table-cell cursor-pointer select-none"
+                      className="hidden xl:table-cell w-[130px] cursor-pointer select-none"
                       onClick={() => handleSort("location")}
                     >
                       <span className="inline-flex items-center">
@@ -1165,7 +1153,7 @@ export function EventsClient({ initialEvents, userId = "", businessName = "", us
                       </span>
                     </TableHead>
                     <TableHead
-                      className="cursor-pointer select-none text-right whitespace-nowrap"
+                      className="w-[95px] cursor-pointer select-none text-right whitespace-nowrap"
                       onClick={() => handleSort("net_sales")}
                     >
                       <span className="inline-flex items-center justify-end">
@@ -1174,7 +1162,7 @@ export function EventsClient({ initialEvents, userId = "", businessName = "", us
                       </span>
                     </TableHead>
                     <TableHead
-                      className="hidden md:table-cell cursor-pointer select-none text-right whitespace-nowrap"
+                      className="hidden md:table-cell w-[90px] cursor-pointer select-none text-right whitespace-nowrap"
                       onClick={() => handleSort("net_after_fees")}
                     >
                       <span className="inline-flex items-center justify-end">
@@ -1183,7 +1171,7 @@ export function EventsClient({ initialEvents, userId = "", businessName = "", us
                       </span>
                     </TableHead>
                     <TableHead
-                      className="hidden md:table-cell cursor-pointer select-none text-right whitespace-nowrap"
+                      className="hidden md:table-cell w-[90px] cursor-pointer select-none text-right whitespace-nowrap"
                       onClick={() => handleSort("forecast_sales")}
                     >
                       <span className="inline-flex items-center justify-end">
@@ -1192,7 +1180,7 @@ export function EventsClient({ initialEvents, userId = "", businessName = "", us
                       </span>
                     </TableHead>
                     <TableHead
-                      className="hidden lg:table-cell cursor-pointer select-none text-right whitespace-nowrap"
+                      className="hidden lg:table-cell w-[85px] cursor-pointer select-none text-right whitespace-nowrap"
                       onClick={() => handleSort("net_profit")}
                     >
                       <span className="inline-flex items-center justify-end">
@@ -1200,7 +1188,7 @@ export function EventsClient({ initialEvents, userId = "", businessName = "", us
                         <SortIcon field="net_profit" />
                       </span>
                     </TableHead>
-                    <TableHead></TableHead>
+                    <TableHead className="w-[100px]"></TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
