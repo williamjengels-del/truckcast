@@ -1141,7 +1141,7 @@ export function EventsClient({ initialEvents, userId = "", businessName = "", us
                       </span>
                     </TableHead>
                     <TableHead
-                      className="hidden lg:table-cell cursor-pointer select-none"
+                      className="hidden xl:table-cell cursor-pointer select-none"
                       onClick={() => handleSort("location")}
                     >
                       <span className="inline-flex items-center">
@@ -1240,7 +1240,7 @@ export function EventsClient({ initialEvents, userId = "", businessName = "", us
                           "—"
                         )}
                       </TableCell>
-                      <TableCell className="hidden lg:table-cell text-sm text-muted-foreground">
+                      <TableCell className="hidden xl:table-cell text-sm text-muted-foreground">
                         {event.location ?? event.city ?? "—"}
                       </TableCell>
                       <TableCell className="text-right font-medium">

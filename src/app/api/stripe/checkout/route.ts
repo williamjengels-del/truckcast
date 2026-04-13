@@ -83,6 +83,14 @@ export async function POST(request: Request) {
       await stripe.subscriptions.cancel(sub.id);
     }
 
+    // Extended beta trial — all signups get a free trial through May 1, 2026.
+    // After that date, remove this block and rely on Stripe price-level trial settings.
+    const MAY_1_2026 = new Date("2026-05-01T00:00:00Z");
+    const trialEnd =
+      MAY_1_2026 > new Date()
+        ? Math.floor(MAY_1_2026.getTime() / 1000)
+        : undefined;
+
     const session = await stripe.checkout.sessions.create({
       customer: customerId,
       mode: "subscription",
@@ -90,6 +98,7 @@ export async function POST(request: Request) {
       success_url: `${origin}/dashboard/settings?upgraded=true`,
       cancel_url: `${origin}/dashboard/settings`,
       metadata: { user_id: user.id, tier },
+      ...(trialEnd ? { subscription_data: { trial_end: trialEnd } } : {}),
     });
 
     return NextResponse.json({ url: session.url });
