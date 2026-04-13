@@ -57,13 +57,22 @@ export default function HistoricalSalesImportPage() {
   const [syncing, setSyncing] = useState(false);
   const [result, setResult] = useState<SyncResult | null>(null);
 
-  // Load connected providers on mount
+  // Load connected providers on mount — wait for auth session before querying
   useEffect(() => {
     async function loadConnections() {
       const supabase = createClient();
+
+      // Ensure session is loaded before querying (RLS requires authenticated user)
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        setLoading(false);
+        return;
+      }
+
       const { data } = await supabase
         .from("pos_connections")
         .select("provider, sync_enabled, last_synced_at")
+        .eq("user_id", user.id)
         .in("provider", ["square", "clover"]);
 
       const validConnections = (data ?? []).filter(
