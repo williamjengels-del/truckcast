@@ -1104,7 +1104,7 @@ export function EventsClient({ initialEvents, userId = "", businessName = "", us
                 {/* Right-edge fade — signals horizontal scroll without requiring user to find the scrollbar */}
                 <div className="pointer-events-none absolute inset-y-0 right-0 w-8 bg-gradient-to-l from-background to-transparent z-10" />
               <div className="overflow-x-auto scroll-smooth">
-              <Table className="w-full min-w-[640px]">
+              <Table className="table-fixed w-full min-w-[700px]">
                 <TableHeader className="sticky top-0 z-20 bg-background">
                   <TableRow>
                     <TableHead
