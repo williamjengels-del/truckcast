@@ -330,19 +330,20 @@ export default async function ReportsPage() {
     }
   }
 
-  // Forecast accuracy
+  // Forecast accuracy — weighted MAPE (revenue-weighted so small events don't skew the metric)
   const eventsWithBoth = completedEvents.filter(
-    (e) => e.forecast_sales !== null && e.forecast_sales > 0
+    (e) => e.forecast_sales !== null && e.forecast_sales > 0 && eventRevenue(e) > 0
   );
   let forecastAccuracy: string | null = null;
   if (eventsWithBoth.length >= 3) {
-    const mape =
-      eventsWithBoth.reduce((sum, e) => {
-        const actual = eventRevenue(e);
-        const forecast = e.forecast_sales ?? 0;
-        return sum + Math.abs(actual - forecast) / Math.max(actual, 1);
-      }, 0) / eventsWithBoth.length;
-    forecastAccuracy = `${Math.round((1 - mape) * 100)}%`;
+    const totalActual = eventsWithBoth.reduce((sum, e) => sum + eventRevenue(e), 0);
+    const weightedError = eventsWithBoth.reduce((sum, e) => {
+      const actual = eventRevenue(e);
+      const forecast = e.forecast_sales ?? 0;
+      const weight = actual / totalActual;
+      return sum + weight * (Math.abs(actual - forecast) / actual);
+    }, 0);
+    forecastAccuracy = `${Math.round((1 - weightedError) * 100)}%`;
   }
 
   const overallAvg = avgPerEvent;

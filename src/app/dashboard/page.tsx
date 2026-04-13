@@ -163,19 +163,22 @@ export default async function DashboardPage() {
   const ytdMargin = ytdCostableRevenue > 0 ? (ytdProfit / ytdCostableRevenue) * 100 : null;
   const showProfitKpi = ytdEventsWithCosts.length > 0;
 
-  // Forecast accuracy (MAPE)
+  // Forecast accuracy — weighted MAPE (revenue-weighted so small events don't skew the metric)
+  // Each event's error is weighted by its actual revenue, so a $5,000 event counts far more
+  // than a $50 event. This matches the "within 16% aggregate" claim on the landing page.
   const eventsWithBoth = completedEvents.filter(
-    (e) => e.forecast_sales !== null && e.forecast_sales > 0
+    (e) => e.forecast_sales !== null && e.forecast_sales > 0 && eventRevenue(e) > 0
   );
   let forecastAccuracy = "N/A";
   if (eventsWithBoth.length >= 3) {
-    const mape =
-      eventsWithBoth.reduce((sum, e) => {
-        const actual = eventRevenue(e);
-        const forecast = e.forecast_sales ?? 0;
-        return sum + Math.abs(actual - forecast) / Math.max(actual, 1);
-      }, 0) / eventsWithBoth.length;
-    forecastAccuracy = `${Math.round((1 - mape) * 100)}%`;
+    const totalActual = eventsWithBoth.reduce((sum, e) => sum + eventRevenue(e), 0);
+    const weightedError = eventsWithBoth.reduce((sum, e) => {
+      const actual = eventRevenue(e);
+      const forecast = e.forecast_sales ?? 0;
+      const weight = actual / totalActual;
+      return sum + weight * (Math.abs(actual - forecast) / actual);
+    }, 0);
+    forecastAccuracy = `${Math.round((1 - weightedError) * 100)}%`;
   }
 
   // Monthly revenue data for chart
