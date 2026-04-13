@@ -891,12 +891,14 @@ function TopEventsSection({ top10 }: { top10: Top10Row[] }) {
 // ─── Year over Year Section ────────────────────────────────────────────────────
 
 function YoYSection({ yoyData }: { yoyData: YoYData[] }) {
+  const now = new Date();
+  const ytdLabel = now.toLocaleDateString("en-US", { month: "short", day: "numeric" });
   return (
     <CollapsibleSection
-      title="Year over Year"
+      title="Year over Year (YTD)"
       summary={
         yoyData.length >= 2
-          ? `${yoyData[yoyData.length - 1].year}–${yoyData[0].year} comparison`
+          ? `Jan 1–${ytdLabel} comparison across years`
           : "Needs 2+ years of data"
       }
     >
@@ -910,7 +912,7 @@ function YoYSection({ yoyData }: { yoyData: YoYData[] }) {
             <TableRow>
               <TableHead>Year</TableHead>
               <TableHead className="text-right">Events</TableHead>
-              <TableHead className="text-right">Total Revenue</TableHead>
+              <TableHead className="text-right">Revenue (Jan 1–{ytdLabel})</TableHead>
               <TableHead className="text-right">Avg / Event</TableHead>
               <TableHead className="text-right">YoY Change</TableHead>
             </TableRow>

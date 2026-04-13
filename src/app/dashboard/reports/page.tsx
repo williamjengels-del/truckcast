@@ -152,11 +152,25 @@ export default async function ReportsPage() {
     }))
     .sort((a, b) => b.avgRevenue - a.avgRevenue);
 
-  // --- Year over Year ---
+  // --- Year over Year (YTD-normalized) ---
+  // Cap every year at today's month+day so we compare apples-to-apples.
+  // e.g. on Apr 13: 2026 = Jan 1–Apr 13 vs 2025 = Jan 1–Apr 13, not all of 2025.
+  const now = new Date();
+  const currentMonth = now.getMonth(); // 0-indexed
+  const currentDay = now.getDate();
+
   const yearMap = new Map<number, { count: number; totalRevenue: number }>();
   for (const e of completedEvents) {
     const d = new Date(e.event_date + "T00:00:00");
     const year = d.getFullYear();
+    // Only include if it falls within the YTD window for that year
+    const eventMonth = d.getMonth();
+    const eventDay = d.getDate();
+    const withinYTD =
+      eventMonth < currentMonth ||
+      (eventMonth === currentMonth && eventDay <= currentDay);
+    if (!withinYTD) continue;
+
     if (!yearMap.has(year)) {
       yearMap.set(year, { count: 0, totalRevenue: 0 });
     }
