@@ -1105,7 +1105,7 @@ export function EventsClient({ initialEvents, userId = "", businessName = "", us
                 <TableHeader>
                   <TableRow>
                     <TableHead
-                      className="cursor-pointer select-none"
+                      className="cursor-pointer select-none pr-6 whitespace-nowrap"
                       onClick={() => handleSort("event_date")}
                     >
                       <span className="inline-flex items-center">
@@ -1123,7 +1123,7 @@ export function EventsClient({ initialEvents, userId = "", businessName = "", us
                       </span>
                     </TableHead>
                     <TableHead
-                      className="hidden md:table-cell cursor-pointer select-none"
+                      className="hidden md:table-cell cursor-pointer select-none pl-6 pr-4"
                       onClick={() => handleSort("event_type")}
                     >
                       <span className="inline-flex items-center">
@@ -1132,7 +1132,7 @@ export function EventsClient({ initialEvents, userId = "", businessName = "", us
                       </span>
                     </TableHead>
                     <TableHead
-                      className="hidden md:table-cell cursor-pointer select-none"
+                      className="hidden md:table-cell cursor-pointer select-none pl-4"
                       onClick={() => handleSort("event_tier")}
                     >
                       <span className="inline-flex items-center">
@@ -1203,7 +1203,7 @@ export function EventsClient({ initialEvents, userId = "", businessName = "", us
                       }`}
                       onClick={() => setEditingEvent(event)}
                     >
-                      <TableCell className="whitespace-nowrap text-sm">
+                      <TableCell className="whitespace-nowrap text-sm pr-6">
                         {formatDate(event.event_date)}
                         {event.cancellation_reason && (
                           <Badge variant="outline" className="ml-2 text-xs text-red-600 border-red-300 dark:text-red-400 dark:border-red-700">
@@ -1225,10 +1225,10 @@ export function EventsClient({ initialEvents, userId = "", businessName = "", us
                         {/* Forecast vs Actual for past events */}
                         <ForecastVsActual event={event} />
                       </TableCell>
-                      <TableCell className="hidden md:table-cell text-sm text-muted-foreground">
+                      <TableCell className="hidden md:table-cell text-sm text-muted-foreground pl-6 pr-4">
                         {event.event_type ?? "—"}
                       </TableCell>
-                      <TableCell className="hidden md:table-cell">
+                      <TableCell className="hidden md:table-cell pl-4">
                         {event.event_tier ? (
                           <Badge
                             variant="outline"
