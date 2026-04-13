@@ -28,3 +28,10 @@ jobs:
         env:
           VERCEL_ORG_ID: team_CCyAXGUAVGcHdMkx89WY3JoJ
           VERCEL_PROJECT_ID: prj_rsbYIGAbv90kawXEqZ1LOgtlnh9i
+
+      - name: Purge Cloudflare cache
+        run: |
+          curl -s -X POST "https://api.cloudflare.com/client/v4/zones/${{ secrets.CLOUDFLARE_ZONE_ID }}/purge_cache" \
+            -H "Authorization: Bearer ${{ secrets.CLOUDFLARE_API_TOKEN }}" \
+            -H "Content-Type: application/json" \
+            --data '{"purge_everything":true}'
