@@ -170,6 +170,12 @@ export function EventsClient({ initialEvents, userId = "", businessName = "", us
     }
   }, [searchParams]);
 
+  // Auto-switch tab if ?tab= is set in URL
+  useEffect(() => {
+    const tab = searchParams.get("tab") as TabMode | null;
+    if (tab) setActiveTab(tab);
+  }, [searchParams]);
+
   function handleViewMode(mode: ViewMode) {
     setViewMode(mode);
     localStorage.setItem("events_view_mode", mode);

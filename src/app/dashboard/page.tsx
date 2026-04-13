@@ -338,7 +338,7 @@ export default async function DashboardPage() {
                 {unloggedEvents.length} event{unloggedEvents.length !== 1 ? "s" : ""} need{unloggedEvents.length === 1 ? "s" : ""} revenue logged
               </p>
             </div>
-            <Link href="/dashboard/events?tab=past">
+            <Link href="/dashboard/events?tab=flagged">
               <Button variant="outline" size="sm" className="text-xs border-amber-300 hover:bg-amber-100 dark:border-amber-800 dark:hover:bg-amber-900/30">
                 View all
               </Button>
@@ -355,7 +355,7 @@ export default async function DashboardPage() {
                     <span className="ml-1.5 text-xs font-medium opacity-70">(catering)</span>
                   )}
                 </span>
-                <Link href="/dashboard/events?tab=past" className="text-xs text-amber-700 dark:text-amber-500 hover:underline shrink-0 font-medium">
+                <Link href="/dashboard/events?tab=flagged" className="text-xs text-amber-700 dark:text-amber-500 hover:underline shrink-0 font-medium">
                   {e.event_mode === "catering" ? "Log invoice →" : "Log sales →"}
                 </Link>
               </div>
