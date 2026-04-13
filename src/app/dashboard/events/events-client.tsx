@@ -42,6 +42,7 @@ import {
   Heart,
   CopyPlus,
   BookCheck,
+  RefreshCw,
 } from "lucide-react";
 import { EventForm } from "@/components/event-form";
 import { SalesEntryDialog } from "@/components/sales-entry-dialog";
@@ -145,6 +146,8 @@ export function EventsClient({ initialEvents, userId = "", businessName = "", us
   const [weatherMap, setWeatherMap] = useState<Map<string, WeatherForecast>>(new Map());
   const [showShareModal, setShowShareModal] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+  const [refreshMsg, setRefreshMsg] = useState<string | null>(null);
   const shareTextRef = useRef<HTMLTextAreaElement>(null);
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -470,6 +473,26 @@ export function EventsClient({ initialEvents, userId = "", businessName = "", us
       anomaly_flag: "normal",
     };
     setDuplicatingEvent(template);
+  }
+
+  async function handleRefreshForecasts() {
+    setRefreshing(true);
+    setRefreshMsg(null);
+    try {
+      const res = await fetch("/api/recalculate", { method: "POST" });
+      if (res.ok) {
+        const data = await res.json() as { forecastsUpdated?: number };
+        setRefreshMsg(`Updated ${data.forecastsUpdated ?? 0} forecast${data.forecastsUpdated === 1 ? "" : "s"}`);
+        router.refresh();
+      } else {
+        setRefreshMsg("Failed — try again");
+      }
+    } catch {
+      setRefreshMsg("Failed — try again");
+    } finally {
+      setRefreshing(false);
+      setTimeout(() => setRefreshMsg(null), 4000);
+    }
   }
 
   function exportCSV() {
@@ -1377,6 +1400,24 @@ export function EventsClient({ initialEvents, userId = "", businessName = "", us
           </p>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
+          {/* Refresh Forecasts button */}
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              className="gap-2"
+              onClick={handleRefreshForecasts}
+              disabled={refreshing}
+              title="Recalculate all forecasts and backfill any missing ones"
+            >
+              <RefreshCw className={`h-4 w-4 ${refreshing ? "animate-spin" : ""}`} />
+              <span className="hidden sm:inline">{refreshing ? "Refreshing…" : "Refresh Forecasts"}</span>
+            </Button>
+            {refreshMsg && (
+              <span className="text-xs text-muted-foreground">{refreshMsg}</span>
+            )}
+          </div>
+
           {/* Export CSV button */}
           {initialEvents.length > 0 && (
             <Button
