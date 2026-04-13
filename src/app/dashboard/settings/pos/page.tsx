@@ -265,7 +265,16 @@ function PosSettingsContent() {
   );
 }
 
+interface HistoricalSyncResult {
+  success: boolean;
+  eventsUpdated: number;
+  daysWithSales: number;
+  ordersFound: number;
+  error?: string;
+}
+
 function PosProviderCard({
+  provider,
   label,
   description,
   connection,
@@ -292,6 +301,57 @@ function PosProviderCard({
   onLocationToggle: (locationId: string) => void;
 }) {
   const isConnected = !!connection;
+
+  // Historical sync state
+  const [showHistorical, setShowHistorical] = useState(false);
+  const [histStartDate, setHistStartDate] = useState(() => {
+    const d = new Date();
+    d.setFullYear(d.getFullYear() - 1);
+    return d.toISOString().slice(0, 10);
+  });
+  const [histEndDate, setHistEndDate] = useState(() => {
+    const d = new Date();
+    d.setDate(d.getDate() - 1);
+    return d.toISOString().slice(0, 10);
+  });
+  const [historicalSyncing, setHistoricalSyncing] = useState(false);
+  const [historicalResult, setHistoricalResult] = useState<HistoricalSyncResult | null>(null);
+
+  const dayCount =
+    histStartDate && histEndDate
+      ? Math.round(
+          (new Date(histEndDate).getTime() - new Date(histStartDate).getTime()) /
+            (1000 * 60 * 60 * 24)
+        ) + 1
+      : 0;
+
+  async function handleHistoricalSync() {
+    if (!histStartDate || !histEndDate) return;
+    setHistoricalSyncing(true);
+    setHistoricalResult(null);
+    try {
+      const res = await fetch(`/api/pos/${provider}/sync`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ startDate: histStartDate, endDate: histEndDate }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setHistoricalResult({ success: false, eventsUpdated: 0, daysWithSales: 0, ordersFound: 0, error: data.error ?? "Sync failed." });
+      } else {
+        setHistoricalResult({
+          success: true,
+          eventsUpdated: data.eventsUpdated ?? 0,
+          daysWithSales: data.daysWithSales ?? 0,
+          ordersFound: data.ordersFound ?? 0,
+        });
+      }
+    } catch {
+      setHistoricalResult({ success: false, eventsUpdated: 0, daysWithSales: 0, ordersFound: 0, error: "Network error. Check your connection." });
+    } finally {
+      setHistoricalSyncing(false);
+    }
+  }
 
   return (
     <Card className="max-w-2xl">
@@ -397,7 +457,7 @@ function PosProviderCard({
               </div>
             )}
 
-            {/* Sync button */}
+            {/* Sync Now */}
             <div className="flex flex-wrap items-center gap-3">
               <Button onClick={onSync} disabled={syncing}>
                 {syncing ? "Syncing..." : "Sync Now"}
@@ -405,12 +465,128 @@ function PosProviderCard({
               <p className="text-xs text-muted-foreground">
                 Pulls yesterday&apos;s orders and matches to your booked events
               </p>
-              <a
-                href="/dashboard/events/import/historical"
-                className="text-xs text-primary hover:underline"
+            </div>
+
+            {/* Historical date range sync */}
+            <div className="border rounded-md">
+              <button
+                type="button"
+                className="w-full flex items-center justify-between px-4 py-3 text-sm font-medium hover:bg-muted/50 transition-colors rounded-md"
+                onClick={() => { setShowHistorical((v) => !v); setHistoricalResult(null); }}
               >
-                Import a custom date range →
-              </a>
+                <span>Import a custom date range</span>
+                <span className="text-muted-foreground text-xs">{showHistorical ? "▲ collapse" : "▼ expand"}</span>
+              </button>
+
+              {showHistorical && (
+                <div className="px-4 pb-4 space-y-4 border-t">
+                  <p className="text-xs text-muted-foreground pt-3">
+                    Pull historical orders for any date range. Sales are matched to booked events by date.
+                  </p>
+
+                  {/* Date inputs */}
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="space-y-1">
+                      <Label htmlFor={`${provider}-hist-start`} className="text-xs">Start date</Label>
+                      <Input
+                        id={`${provider}-hist-start`}
+                        type="date"
+                        value={histStartDate}
+                        onChange={(e) => setHistStartDate(e.target.value)}
+                        max={histEndDate || undefined}
+                        className="text-sm"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <Label htmlFor={`${provider}-hist-end`} className="text-xs">End date</Label>
+                      <Input
+                        id={`${provider}-hist-end`}
+                        type="date"
+                        value={histEndDate}
+                        onChange={(e) => setHistEndDate(e.target.value)}
+                        min={histStartDate || undefined}
+                        max={new Date().toISOString().slice(0, 10)}
+                        className="text-sm"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Quick presets */}
+                  <div className="flex flex-wrap gap-1.5">
+                    {[
+                      { label: "30 days", days: 30 },
+                      { label: "90 days", days: 90 },
+                      { label: "6 months", days: 180 },
+                      { label: "1 year", days: 365 },
+                      { label: "2 years", days: 730 },
+                    ].map(({ label: l, days }) => (
+                      <button
+                        key={l}
+                        onClick={() => {
+                          const end = new Date();
+                          end.setDate(end.getDate() - 1);
+                          const start = new Date();
+                          start.setDate(start.getDate() - days);
+                          setHistStartDate(start.toISOString().slice(0, 10));
+                          setHistEndDate(end.toISOString().slice(0, 10));
+                        }}
+                        className="text-xs px-2 py-1 rounded border hover:bg-muted transition-colors text-muted-foreground"
+                      >
+                        {l}
+                      </button>
+                    ))}
+                  </div>
+
+                  {dayCount > 0 && (
+                    <p className="text-xs text-muted-foreground">
+                      {dayCount.toLocaleString()} day range
+                      {dayCount > 365 && (
+                        <span className="text-amber-600 font-medium"> — may take 30–60 seconds</span>
+                      )}
+                    </p>
+                  )}
+
+                  <Button
+                    onClick={handleHistoricalSync}
+                    disabled={historicalSyncing || !histStartDate || !histEndDate || histStartDate > histEndDate}
+                    size="sm"
+                  >
+                    {historicalSyncing ? "Pulling sales…" : "Pull Historical Sales"}
+                  </Button>
+
+                  {/* Result */}
+                  {historicalResult && (
+                    <div
+                      className={`rounded-md p-3 text-sm space-y-1 ${
+                        historicalResult.success
+                          ? "bg-emerald-50 border border-emerald-200"
+                          : "bg-red-50 border border-red-200"
+                      }`}
+                    >
+                      {historicalResult.success ? (
+                        <>
+                          <p className="font-medium text-emerald-800">Sync complete</p>
+                          <p className="text-emerald-700">
+                            {historicalResult.ordersFound.toLocaleString()} orders found &middot;{" "}
+                            {historicalResult.daysWithSales} days with sales &middot;{" "}
+                            {historicalResult.eventsUpdated} events updated
+                          </p>
+                          {historicalResult.eventsUpdated === 0 && historicalResult.daysWithSales > 0 && (
+                            <p className="text-amber-700 text-xs mt-1">
+                              Sales found but no matching events updated — make sure events are booked for those dates.
+                            </p>
+                          )}
+                        </>
+                      ) : (
+                        <>
+                          <p className="font-medium text-red-800">Sync failed</p>
+                          <p className="text-red-700">{historicalResult.error}</p>
+                        </>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           </>
         )}
