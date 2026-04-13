@@ -1100,9 +1100,12 @@ export function EventsClient({ initialEvents, userId = "", businessName = "", us
                   : "No events match your search."}
               </div>
             ) : (
-              <div className="overflow-x-auto">
+              <div className="relative">
+                {/* Right-edge fade — signals horizontal scroll without requiring user to hunt for scrollbar */}
+                <div className="pointer-events-none absolute inset-y-0 right-0 w-8 bg-gradient-to-l from-background to-transparent z-10 lg:hidden" />
+              <div className="overflow-x-auto scroll-smooth">
               <Table>
-                <TableHeader>
+                <TableHeader className="sticky top-0 z-20 bg-background">
                   <TableRow>
                     <TableHead
                       className="cursor-pointer select-none"
@@ -1380,6 +1383,7 @@ export function EventsClient({ initialEvents, userId = "", businessName = "", us
                   ))}
                 </TableBody>
               </Table>
+              </div>
               </div>
             )}
           </CardContent>
