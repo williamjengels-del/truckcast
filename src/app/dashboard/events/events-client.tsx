@@ -1100,15 +1100,12 @@ export function EventsClient({ initialEvents, userId = "", businessName = "", us
                   : "No events match your search."}
               </div>
             ) : (
-              <div className="relative">
-                {/* Right-edge fade — signals horizontal scroll without requiring user to find the scrollbar */}
-                <div className="pointer-events-none absolute inset-y-0 right-0 w-8 bg-gradient-to-l from-background to-transparent z-10" />
-              <div className="overflow-x-auto scroll-smooth">
-              <Table className="table-fixed w-full min-w-[700px]">
-                <TableHeader className="sticky top-0 z-20 bg-background">
+              <div className="overflow-x-auto">
+              <Table>
+                <TableHeader>
                   <TableRow>
                     <TableHead
-                      className="w-[100px] cursor-pointer select-none whitespace-nowrap"
+                      className="cursor-pointer select-none"
                       onClick={() => handleSort("event_date")}
                     >
                       <span className="inline-flex items-center">
@@ -1126,7 +1123,7 @@ export function EventsClient({ initialEvents, userId = "", businessName = "", us
                       </span>
                     </TableHead>
                     <TableHead
-                      className="hidden md:table-cell w-[110px] cursor-pointer select-none whitespace-nowrap"
+                      className="hidden md:table-cell cursor-pointer select-none"
                       onClick={() => handleSort("event_type")}
                     >
                       <span className="inline-flex items-center">
@@ -1135,7 +1132,7 @@ export function EventsClient({ initialEvents, userId = "", businessName = "", us
                       </span>
                     </TableHead>
                     <TableHead
-                      className="hidden md:table-cell w-[60px] cursor-pointer select-none"
+                      className="hidden md:table-cell cursor-pointer select-none"
                       onClick={() => handleSort("event_tier")}
                     >
                       <span className="inline-flex items-center">
@@ -1144,7 +1141,7 @@ export function EventsClient({ initialEvents, userId = "", businessName = "", us
                       </span>
                     </TableHead>
                     <TableHead
-                      className="hidden xl:table-cell w-[130px] cursor-pointer select-none"
+                      className="hidden xl:table-cell cursor-pointer select-none"
                       onClick={() => handleSort("location")}
                     >
                       <span className="inline-flex items-center">
@@ -1153,7 +1150,7 @@ export function EventsClient({ initialEvents, userId = "", businessName = "", us
                       </span>
                     </TableHead>
                     <TableHead
-                      className="w-[95px] cursor-pointer select-none text-right whitespace-nowrap"
+                      className="cursor-pointer select-none text-right"
                       onClick={() => handleSort("net_sales")}
                     >
                       <span className="inline-flex items-center justify-end">
@@ -1162,7 +1159,7 @@ export function EventsClient({ initialEvents, userId = "", businessName = "", us
                       </span>
                     </TableHead>
                     <TableHead
-                      className="hidden md:table-cell w-[90px] cursor-pointer select-none text-right whitespace-nowrap"
+                      className="hidden md:table-cell cursor-pointer select-none text-right"
                       onClick={() => handleSort("net_after_fees")}
                     >
                       <span className="inline-flex items-center justify-end">
@@ -1171,7 +1168,7 @@ export function EventsClient({ initialEvents, userId = "", businessName = "", us
                       </span>
                     </TableHead>
                     <TableHead
-                      className="hidden md:table-cell w-[90px] cursor-pointer select-none text-right whitespace-nowrap"
+                      className="hidden md:table-cell cursor-pointer select-none text-right"
                       onClick={() => handleSort("forecast_sales")}
                     >
                       <span className="inline-flex items-center justify-end">
@@ -1180,7 +1177,7 @@ export function EventsClient({ initialEvents, userId = "", businessName = "", us
                       </span>
                     </TableHead>
                     <TableHead
-                      className="hidden lg:table-cell w-[85px] cursor-pointer select-none text-right whitespace-nowrap"
+                      className="hidden lg:table-cell cursor-pointer select-none text-right"
                       onClick={() => handleSort("net_profit")}
                     >
                       <span className="inline-flex items-center justify-end">
@@ -1188,7 +1185,7 @@ export function EventsClient({ initialEvents, userId = "", businessName = "", us
                         <SortIcon field="net_profit" />
                       </span>
                     </TableHead>
-                    <TableHead className="w-[100px]"></TableHead>
+                    <TableHead></TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -1223,8 +1220,8 @@ export function EventsClient({ initialEvents, userId = "", businessName = "", us
                           <WeatherBadge event={event} />
                         )}
                       </TableCell>
-                      <TableCell className="font-medium max-w-0">
-                        <div className="truncate" title={event.event_name}>{event.event_name}</div>
+                      <TableCell className="font-medium">
+                        <div>{event.event_name}</div>
                         {/* Forecast vs Actual for past events */}
                         <ForecastVsActual event={event} />
                       </TableCell>
@@ -1383,7 +1380,6 @@ export function EventsClient({ initialEvents, userId = "", businessName = "", us
                   ))}
                 </TableBody>
               </Table>
-              </div>
               </div>
             )}
           </CardContent>
