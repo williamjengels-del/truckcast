@@ -34,6 +34,8 @@ import {
   Download,
   Link,
   Loader2,
+  ChevronDown,
+  ChevronRight,
 } from "lucide-react";
 
 // ═══════════════════════════════════════════════════════════════════════
@@ -144,6 +146,37 @@ const FIELD_OPTIONS: { value: FieldKey | "skip"; label: string; description: str
   { value: "food_cost", label: "Food Cost", description: "Cost of food/ingredients" },
   { value: "labor_cost", label: "Labor Cost", description: "Labor / staffing cost" },
   { value: "other_costs", label: "Other Costs", description: "Supplies, fuel, misc costs" },
+];
+
+// Basic fields shown by default; advanced fields hidden until toggle is expanded
+const BASIC_FIELD_VALUES: (FieldKey | "skip")[] = [
+  "skip",
+  "event_name",
+  "event_date",
+  "start_time",
+  "end_time",
+  "city",
+  "location",
+  "net_sales",
+  "event_type",
+  "booked",
+];
+
+const ADVANCED_FIELD_VALUES: (FieldKey | "skip")[] = [
+  "setup_time",
+  "fee_type",
+  "fee_rate",
+  "sales_minimum",
+  "forecast_sales",
+  "event_tier",
+  "anomaly_flag",
+  "weather_type",
+  "expected_attendance",
+  "notes",
+  "event_mode",
+  "food_cost",
+  "labor_cost",
+  "other_costs",
 ];
 
 // ═══════════════════════════════════════════════════════════════════════
@@ -694,6 +727,7 @@ export default function ImportPage() {
   const [duplicates, setDuplicates] = useState<DuplicateMatch[]>([]);
   const [checkingDuplicates, setCheckingDuplicates] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
+  const [showAdvancedFields, setShowAdvancedFields] = useState(false);
 
   const router = useRouter();
   const supabase = createClient();
@@ -1355,6 +1389,25 @@ export default function ImportPage() {
               </p>
             )}
 
+            {/* Advanced options toggle */}
+            <div className="flex items-center justify-between">
+              <p className="text-xs text-muted-foreground">
+                Showing basic fields. Advanced fields (weather, anomaly, fees, costs) are hidden by default.
+              </p>
+              <button
+                type="button"
+                onClick={() => setShowAdvancedFields((v) => !v)}
+                className="flex items-center gap-1.5 text-xs font-medium text-primary hover:underline shrink-0"
+              >
+                {showAdvancedFields ? (
+                  <ChevronDown className="h-3.5 w-3.5" />
+                ) : (
+                  <ChevronRight className="h-3.5 w-3.5" />
+                )}
+                {showAdvancedFields ? "Hide advanced options" : "Show advanced options"}
+              </button>
+            </div>
+
             <div className="border rounded-lg overflow-hidden">
               <Table>
                 <TableHeader>
@@ -1382,6 +1435,15 @@ export default function ImportPage() {
                             auto
                           </Badge>
                         )}
+                        {/* Badge if this column is mapped to an advanced field */}
+                        {ADVANCED_FIELD_VALUES.includes(col.assignedField) && col.assignedField !== "skip" && (
+                          <Badge
+                            variant="outline"
+                            className="ml-2 text-xs text-indigo-700 border-indigo-300"
+                          >
+                            advanced
+                          </Badge>
+                        )}
                       </TableCell>
                       <TableCell>
                         <Select
@@ -1394,7 +1456,10 @@ export default function ImportPage() {
                             <SelectValue />
                           </SelectTrigger>
                           <SelectContent>
-                            {FIELD_OPTIONS.map((opt) => (
+                            {/* Always show basic fields */}
+                            {FIELD_OPTIONS.filter((opt) =>
+                              BASIC_FIELD_VALUES.includes(opt.value)
+                            ).map((opt) => (
                               <SelectItem key={opt.value} value={opt.value}>
                                 <span>{opt.label}</span>
                                 <span className="ml-2 text-xs text-muted-foreground">
@@ -1402,6 +1467,24 @@ export default function ImportPage() {
                                 </span>
                               </SelectItem>
                             ))}
+                            {/* Advanced fields — shown when toggle is on, or when current value is an advanced field */}
+                            {(showAdvancedFields || ADVANCED_FIELD_VALUES.includes(col.assignedField)) && (
+                              <>
+                                <div className="px-2 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground border-t mt-1 pt-2">
+                                  Advanced
+                                </div>
+                                {FIELD_OPTIONS.filter((opt) =>
+                                  ADVANCED_FIELD_VALUES.includes(opt.value)
+                                ).map((opt) => (
+                                  <SelectItem key={opt.value} value={opt.value}>
+                                    <span>{opt.label}</span>
+                                    <span className="ml-2 text-xs text-muted-foreground">
+                                      {opt.description}
+                                    </span>
+                                  </SelectItem>
+                                ))}
+                              </>
+                            )}
                           </SelectContent>
                         </Select>
                       </TableCell>
