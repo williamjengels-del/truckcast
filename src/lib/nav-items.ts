@@ -11,6 +11,7 @@ import {
   Bell,
   BookOpen,
   Plug,
+  Compass,
 } from "lucide-react";
 import type { SubscriptionTier } from "@/lib/database.types";
 
@@ -32,6 +33,7 @@ export const navItems: NavItem[] = [
   { href: "/dashboard/bookings", label: "Bookings", icon: BookOpen },
   { href: "/dashboard/contacts", label: "Contacts", icon: Users },
   { href: "/dashboard/followers", label: "Followers", icon: Bell, tier: "premium" },
+  { href: "/dashboard/discover", label: "Discover", icon: Compass, tier: "pro" },
   { href: "/dashboard/events/import", label: "Import CSV", icon: Upload },
   { href: "/dashboard/settings/pos", label: "POS Integrations", icon: Plug },
   { href: "/dashboard/settings", label: "Settings", icon: Settings },
