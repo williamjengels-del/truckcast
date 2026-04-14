@@ -60,7 +60,7 @@ import {
   deleteAllEvents,
   dismissFlaggedEvent,
 } from "@/app/dashboard/events/actions";
-import { TIER_COLORS } from "@/lib/constants";
+import { TIER_COLORS, WEATHER_COEFFICIENTS } from "@/lib/constants";
 import { normalizeCityForGeocoding } from "@/lib/weather";
 import type { Event } from "@/lib/database.types";
 import type { EventFormData } from "@/app/dashboard/events/actions";
@@ -875,8 +875,9 @@ export function EventsClient({ initialEvents, userId = "", businessName = "", us
                     </div>
                   </div>
                   {event.forecast_sales && (
-                    <p className="text-xs text-muted-foreground mt-1">
+                    <p className="text-xs text-muted-foreground mt-1 flex items-center flex-wrap gap-x-1">
                       Forecast: <span className="font-medium text-foreground">{formatCurrency(event.forecast_sales)}</span>
+                      <WeatherForecastImpact event={event} />
                     </p>
                   )}
                 </div>
@@ -909,6 +910,43 @@ export function EventsClient({ initialEvents, userId = "", businessName = "", us
       >
         {icon}
         <span>{wx.tempHigh}°/{wx.tempLow}°</span>
+      </span>
+    );
+  }
+
+  // ---- WEATHER IMPACT ON FORECAST ----
+  // Shows a qualitative indicator when weather is meaningfully adjusting an upcoming event's forecast.
+  // Uses stored event_weather + known coefficients to infer direction and magnitude.
+  function WeatherForecastImpact({ event }: { event: Event }) {
+    if (!event.event_weather || !event.forecast_sales || event.forecast_sales <= 0) return null;
+    if (event.event_date < today) return null; // only for upcoming events
+
+    const coeff = WEATHER_COEFFICIENTS[event.event_weather];
+    if (coeff === undefined || coeff === null) return null;
+
+    // Only show when there's a meaningful deviation (coeff differs from Clear=1.0 by >5%)
+    const deviation = Math.abs(coeff - 1.0);
+    if (deviation < 0.05) return null;
+
+    // Base forecast without weather would be forecast_sales / coeff
+    const baseForecast = event.forecast_sales / coeff;
+    const dollarImpact = Math.round(event.forecast_sales - baseForecast);
+    const absImpact = Math.abs(dollarImpact);
+
+    // Only show when impact is > $10
+    if (absImpact < 10) return null;
+
+    const isNegative = dollarImpact < 0;
+    const sign = isNegative ? "-" : "+";
+    const color = isNegative ? "text-red-600 dark:text-red-400" : "text-green-600 dark:text-green-400";
+    const arrow = isNegative ? "↓" : "↑";
+
+    return (
+      <span
+        className={`inline-flex items-center gap-0.5 text-xs ${color} ml-1`}
+        title={`Weather (${event.event_weather}) adjusting forecast by ${sign}$${absImpact.toLocaleString()} — coefficient: ${coeff}`}
+      >
+        {arrow} {sign}${absImpact.toLocaleString()} weather
       </span>
     );
   }
@@ -1263,7 +1301,10 @@ export function EventsClient({ initialEvents, userId = "", businessName = "", us
                         {formatCurrency(event.net_after_fees)}
                       </TableCell>
                       <TableCell className="hidden lg:table-cell text-right text-sm text-muted-foreground">
-                        {formatCurrency(event.forecast_sales)}
+                        <div>{formatCurrency(event.forecast_sales)}</div>
+                        {event.event_date >= today && (
+                          <WeatherForecastImpact event={event} />
+                        )}
                       </TableCell>
                       <TableCell className="hidden xl:table-cell text-right text-sm font-medium">
                         {(() => {
