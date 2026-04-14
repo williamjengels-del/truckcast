@@ -9,6 +9,8 @@ import { FeedbackDialog } from "@/components/feedback-dialog";
 import { ErrorBoundary } from "@/components/error-boundary";
 import { TrialBanner } from "@/components/trial-banner";
 import { WelcomeTour } from "@/components/welcome-tour";
+import { ChatWidget } from "@/components/chat-widget";
+import { createClient } from "@/lib/supabase/server";
 
 export const metadata: Metadata = {
   title: {
@@ -18,11 +20,25 @@ export const metadata: Metadata = {
   description: "Manage your food truck events, forecasts, and performance analytics.",
 };
 
-export default function DashboardLayout({
+export default async function DashboardLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+
+  let isPro = false;
+  if (user) {
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("subscription_tier")
+      .eq("id", user.id)
+      .single();
+    const tier = profile?.subscription_tier ?? "starter";
+    isPro = tier === "pro" || tier === "premium";
+  }
+
   return (
     <div className="flex h-screen overflow-hidden">
       <Sidebar />
@@ -37,6 +53,7 @@ export default function DashboardLayout({
       </div>
       <FeedbackDialog />
       <WelcomeTour />
+      <ChatWidget isPro={isPro} />
     </div>
   );
 }
