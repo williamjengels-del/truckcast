@@ -20,6 +20,7 @@ import {
   Sparkles,
 } from "lucide-react";
 import { DashboardCharts } from "./dashboard-charts";
+import { DashboardHeroChart } from "./hero-chart";
 import { SetupProgress } from "@/components/setup-progress";
 import { JourneyCallout } from "@/components/journey-callout";
 import { computeJourneyState } from "@/lib/user-journey";
@@ -502,6 +503,9 @@ export default async function DashboardPage() {
         </div>
       ) : (
         <>
+          {/* ── Rolling 12-Week Hero Chart ── */}
+          <DashboardHeroChart rollingWeekData={rollingWeekData} />
+
           {/* ── Season Progress Hero ── */}
           <div className="rounded-xl border bg-gradient-to-br from-orange-50 to-amber-50 dark:from-orange-950/20 dark:to-amber-950/10 p-5 md:p-6">
             <div className="flex items-center justify-between mb-4">
