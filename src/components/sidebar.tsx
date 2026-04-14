@@ -26,19 +26,23 @@ export function Sidebar() {
         supabase.from("profiles").select("subscription_tier").eq("id", user.id).single(),
         supabase
           .from("events")
-          .select("id, event_mode, invoice_revenue")
+          .select("id, event_mode, invoice_revenue, anomaly_flag, cancellation_reason")
           .eq("user_id", user.id)
           .eq("booked", true)
+          .is("net_sales", null)
+          .is("cancellation_reason", null)
           .neq("fee_type", "pre_settled")
-          .lt("event_date", new Date().toISOString().split("T")[0])
-          .or("net_sales.is.null,net_sales.eq.0"),
+          .lt("event_date", new Date().toISOString().split("T")[0]),
       ]);
 
       if (profileRes.data) setTier(profileRes.data.subscription_tier);
 
-      // Exclude catering events that have invoice revenue — those are complete
+      // Mirror the Needs Attention tab filter exactly:
+      // exclude catering with invoice revenue, and disrupted events
       const unloggedEvents = (unloggedRes.data ?? []).filter(
-        (e) => !(e.event_mode === "catering" && (e.invoice_revenue ?? 0) > 0)
+        (e) =>
+          !(e.event_mode === "catering" && (e.invoice_revenue ?? 0) > 0) &&
+          e.anomaly_flag !== "disrupted"
       );
       setUnloggedCount(unloggedEvents.length);
     }
