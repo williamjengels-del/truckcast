@@ -47,6 +47,11 @@ export async function GET(request: NextRequest) {
     // Fetch available locations
     const locations = await listSquareLocations(tokenData.access_token);
     const locationIds = locations.map((l) => l.id);
+    // Build id→name map for display in the UI
+    const locationNames: Record<string, string> = {};
+    for (const loc of locations) {
+      locationNames[loc.id] = loc.name;
+    }
 
     // Upsert the connection (one per user per provider)
     const { error: upsertError } = await supabase
@@ -61,6 +66,7 @@ export async function GET(request: NextRequest) {
           merchant_id: tokenData.merchant_id,
           location_ids: locationIds,
           selected_location_ids: locationIds, // Default: all locations selected
+          location_names: locationNames,
           sync_enabled: true,
           last_sync_status: "never",
         },

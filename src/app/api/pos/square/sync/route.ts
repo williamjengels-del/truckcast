@@ -140,8 +140,10 @@ export async function POST(request: Request) {
     const invoiceOrders = orders.filter((o) => o.isInvoice);
     const invoiceRevenueTotal = invoiceOrders.reduce((sum, o) => sum + o.netSales, 0);
 
-    // Aggregate by date and match to events (POS sales only)
-    const dailySales = aggregateByDate(posOrders);
+    // Aggregate by local date (America/Chicago default) and filter to requested range.
+    // The Square query window is wider than the requested range to capture
+    // late-night orders that cross midnight in UTC.
+    const dailySales = aggregateByDate(posOrders, { startDate, endDate });
     const updatedCount = await matchAndUpdateSales(
       user.id,
       dailySales,

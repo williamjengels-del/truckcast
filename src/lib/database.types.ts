@@ -140,6 +140,7 @@ export interface PosConnection {
   merchant_id: string | null;
   location_ids: string[];
   selected_location_ids: string[];
+  location_names: Record<string, string>; // { locationId: locationName }
   sync_enabled: boolean;
   last_sync_at: string | null;
   last_sync_status: string;

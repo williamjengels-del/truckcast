@@ -25,15 +25,38 @@ export interface MatchAndUpdateOptions {
 
 /**
  * Aggregate order-level sales into per-day totals.
+ *
+ * Square timestamps are UTC. Food trucks often operate in the evening, so
+ * a naive UTC slice (createdAt.slice(0, 10)) will attribute late-night orders
+ * to the wrong calendar date. We convert to the merchant's local timezone
+ * before grouping, then optionally filter to the requested date range.
+ *
+ * Default timezone: America/Chicago (covers most US food trucks). Users can
+ * override this with a profile timezone field in the future.
  */
 export function aggregateByDate(
-  orders: { createdAt: string; netSales: number }[]
+  orders: { createdAt: string; netSales: number }[],
+  options: {
+    timeZone?: string;
+    startDate?: string; // YYYY-MM-DD inclusive filter
+    endDate?: string;   // YYYY-MM-DD inclusive filter
+  } = {}
 ): DailySalesAggregate[] {
+  const { timeZone = "America/Chicago", startDate, endDate } = options;
   const map = new Map<string, number>();
 
   for (const order of orders) {
-    const date = order.createdAt.slice(0, 10); // YYYY-MM-DD
-    map.set(date, (map.get(date) ?? 0) + order.netSales);
+    // Convert UTC timestamp to local calendar date in the merchant's timezone.
+    // en-CA gives YYYY-MM-DD format natively.
+    const localDate = new Date(order.createdAt).toLocaleDateString("en-CA", {
+      timeZone,
+    });
+
+    // If a date range filter is provided, skip orders that fall outside it.
+    if (startDate && localDate < startDate) continue;
+    if (endDate && localDate > endDate) continue;
+
+    map.set(localDate, (map.get(localDate) ?? 0) + order.netSales);
   }
 
   return Array.from(map.entries()).map(([date, netSales]) => ({

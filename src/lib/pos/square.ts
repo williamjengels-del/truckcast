@@ -125,15 +125,26 @@ export interface SquareOrderSummary {
 /**
  * Fetch orders for a date range from specific Square locations.
  * Returns summarized order data with net sales calculated.
+ *
+ * The query window is expanded by 14 hours on each end so that local-time
+ * midnight boundaries are always captured regardless of UTC offset (covers
+ * UTC-12 through UTC+14). The caller should filter by local date afterward
+ * using aggregateByDate({ startDate, endDate, timeZone }).
  */
 export async function fetchSquareOrders(
   accessToken: string,
   locationIds: string[],
-  startDate: string, // YYYY-MM-DD
-  endDate: string // YYYY-MM-DD
+  startDate: string, // YYYY-MM-DD local date
+  endDate: string    // YYYY-MM-DD local date
 ): Promise<SquareOrderSummary[]> {
   const orders: SquareOrderSummary[] = [];
   let cursor: string | undefined;
+
+  // Expand window by 14 hours on each side to capture all local-timezone orders
+  const startUtc = new Date(`${startDate}T00:00:00Z`);
+  startUtc.setUTCHours(startUtc.getUTCHours() - 14);
+  const endUtc = new Date(`${endDate}T23:59:59Z`);
+  endUtc.setUTCHours(endUtc.getUTCHours() + 14);
 
   do {
     const body: Record<string, unknown> = {
@@ -142,8 +153,8 @@ export async function fetchSquareOrders(
         filter: {
           date_time_filter: {
             created_at: {
-              start_at: `${startDate}T00:00:00Z`,
-              end_at: `${endDate}T23:59:59Z`,
+              start_at: startUtc.toISOString(),
+              end_at: endUtc.toISOString(),
             },
           },
           state_filter: {

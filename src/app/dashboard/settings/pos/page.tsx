@@ -439,20 +439,28 @@ function PosProviderCard({
               <div className="space-y-2">
                 <p className="text-sm font-medium">Locations to sync</p>
                 <div className="space-y-1">
-                  {locations.map((loc) => (
-                    <label
-                      key={loc.id}
-                      className="flex items-center gap-2 text-sm cursor-pointer"
-                    >
-                      <input
-                        type="checkbox"
-                        checked={loc.selected}
-                        onChange={() => onLocationToggle(loc.id)}
-                        className="rounded"
-                      />
-                      <span className="font-mono text-xs">{loc.id}</span>
-                    </label>
-                  ))}
+                  {locations.map((loc) => {
+                    const name = connection.location_names?.[loc.id];
+                    return (
+                      <label
+                        key={loc.id}
+                        className="flex items-center gap-2 text-sm cursor-pointer"
+                      >
+                        <input
+                          type="checkbox"
+                          checked={loc.selected}
+                          onChange={() => onLocationToggle(loc.id)}
+                          className="rounded"
+                        />
+                        <span className="font-medium">{name ?? loc.id}</span>
+                        {name && (
+                          <span className="font-mono text-xs text-muted-foreground">
+                            {loc.id}
+                          </span>
+                        )}
+                      </label>
+                    );
+                  })}
                 </div>
               </div>
             )}
