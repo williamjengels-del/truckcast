@@ -28,10 +28,10 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    // Check subscription tier
+    // Check subscription tier (also grab timezone for date aggregation)
     const { data: profile } = await supabase
       .from("profiles")
-      .select("subscription_tier")
+      .select("subscription_tier, timezone")
       .eq("id", user.id)
       .single();
 
@@ -140,10 +140,11 @@ export async function POST(request: Request) {
     const invoiceOrders = orders.filter((o) => o.isInvoice);
     const invoiceRevenueTotal = invoiceOrders.reduce((sum, o) => sum + o.netSales, 0);
 
-    // Aggregate by local date (America/Chicago default) and filter to requested range.
+    // Aggregate by the user's local date and filter to the requested range.
     // The Square query window is wider than the requested range to capture
     // late-night orders that cross midnight in UTC.
-    const dailySales = aggregateByDate(posOrders, { startDate, endDate });
+    const timeZone = (profile as Profile & { timezone?: string }).timezone ?? "America/Chicago";
+    const dailySales = aggregateByDate(posOrders, { startDate, endDate, timeZone });
     const updatedCount = await matchAndUpdateSales(
       user.id,
       dailySales,

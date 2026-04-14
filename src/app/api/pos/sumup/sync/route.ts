@@ -32,7 +32,7 @@ export async function POST(request: Request) {
 
     const { data: profile } = await supabase
       .from("profiles")
-      .select("subscription_tier")
+      .select("subscription_tier, timezone")
       .eq("id", user.id)
       .single();
 
@@ -118,8 +118,9 @@ export async function POST(request: Request) {
       netSales: t.netSales,
     }));
 
-    // Aggregate by date and match to events
-    const dailySales = aggregateByDate(normalized);
+    // Aggregate by the user's local date and match to events
+    const timeZone = (profile as Profile & { timezone?: string }).timezone ?? "America/Chicago";
+    const dailySales = aggregateByDate(normalized, { startDate, endDate, timeZone });
     const updatedCount = await matchAndUpdateSales(user.id, dailySales, "sumup");
 
     await updateSyncStatus(conn.id, "success");

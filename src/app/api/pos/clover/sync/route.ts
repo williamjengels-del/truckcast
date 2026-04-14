@@ -25,10 +25,10 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    // Check subscription tier
+    // Check subscription tier (also grab timezone for date aggregation)
     const { data: profile } = await supabase
       .from("profiles")
-      .select("subscription_tier")
+      .select("subscription_tier, timezone")
       .eq("id", user.id)
       .single();
 
@@ -98,8 +98,9 @@ export async function POST(request: Request) {
       endDate
     );
 
-    // Aggregate by date and match to events
-    const dailySales = aggregateByDate(orders);
+    // Aggregate by the user's local date and match to events
+    const timeZone = (profile as Profile & { timezone?: string }).timezone ?? "America/Chicago";
+    const dailySales = aggregateByDate(orders, { startDate, endDate, timeZone });
     const updatedCount = await matchAndUpdateSales(
       user.id,
       dailySales,
