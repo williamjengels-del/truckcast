@@ -47,7 +47,7 @@ export async function GET(req: NextRequest) {
     const res = await fetch(csvUrl, {
       headers: {
         // Identify ourselves politely
-        "User-Agent": "TruckCast/1.0 (import tool)",
+        "User-Agent": "VendCast/1.0 (import tool)",
       },
       // 10 second timeout
       signal: AbortSignal.timeout(10000),

@@ -32,7 +32,7 @@ export class ErrorBoundary extends React.Component<
   }
 
   componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
-    console.warn("[TruckCast] Caught error:", error.message, errorInfo);
+    console.warn("[VendCast] Caught error:", error.message, errorInfo);
   }
 
   reset() {

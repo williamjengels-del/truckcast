@@ -63,10 +63,7 @@ export function Sidebar() {
     <aside className="hidden lg:flex h-screen w-64 flex-col border-r bg-card">
       <div className="flex items-center gap-2 px-6 py-5 border-b">
         <TruckIcon className="h-7 w-7 text-primary" />
-        <div className="flex flex-col leading-none">
-          <span className="text-xl font-bold">TruckCast</span>
-          <span className="text-[10px] text-muted-foreground font-medium tracking-wide">by VendCast</span>
-        </div>
+        <span className="text-xl font-bold">VendCast</span>
       </div>
 
       <nav className="flex-1 px-3 py-4 space-y-1">

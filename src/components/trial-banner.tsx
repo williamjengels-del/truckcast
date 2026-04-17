@@ -53,7 +53,7 @@ export async function TrialBanner() {
           <AlertTriangle className="h-4 w-4 text-destructive shrink-0" />
           <span className="text-destructive font-medium">Your free trial has ended.</span>
           {hardGateActive ? (
-            <span className="text-muted-foreground hidden sm:inline">Upgrade to keep your data and continue using TruckCast.</span>
+            <span className="text-muted-foreground hidden sm:inline">Upgrade to keep your data and continue using VendCast.</span>
           ) : (
             <span className="text-muted-foreground hidden sm:inline">
               Full access continues until May 1 — upgrade anytime to lock in your plan.

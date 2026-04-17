@@ -185,7 +185,7 @@ export default function HistoricalSalesImportPage() {
         </Link>
         <h1 className="text-2xl font-bold">Import Historical Sales</h1>
         <p className="text-muted-foreground mt-1">
-          Pull past sales from your POS into TruckCast. The sync matches
+          Pull past sales from your POS into VendCast. The sync matches
           daily totals to events you already have booked on those dates.
         </p>
       </div>
@@ -426,7 +426,7 @@ export default function HistoricalSalesImportPage() {
                     {result.eventsUpdated === 0 && result.daysWithSales > 0 && (
                       <p className="text-sm text-amber-700 mt-2">
                         Sales were found but no matching events were updated. Make
-                        sure your events are booked in TruckCast for those dates.
+                        sure your events are booked in VendCast for those dates.
                       </p>
                     )}
                     {result.eventsUpdated > 0 && (

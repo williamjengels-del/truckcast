@@ -265,10 +265,10 @@ export default function FollowTruckPage() {
         {/* Footer */}
         <div className="mt-8 text-center">
           <a
-            href="https://truckcast.app"
+            href="https://vendcast.co"
             className="text-xs text-gray-400 hover:text-gray-500 transition-colors"
           >
-            Powered by TruckCast
+            Powered by VendCast
           </a>
         </div>
       </div>

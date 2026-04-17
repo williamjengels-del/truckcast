@@ -225,7 +225,7 @@ export default function AdminContentPage() {
                   className="w-full min-h-[100px] rounded-md border border-input bg-background px-3 py-2 text-sm resize-y focus:outline-none focus:ring-2 focus:ring-ring"
                   value={newContent}
                   onChange={(e) => setNewContent(e.target.value)}
-                  placeholder="What they said about TruckCast..."
+                  placeholder="What they said about VendCast..."
                 />
               </div>
               <div className="space-y-1">

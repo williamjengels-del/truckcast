@@ -4,7 +4,7 @@
 
   var truckId = script.getAttribute("data-truck-id");
   if (!truckId) {
-    console.error("TruckCast widget: missing data-truck-id attribute");
+    console.error("VendCast widget: missing data-truck-id attribute");
     return;
   }
 

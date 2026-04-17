@@ -6,7 +6,7 @@
  *   2. Add vendcast.co as a sending domain (auto-configure via Cloudflare)
  *   3. Create an API key and add to Vercel env vars:
  *        RESEND_API_KEY=re_xxxxxxxxx
- *        EMAIL_FROM=TruckCast by VendCast <hello@vendcast.co>
+ *        EMAIL_FROM=VendCast <hello@vendcast.co>
  */
 
 import { Resend } from "resend";
@@ -16,7 +16,7 @@ function getResend() {
 }
 
 const FROM =
-  process.env.EMAIL_FROM ?? "TruckCast by VendCast <hello@vendcast.co>";
+  process.env.EMAIL_FROM ?? "VendCast <hello@vendcast.co>";
 
 const APP_URL = "https://vendcast.co";
 
@@ -31,7 +31,7 @@ export async function sendWelcomeEmail(to: string, businessName: string) {
   await resend.emails.send({
     from: FROM,
     to,
-    subject: "Welcome to TruckCast 🚚",
+    subject: "Welcome to VendCast 🚚",
     html: `
 <!DOCTYPE html>
 <html>
@@ -41,8 +41,7 @@ export async function sendWelcomeEmail(to: string, businessName: string) {
 
     <!-- Header -->
     <div style="background:#f97316;padding:32px 40px;">
-      <div style="color:white;font-size:28px;font-weight:800;letter-spacing:-1px;">TruckCast</div>
-      <div style="color:rgba(255,255,255,0.8);font-size:12px;margin-top:2px;font-weight:500;letter-spacing:0.5px;">by VendCast</div>
+      <div style="color:white;font-size:28px;font-weight:800;letter-spacing:-1px;">VendCast</div>
       <div style="color:rgba(255,255,255,0.7);font-size:13px;margin-top:6px;">Event forecasting for food trucks</div>
     </div>
 
@@ -50,7 +49,7 @@ export async function sendWelcomeEmail(to: string, businessName: string) {
     <div style="padding:40px;">
       <h1 style="margin:0 0 16px;font-size:22px;font-weight:700;color:#111827;">Welcome, ${displayName}! 👋</h1>
       <p style="margin:0 0 20px;font-size:15px;line-height:1.6;color:#374151;">
-        You've got <strong>14 days</strong> to explore TruckCast — no credit card needed.
+        You've got <strong>14 days</strong> to explore VendCast — no credit card needed.
         Here's how to get the most out of it:
       </p>
 
@@ -84,14 +83,14 @@ export async function sendWelcomeEmail(to: string, businessName: string) {
       </a>
 
       <p style="margin:32px 0 0;font-size:13px;color:#9ca3af;line-height:1.5;">
-        Questions? Just reply to this email — it goes straight to Julian, the food truck operator who built TruckCast.
+        Questions? Just reply to this email — it goes straight to Julian, the food truck operator who built VendCast.
       </p>
     </div>
 
     <!-- Footer -->
     <div style="padding:20px 40px;border-top:1px solid #f3f4f6;">
       <p style="margin:0;font-size:12px;color:#9ca3af;">
-        TruckCast by VendCast · Built by Wok-O Taco, St. Louis MO ·
+        VendCast · Built by Wok-O Taco, St. Louis MO ·
         <a href="${APP_URL}/dashboard/settings" style="color:#9ca3af;">Manage preferences</a>
       </p>
     </div>
@@ -122,7 +121,7 @@ export async function sendSalesReminderEmail(
   const subject =
     count === 1
       ? `Don't forget — log your sales from ${events[0].event_name}`
-      : `${count} events need sales logged in TruckCast`;
+      : `${count} events need sales logged in VendCast`;
 
   function formatDate(iso: string) {
     return new Date(iso + "T00:00:00").toLocaleDateString("en-US", {
@@ -153,8 +152,7 @@ export async function sendSalesReminderEmail(
 <body style="margin:0;padding:0;background:#f9fafb;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;">
   <div style="max-width:560px;margin:40px auto;background:#fff;border-radius:12px;overflow:hidden;border:1px solid #e5e7eb;">
     <div style="background:#f97316;padding:32px 40px;">
-      <div style="color:white;font-size:28px;font-weight:800;letter-spacing:-1px;">TruckCast</div>
-      <div style="color:rgba(255,255,255,0.8);font-size:12px;margin-top:2px;font-weight:500;">by VendCast</div>
+      <div style="color:white;font-size:28px;font-weight:800;letter-spacing:-1px;">VendCast</div>
     </div>
     <div style="padding:40px;">
       <h1 style="margin:0 0 8px;font-size:22px;font-weight:700;color:#111827;">Log your sales, ${displayName} 📋</h1>
@@ -179,7 +177,7 @@ export async function sendSalesReminderEmail(
       </p>
     </div>
     <div style="padding:20px 40px;border-top:1px solid #f3f4f6;">
-      <p style="margin:0;font-size:12px;color:#9ca3af;">TruckCast by VendCast · <a href="${APP_URL}/dashboard/settings" style="color:#9ca3af;">Manage preferences</a></p>
+      <p style="margin:0;font-size:12px;color:#9ca3af;">VendCast · <a href="${APP_URL}/dashboard/settings" style="color:#9ca3af;">Manage preferences</a></p>
     </div>
   </div>
 </body>
@@ -201,7 +199,7 @@ export async function sendOnboardingNudgeEmail(to: string) {
   await resend.emails.send({
     from: FROM,
     to,
-    subject: "One quick step left to set up TruckCast",
+    subject: "One quick step left to set up VendCast",
     html: `
 <!DOCTYPE html>
 <html>
@@ -211,15 +209,14 @@ export async function sendOnboardingNudgeEmail(to: string) {
 
     <!-- Header -->
     <div style="background:#f97316;padding:32px 40px;">
-      <div style="color:white;font-size:28px;font-weight:800;letter-spacing:-1px;">TruckCast</div>
-      <div style="color:rgba(255,255,255,0.8);font-size:12px;margin-top:2px;font-weight:500;letter-spacing:0.5px;">by VendCast</div>
+      <div style="color:white;font-size:28px;font-weight:800;letter-spacing:-1px;">VendCast</div>
     </div>
 
     <!-- Body -->
     <div style="padding:40px;">
       <h1 style="margin:0 0 16px;font-size:22px;font-weight:700;color:#111827;">You're almost in 👋</h1>
       <p style="margin:0 0 20px;font-size:15px;line-height:1.6;color:#374151;">
-        You signed up for TruckCast but haven't finished setting up your account yet.
+        You signed up for VendCast but haven't finished setting up your account yet.
         It takes about 2 minutes — just your truck name and you're in.
       </p>
 
@@ -251,7 +248,7 @@ export async function sendOnboardingNudgeEmail(to: string) {
     <!-- Footer -->
     <div style="padding:20px 40px;border-top:1px solid #f3f4f6;">
       <p style="margin:0;font-size:12px;color:#9ca3af;">
-        TruckCast by VendCast · Built by Wok-O Taco, St. Louis MO ·
+        VendCast · Built by Wok-O Taco, St. Louis MO ·
         <a href="${APP_URL}/dashboard/settings" style="color:#9ca3af;">Manage preferences</a>
       </p>
     </div>
@@ -274,8 +271,8 @@ export async function sendTrialExpiryEmail(
 
   const isUrgent = daysLeft <= 2;
   const subject = isUrgent
-    ? `⚠️ Your TruckCast trial ends tomorrow`
-    : `Your TruckCast trial ends in ${daysLeft} days`;
+    ? `⚠️ Your VendCast trial ends tomorrow`
+    : `Your VendCast trial ends in ${daysLeft} days`;
 
   await resend.emails.send({
     from: FROM,
@@ -288,8 +285,7 @@ export async function sendTrialExpiryEmail(
 <body style="margin:0;padding:0;background:#f9fafb;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;">
   <div style="max-width:560px;margin:40px auto;background:#fff;border-radius:12px;overflow:hidden;border:1px solid #e5e7eb;">
     <div style="background:${isUrgent ? "#dc2626" : "#f97316"};padding:32px 40px;">
-      <div style="color:white;font-size:28px;font-weight:800;letter-spacing:-1px;">TruckCast</div>
-      <div style="color:rgba(255,255,255,0.8);font-size:12px;margin-top:2px;font-weight:500;">by VendCast</div>
+      <div style="color:white;font-size:28px;font-weight:800;letter-spacing:-1px;">VendCast</div>
     </div>
     <div style="padding:40px;">
       <h1 style="margin:0 0 16px;font-size:22px;font-weight:700;color:#111827;">
@@ -307,7 +303,7 @@ export async function sendTrialExpiryEmail(
       </p>
     </div>
     <div style="padding:20px 40px;border-top:1px solid #f3f4f6;">
-      <p style="margin:0;font-size:12px;color:#9ca3af;">TruckCast by VendCast · <a href="${APP_URL}/dashboard/settings" style="color:#9ca3af;">Manage preferences</a></p>
+      <p style="margin:0;font-size:12px;color:#9ca3af;">VendCast · <a href="${APP_URL}/dashboard/settings" style="color:#9ca3af;">Manage preferences</a></p>
     </div>
   </div>
 </body>
@@ -332,15 +328,15 @@ export async function sendTrialExpiredEmail(
   const resend = getResend();
 
   const bodyText = gracePeriodActive
-    ? `Hey ${businessName || "there"} — your TruckCast free trial has ended, but your access isn't going anywhere yet. You have full dashboard access until <strong>May 1, 2026</strong>. Use this time to add your events and run some forecasts — then decide if TruckCast is worth keeping.`
-    : `Hey ${businessName || "there"} — your TruckCast free trial has ended. Your data is safe and waiting for you. Upgrade to restore full access.`;
+    ? `Hey ${businessName || "there"} — your VendCast free trial has ended, but your access isn't going anywhere yet. You have full dashboard access until <strong>May 1, 2026</strong>. Use this time to add your events and run some forecasts — then decide if VendCast is worth keeping.`
+    : `Hey ${businessName || "there"} — your VendCast free trial has ended. Your data is safe and waiting for you. Upgrade to restore full access.`;
 
   const ctaText = gracePeriodActive ? "View upgrade options" : "Upgrade to continue →";
 
   await resend.emails.send({
     from: FROM,
     to,
-    subject: "Your TruckCast trial has ended",
+    subject: "Your VendCast trial has ended",
     html: `
 <!DOCTYPE html>
 <html>
@@ -348,8 +344,7 @@ export async function sendTrialExpiredEmail(
 <body style="margin:0;padding:0;background:#f9fafb;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;">
   <div style="max-width:560px;margin:40px auto;background:#fff;border-radius:12px;overflow:hidden;border:1px solid #e5e7eb;">
     <div style="background:#f97316;padding:32px 40px;">
-      <div style="color:white;font-size:28px;font-weight:800;letter-spacing:-1px;">TruckCast</div>
-      <div style="color:rgba(255,255,255,0.8);font-size:12px;margin-top:2px;font-weight:500;">by VendCast</div>
+      <div style="color:white;font-size:28px;font-weight:800;letter-spacing:-1px;">VendCast</div>
     </div>
     <div style="padding:40px;">
       <h1 style="margin:0 0 16px;font-size:22px;font-weight:700;color:#111827;">Your trial has ended</h1>
@@ -360,7 +355,7 @@ export async function sendTrialExpiredEmail(
       <p style="margin:24px 0 0;font-size:13px;color:#9ca3af;">Plans start at $19/month. Cancel anytime.</p>
     </div>
     <div style="padding:20px 40px;border-top:1px solid #f3f4f6;">
-      <p style="margin:0;font-size:12px;color:#9ca3af;">TruckCast by VendCast · <a href="${APP_URL}/dashboard/settings" style="color:#9ca3af;">Manage preferences</a></p>
+      <p style="margin:0;font-size:12px;color:#9ca3af;">VendCast · <a href="${APP_URL}/dashboard/settings" style="color:#9ca3af;">Manage preferences</a></p>
     </div>
   </div>
 </body>

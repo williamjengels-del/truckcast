@@ -3,8 +3,8 @@ import Link from "next/link";
 import { TruckIcon, CheckCircle2, Circle, Clock } from "lucide-react";
 
 export const metadata: Metadata = {
-  title: "TruckCast Roadmap — Built for Food Truck Operators",
-  description: "See how TruckCast went from an Airtable spreadsheet to a full AI-powered forecasting platform for food truck operators.",
+  title: "VendCast Roadmap — Built for Food Truck Operators",
+  description: "See how VendCast grew from an Airtable spreadsheet to a full AI-powered forecasting platform for food truck operators.",
 };
 
 type MilestoneStatus = "done" | "in_progress" | "planned";
@@ -71,7 +71,7 @@ const PHASES: Phase[] = [
       { label: "Fee calculator handles flat fees, percentages, pre-settled, and day rates", status: "done" },
       { label: "AI forecast engine predicts revenue for upcoming events", status: "done", note: "Validated: within 16% of actual revenue on aggregate forecasts" },
       { label: "Forecasts automatically adjust for weather, day of week, and attendance size", status: "done" },
-      { label: "Enter your city, and TruckCast automatically looks up the weather and location coordinates", status: "done" },
+      { label: "Enter your city, and VendCast automatically looks up the weather and location coordinates", status: "done" },
       { label: "The more events you log, the smarter your forecasts get", status: "done" },
       { label: "Dashboard with year-to-date revenue, upcoming projections, and trends at a glance", status: "done" },
       { label: "See which events, event types, and organizers are most valuable to your business", status: "done" },
@@ -90,8 +90,8 @@ const PHASES: Phase[] = [
       { label: "Clover: same seamless auto-sync as Square", status: "done" },
       { label: "Toast: forward your daily summary email and it syncs hands-free", status: "done" },
       { label: "Automatic email routing so Toast users don't have to do anything after setup", status: "done" },
-      { label: "Run multiple locations? Pick which one TruckCast pulls from", status: "done" },
-      { label: "If you had two events on the same day, TruckCast splits the revenue intelligently", status: "done" },
+      { label: "Run multiple locations? Pick which one VendCast pulls from", status: "done" },
+      { label: "If you had two events on the same day, VendCast splits the revenue intelligently", status: "done" },
     ],
   },
   {
@@ -103,7 +103,7 @@ const PHASES: Phase[] = [
     badge: "bg-orange-100 text-orange-700 dark:bg-orange-900/50 dark:text-orange-300",
     status: "done",
     milestones: [
-      { label: "VendCast brand and vendcast.co live — TruckCast is the first product", status: "done" },
+      { label: "VendCast brand launched at vendcast.co — software for food truck operators", status: "done" },
       { label: "Starter, Pro, and Premium plans — pay for what you need", status: "done" },
       { label: "14-day free trial so you can see the value before committing", status: "done" },
       { label: "Beta invite codes to bring early adopters aboard first", status: "done" },
@@ -132,7 +132,7 @@ const PHASES: Phase[] = [
   {
     number: 6,
     name: "Onboarding & Guidance",
-    tagline: "TruckCast now meets you where you are and shows you what to do next.",
+    tagline: "VendCast now meets you where you are and shows you what to do next.",
     color: "bg-pink-50 dark:bg-pink-950/20",
     accent: "border-pink-300 dark:border-pink-700",
     badge: "bg-pink-100 text-pink-700 dark:bg-pink-900/50 dark:text-pink-300",
@@ -215,7 +215,7 @@ const PHASES: Phase[] = [
       { label: "Apply to events — submit your truck for consideration in a few taps", status: "planned" },
       { label: "Company catering portal — corporate clients find and book trucks without going through an agency", status: "planned" },
       { label: "Organizer profiles — see ratings, past events, and payment history before you commit", status: "planned" },
-      { label: "TruckCast data powers the match — your forecast history tells organizers exactly what to expect", status: "planned" },
+      { label: "VendCast data powers the match — your forecast history tells organizers exactly what to expect", status: "planned" },
       { label: "No booking commissions — ever. Your subscription covers everything.", status: "planned", note: "Companies like Food Fleet take 20–30% of your revenue. We don't." },
     ],
   },
@@ -287,12 +287,7 @@ export default function RoadmapPage() {
         <div className="max-w-5xl mx-auto px-6 py-4 flex items-center justify-between">
           <Link href="/" className="flex items-center gap-2">
             <TruckIcon className="h-6 w-6 text-primary" />
-            <div className="flex flex-col leading-none">
-              <span className="font-bold text-lg">TruckCast</span>
-              <span className="text-[9px] text-muted-foreground font-medium tracking-wide">
-                by VendCast
-              </span>
-            </div>
+            <span className="font-bold text-lg">VendCast</span>
           </Link>
           <Link
             href="/signup"
@@ -314,7 +309,7 @@ export default function RoadmapPage() {
             From Guesswork to Real Forecasts
           </h1>
           <p className="text-xl text-muted-foreground max-w-2xl mx-auto">
-            TruckCast started as one food truck owner&apos;s spreadsheet in St. Louis.
+            VendCast started as one food truck owner&apos;s spreadsheet in St. Louis.
             Here&apos;s every step we&apos;ve taken — and everything coming next.
           </p>
 
@@ -427,7 +422,7 @@ export default function RoadmapPage() {
           <TruckIcon className="h-10 w-10 text-primary mx-auto mb-4" />
           <h2 className="text-2xl font-bold mb-2">Ready to forecast your revenue?</h2>
           <p className="text-muted-foreground mb-6 max-w-md mx-auto">
-            TruckCast is the only platform built specifically for food truck event forecasting.
+            VendCast is the only platform built specifically for food truck event forecasting.
             14-day free trial, no credit card required.
           </p>
           <div className="flex gap-3 justify-center flex-wrap">

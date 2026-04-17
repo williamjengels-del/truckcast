@@ -442,7 +442,7 @@ export default async function DashboardPage() {
                     <span className="text-[10px] font-bold uppercase bg-primary text-primary-foreground rounded px-1.5 py-0.5">Fastest</span>
                   </div>
                   <p className="text-xs text-muted-foreground leading-relaxed">
-                    Have events in Airtable, Square, or a spreadsheet? Drag in your CSV and TruckCast auto-detects the columns.
+                    Have events in Airtable, Square, or a spreadsheet? Drag in your CSV and VendCast auto-detects the columns.
                   </p>
                   <p className="text-xs font-medium text-primary mt-3 flex items-center gap-1 group-hover:gap-2 transition-all">
                     Import events <ArrowRight className="h-3.5 w-3.5" />
@@ -474,7 +474,7 @@ export default async function DashboardPage() {
                   </div>
                   <p className="font-semibold text-sm mb-1">See how forecasts work</p>
                   <p className="text-xs text-muted-foreground leading-relaxed">
-                    With 10+ past events logged, TruckCast generates revenue forecasts calibrated to your truck&apos;s history.
+                    With 10+ past events logged, VendCast generates revenue forecasts calibrated to your truck&apos;s history.
                   </p>
                   <p className="text-xs font-medium text-primary mt-3 flex items-center gap-1 group-hover:gap-2 transition-all">
                     Explore forecasts <ArrowRight className="h-3.5 w-3.5" />

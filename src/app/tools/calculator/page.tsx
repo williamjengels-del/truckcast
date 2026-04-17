@@ -3,15 +3,15 @@ import Link from "next/link";
 import { ForecastCalculator } from "@/components/forecast-calculator";
 
 export const metadata: Metadata = {
-  title: "Free Food Truck Revenue Estimator | TruckCast",
+  title: "Free Food Truck Revenue Estimator | VendCast",
   description:
     "Estimate how much your food truck will make at any event — festivals, corporate, catering, and more. Free tool, no signup required.",
   openGraph: {
     title: "Free Food Truck Revenue Estimator",
     description:
       "Find out if an event is worth booking before you commit. Enter attendance, event type, and conditions to get an instant revenue estimate.",
-    url: "https://truckcast.co/tools/calculator",
-    siteName: "TruckCast",
+    url: "https://vendcast.co/tools/calculator",
+    siteName: "VendCast",
     type: "website",
   },
 };
@@ -24,10 +24,7 @@ export default function PublicCalculatorPage() {
         <div className="max-w-4xl mx-auto px-4 h-14 flex items-center justify-between">
           <Link href="/" className="flex items-center gap-2 font-semibold text-sm">
             <span className="text-xl">🚚</span>
-            <div className="flex flex-col leading-none">
-              <span className="font-bold">TruckCast</span>
-              <span className="text-[10px] text-muted-foreground font-medium tracking-wide">by VendCast</span>
-            </div>
+            <span className="font-bold">VendCast</span>
           </Link>
           <div className="flex items-center gap-3">
             <a
@@ -69,7 +66,7 @@ export default function PublicCalculatorPage() {
       {/* Footer */}
       <footer className="border-t mt-12 py-6">
         <div className="max-w-4xl mx-auto px-4 flex flex-col sm:flex-row items-center justify-between gap-2 text-xs text-muted-foreground">
-          <span>© {new Date().getFullYear()} VendCast · TruckCast is built for food truck operators, by a food truck operator</span>
+          <span>© {new Date().getFullYear()} VendCast — built for food truck operators, by a food truck operator</span>
           <div className="flex gap-4">
             <a href="/privacy" className="hover:text-foreground transition-colors">Privacy</a>
             <a href="/terms" className="hover:text-foreground transition-colors">Terms</a>

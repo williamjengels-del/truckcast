@@ -533,7 +533,7 @@ function DataPrivacyCard({
           <div className="space-y-1">
             <p className="text-sm font-medium">Internal model improvement</p>
             <p className="text-sm text-muted-foreground">
-              Allow TruckCast to use your event data internally to improve forecast accuracy
+              Allow VendCast to use your event data internally to improve forecast accuracy
               for all users. Your data is never sold or shared externally.{" "}
               <a href="/privacy#model-improvement" className="text-primary hover:underline">
                 Learn more
@@ -553,7 +553,7 @@ function DataPrivacyCard({
         {!enabled && (
           <p className="text-xs text-muted-foreground rounded border border-dashed p-3">
             You&apos;ve opted out. Your events are excluded from internal analysis.
-            Core TruckCast functionality is unaffected.
+            Core VendCast functionality is unaffected.
           </p>
         )}
       </CardContent>

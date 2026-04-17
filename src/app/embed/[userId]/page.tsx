@@ -58,10 +58,10 @@ export default async function EmbedSchedulePage({ params, searchParams }: PagePr
           Upgrade to Pro to embed your schedule.
         </p>
         <a
-          href="https://truckcast.app"
+          href="https://vendcast.co"
           style={{ color: accent, fontSize: "0.75rem", textDecoration: "none" }}
         >
-          Powered by TruckCast
+          Powered by VendCast
         </a>
       </div>
     );
@@ -217,7 +217,7 @@ export default async function EmbedSchedulePage({ params, searchParams }: PagePr
 
       <div style={{ marginTop: "1rem", textAlign: "center", paddingTop: "0.5rem" }}>
         <a
-          href="https://truckcast.app"
+          href="https://vendcast.co"
           target="_blank"
           rel="noopener noreferrer"
           style={{
@@ -226,7 +226,7 @@ export default async function EmbedSchedulePage({ params, searchParams }: PagePr
             textDecoration: "none",
           }}
         >
-          Powered by TruckCast
+          Powered by VendCast
         </a>
       </div>
     </div>

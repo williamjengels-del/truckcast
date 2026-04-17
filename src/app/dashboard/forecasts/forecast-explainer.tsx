@@ -14,7 +14,7 @@ export function ForecastExplainer() {
           <div className="flex items-start gap-3">
             <Info className="h-4 w-4 text-muted-foreground mt-0.5 shrink-0" />
             <p className="text-sm text-muted-foreground">
-              TruckCast forecasts are based on your event history. We analyze past events with the
+              VendCast forecasts are based on your event history. We analyze past events with the
               same name, type, and location to predict your likely revenue. The more events you log,
               the more accurate your forecasts become.
             </p>
@@ -40,7 +40,7 @@ export function ForecastExplainer() {
           {open && (
             <div className="border rounded-lg p-4 space-y-3 text-sm text-muted-foreground bg-muted/30">
               <p className="font-medium text-foreground">
-                TruckCast uses a 4-level fallback system to generate the best possible forecast:
+                VendCast uses a 4-level fallback system to generate the best possible forecast:
               </p>
               <ol className="space-y-2 list-none">
                 <li className="flex gap-3">

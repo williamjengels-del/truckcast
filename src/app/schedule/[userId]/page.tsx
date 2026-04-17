@@ -174,7 +174,7 @@ export default async function PublicSchedulePage({ params }: Props) {
         <div className="container mx-auto px-4 text-center text-sm text-muted-foreground">
           Powered by{" "}
           <Link href="/" className="text-primary hover:underline">
-            TruckCast
+            VendCast
           </Link>
         </div>
       </footer>

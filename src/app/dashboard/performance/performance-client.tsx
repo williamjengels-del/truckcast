@@ -237,7 +237,7 @@ export function PerformanceClient({ performances }: PerformanceClientProps) {
               <div>
                 <p className="font-medium text-sm">No performance data yet</p>
                 <p className="text-muted-foreground text-xs mt-1 max-w-xs mx-auto">
-                  Once you have recurring events with sales logged, TruckCast shows avg revenue, consistency scores, and trends per event.
+                  Once you have recurring events with sales logged, VendCast shows avg revenue, consistency scores, and trends per event.
                 </p>
               </div>
               <div className="flex gap-2 justify-center">

@@ -143,7 +143,7 @@ function getSteps(provider: ProviderOption["id"], toastEmail?: string): Step[] {
         },
         {
           title: "You're all set!",
-          detail: "Every morning after an event, Toast sends a summary email. TruckCast picks it up automatically — your sales log themselves.",
+          detail: "Every morning after an event, Toast sends a summary email. VendCast picks it up automatically — your sales log themselves.",
           autoComplete: true,
         },
       ];
@@ -165,7 +165,7 @@ function getSteps(provider: ProviderOption["id"], toastEmail?: string): Step[] {
         },
         {
           title: "Upload it here",
-          detail: "Come back to TruckCast and upload the CSV. We'll auto-detect SkyTab's columns and match sales to your events.",
+          detail: "Come back to VendCast and upload the CSV. We'll auto-detect SkyTab's columns and match sales to your events.",
           action: {
             label: "Go to Import →",
             href: "/dashboard/events/import",
@@ -185,7 +185,7 @@ function getSteps(provider: ProviderOption["id"], toastEmail?: string): Step[] {
           detail: "Most POS systems have a 'Reports' or 'Export' option. Look for daily sales totals — one row per day is perfect.",
         },
         {
-          title: "Upload it to TruckCast",
+          title: "Upload it to VendCast",
           detail: "Go to Import Events, upload the CSV, and map the columns. We'll match sales to the right events automatically.",
           action: {
             label: "Go to Import →",
@@ -215,7 +215,7 @@ function getSteps(provider: ProviderOption["id"], toastEmail?: string): Step[] {
         },
         {
           title: "Set a reminder",
-          detail: "The easiest habit: set a recurring phone reminder for the morning after every event. '30 seconds to log sales in TruckCast.'",
+          detail: "The easiest habit: set a recurring phone reminder for the morning after every event. '30 seconds to log sales in VendCast.'",
         },
         {
           title: "Your forecasts get smarter with every event",
@@ -303,7 +303,7 @@ export function POSSetupGuide({
           </p>
           <p className="text-sm text-green-700 dark:text-green-400 mt-1">
             {selected === "square" || selected === "clover" || selected === "sumup"
-              ? "Every night TruckCast pulls your sales and matches them to your events."
+              ? "Every night VendCast pulls your sales and matches them to your events."
               : selected === "toast"
               ? "Toast emails will sync automatically. Check back after your next event."
               : "Head to your events page whenever you're ready to log sales."}

@@ -134,7 +134,7 @@ function getSteps(source: SourceId): Step[] {
         {
           title: "Upload the CSV file",
           detail:
-            "Go to Import, upload the file, and match your Airtable columns to TruckCast fields. Airtable exports clean CSVs — it usually auto-maps perfectly.",
+            "Go to Import, upload the file, and match your Airtable columns to VendCast fields. Airtable exports clean CSVs — it usually auto-maps perfectly.",
           action: {
             label: "Go to Import →",
             href: "/dashboard/events/import",
@@ -148,7 +148,7 @@ function getSteps(source: SourceId): Step[] {
         {
           title: "Connect your Square account first",
           detail:
-            "TruckCast pulls sales directly from Square — no export needed. Connect Square from the POS settings page, then use the sync feature to pull your history.",
+            "VendCast pulls sales directly from Square — no export needed. Connect Square from the POS settings page, then use the sync feature to pull your history.",
           action: {
             label: "Go to POS Settings →",
             href: "/dashboard/settings/pos",
@@ -157,7 +157,7 @@ function getSteps(source: SourceId): Step[] {
         {
           title: "Run a historical sync",
           detail:
-            'Once connected, click "Sync" on the Square card and choose a custom date range to pull past sales. TruckCast matches them to your events automatically.',
+            'Once connected, click "Sync" on the Square card and choose a custom date range to pull past sales. VendCast matches them to your events automatically.',
           isLast: true,
         },
       ];
@@ -201,7 +201,7 @@ function getSteps(source: SourceId): Step[] {
         {
           title: "Your first forecast unlocks fast",
           detail:
-            "Even one logged event gives you a baseline. By your 5th event, TruckCast starts recognizing patterns. By your 10th, forecasts get genuinely useful.",
+            "Even one logged event gives you a baseline. By your 5th event, VendCast starts recognizing patterns. By your 10th, forecasts get genuinely useful.",
           isLast: true,
         },
       ];
@@ -402,7 +402,7 @@ export function DataImportTrigger({ hasEvents }: DataImportTriggerProps) {
       <div className="rounded-xl border-2 border-dashed border-primary/30 bg-primary/5 p-5 mb-6">
         <div className="flex items-center justify-between gap-4 flex-wrap">
           <div>
-            <p className="font-semibold">Get your events into TruckCast</p>
+            <p className="font-semibold">Get your events into VendCast</p>
             <p className="text-sm text-muted-foreground mt-0.5">
               Google Sheets, Excel, Airtable, or manual — we&apos;ll walk you through it.
             </p>
@@ -419,7 +419,7 @@ export function DataImportTrigger({ hasEvents }: DataImportTriggerProps) {
   return (
     <div className="rounded-xl border bg-card p-5 mb-6 space-y-4">
       <div className="flex items-center justify-between">
-        <p className="font-semibold">Get your events into TruckCast</p>
+        <p className="font-semibold">Get your events into VendCast</p>
         <button
           onClick={() => setOpen(false)}
           className="text-xs text-muted-foreground hover:text-foreground"

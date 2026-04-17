@@ -53,7 +53,7 @@ export default function LoginPage() {
         <CardHeader className="text-center">
           <div className="flex items-center justify-center gap-2 mb-2">
             <TruckIcon className="h-8 w-8 text-primary" />
-            <span className="text-2xl font-bold">TruckCast</span>
+            <span className="text-2xl font-bold">VendCast</span>
           </div>
           <CardTitle>Welcome back</CardTitle>
           <CardDescription>Sign in to your account</CardDescription>

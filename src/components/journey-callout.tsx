@@ -21,14 +21,14 @@ const STATE_CONTENT: Record<
     badgeColor:
       "bg-blue-100 text-blue-700 dark:bg-blue-950/50 dark:text-blue-300",
     headline: "Start with what you know",
-    body: "Add your first event — past or upcoming. Every booking you enter helps TruckCast learn your business.",
+    body: "Add your first event — past or upcoming. Every booking you enter helps VendCast learn your business.",
   },
   building: {
     badge: "Building History",
     badgeColor:
       "bg-violet-100 text-violet-700 dark:bg-violet-950/50 dark:text-violet-300",
     headline: "Build your history",
-    body: "Import past events to unlock forecasts. TruckCast's engine needs at least 10 events with sales to start calibrating.",
+    body: "Import past events to unlock forecasts. VendCast's engine needs at least 10 events with sales to start calibrating.",
   },
   logging: {
     badge: "Ready to Log",

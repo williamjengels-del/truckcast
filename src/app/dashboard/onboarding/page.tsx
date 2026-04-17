@@ -123,7 +123,7 @@ export default function OnboardingPage() {
     <div className="max-w-2xl mx-auto">
       <div className="text-center mb-8">
         <TruckIcon className="h-12 w-12 text-primary mx-auto mb-4" />
-        <h1 className="text-3xl font-bold">Welcome to TruckCast</h1>
+        <h1 className="text-3xl font-bold">Welcome to VendCast</h1>
         <p className="text-muted-foreground mt-2">
           Let&apos;s get your calendar set up in a few quick steps
         </p>
@@ -315,7 +315,7 @@ export default function OnboardingPage() {
                 <div>
                   <div className="font-medium">Business profile set up</div>
                   <div className="text-sm text-muted-foreground">
-                    Your truck is registered in TruckCast
+                    Your truck is registered in VendCast
                   </div>
                 </div>
               </div>

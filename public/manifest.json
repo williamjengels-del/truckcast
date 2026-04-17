@@ -1,6 +1,6 @@
 {
-  "name": "TruckCast",
-  "short_name": "TruckCast",
+  "name": "VendCast",
+  "short_name": "VendCast",
   "description": "Food truck event scheduling and revenue forecasting",
   "start_url": "/dashboard",
   "display": "standalone",

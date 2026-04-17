@@ -3,8 +3,8 @@ import Link from "next/link";
 import { TruckIcon } from "lucide-react";
 
 export const metadata: Metadata = {
-  title: "Terms of Service — TruckCast by VendCast",
-  description: "The terms governing your use of TruckCast, a VendCast product.",
+  title: "Terms of Service — VendCast",
+  description: "The terms governing your use of VendCast.",
 };
 
 export default function TermsPage() {
@@ -14,7 +14,7 @@ export default function TermsPage() {
         <div className="container mx-auto flex h-16 items-center justify-between px-4">
           <Link href="/" className="flex items-center gap-2">
             <TruckIcon className="h-7 w-7 text-primary" />
-            <span className="text-xl font-bold">TruckCast</span>
+            <span className="text-xl font-bold">VendCast</span>
           </Link>
         </div>
       </header>
@@ -29,17 +29,17 @@ export default function TermsPage() {
             <section>
               <h2 className="text-lg font-semibold mb-3">1. Acceptance of terms</h2>
               <p className="text-muted-foreground">
-                By creating an account or using TruckCast (&ldquo;the Service&rdquo;), you agree to be
+                By creating an account or using VendCast (&ldquo;the Service&rdquo;), you agree to be
                 bound by these Terms of Service (&ldquo;Terms&rdquo;). The Service is operated by Julian
                 Engels (&ldquo;we,&rdquo; &ldquo;us,&rdquo; or &ldquo;our&rdquo;). If you do not agree to
-                these Terms, do not use TruckCast.
+                these Terms, do not use VendCast.
               </p>
             </section>
 
             <section>
               <h2 className="text-lg font-semibold mb-3">2. Description of the service</h2>
               <p className="text-muted-foreground">
-                TruckCast is a software-as-a-service platform that helps food truck operators forecast
+                VendCast is a software-as-a-service platform that helps food truck operators forecast
                 event revenue, track sales performance, and manage booking decisions. Features vary by
                 subscription tier. We reserve the right to modify, add, or discontinue features at any
                 time with reasonable notice.
@@ -59,7 +59,7 @@ export default function TermsPage() {
             <section>
               <h2 className="text-lg font-semibold mb-3">4. Subscriptions and billing</h2>
               <p className="text-muted-foreground mb-3">
-                TruckCast is offered on a recurring subscription basis. By subscribing, you authorize us
+                VendCast is offered on a recurring subscription basis. By subscribing, you authorize us
                 to charge your payment method on a monthly or annual basis at the rates in effect at the
                 time of billing.
               </p>
@@ -75,7 +75,7 @@ export default function TermsPage() {
               <h2 className="text-lg font-semibold mb-3">5. Acceptable use</h2>
               <p className="text-muted-foreground mb-3">You agree not to:</p>
               <ul className="list-disc list-inside space-y-2 text-muted-foreground">
-                <li>Use TruckCast for any unlawful purpose.</li>
+                <li>Use VendCast for any unlawful purpose.</li>
                 <li>Attempt to access another user&apos;s data or circumvent Row Level Security controls.</li>
                 <li>Reverse-engineer, scrape, or automate requests to the Service in ways not intended by its design.</li>
                 <li>Introduce malicious code, spam, or content that violates others&apos; rights.</li>
@@ -86,12 +86,12 @@ export default function TermsPage() {
             <section className="rounded-lg border border-primary/30 bg-primary/5 p-5">
               <h2 className="text-lg font-semibold mb-3">6. Data you enter and internal model improvement</h2>
               <p className="text-muted-foreground mb-3">
-                You retain ownership of the data you enter into TruckCast (event records, sales figures,
-                notes, etc.). By using the Service, you grant TruckCast a limited, non-exclusive license
+                You retain ownership of the data you enter into VendCast (event records, sales figures,
+                notes, etc.). By using the Service, you grant VendCast a limited, non-exclusive license
                 to store, process, and display your data to operate the Service.
               </p>
               <p className="text-muted-foreground mb-3">
-                By default, your event data may also be accessed by TruckCast&apos;s operator
+                By default, your event data may also be accessed by VendCast&apos;s operator
                 internally to analyze patterns, validate forecast accuracy, and improve the forecasting
                 model. This use is covered in detail in our{" "}
                 <Link href="/privacy" className="text-primary hover:underline">
@@ -108,17 +108,17 @@ export default function TermsPage() {
             <section>
               <h2 className="text-lg font-semibold mb-3">7. Forecasts and accuracy</h2>
               <p className="text-muted-foreground">
-                TruckCast forecasts are estimates based on historical data and algorithmic modeling.
+                VendCast forecasts are estimates based on historical data and algorithmic modeling.
                 They are provided for informational and planning purposes only. We make no guarantee
                 that forecasts will match actual results. You are solely responsible for business
-                decisions made using TruckCast data.
+                decisions made using VendCast data.
               </p>
             </section>
 
             <section>
               <h2 className="text-lg font-semibold mb-3">8. Third-party integrations</h2>
               <p className="text-muted-foreground">
-                TruckCast connects to third-party services including Square, Clover, Toast, Stripe,
+                VendCast connects to third-party services including Square, Clover, Toast, Stripe,
                 and Open-Meteo. These integrations are provided as-is. We are not responsible for
                 outages, data loss, or changes to third-party APIs. Connecting a POS system is
                 optional and can be disconnected at any time.
@@ -128,7 +128,7 @@ export default function TermsPage() {
             <section>
               <h2 className="text-lg font-semibold mb-3">9. Availability and warranties</h2>
               <p className="text-muted-foreground">
-                TruckCast is provided &ldquo;as is&rdquo; without warranties of any kind, express or
+                VendCast is provided &ldquo;as is&rdquo; without warranties of any kind, express or
                 implied. We do not guarantee uninterrupted, error-free service. We will make
                 commercially reasonable efforts to maintain uptime but are not liable for downtime
                 outside our control.
@@ -138,7 +138,7 @@ export default function TermsPage() {
             <section>
               <h2 className="text-lg font-semibold mb-3">10. Limitation of liability</h2>
               <p className="text-muted-foreground">
-                To the maximum extent permitted by law, TruckCast and its operator shall not be
+                To the maximum extent permitted by law, VendCast and its operator shall not be
                 liable for indirect, incidental, special, or consequential damages arising from use
                 or inability to use the Service, including lost profits or lost data. Our total
                 liability in any matter shall not exceed the amount you paid us in the three months
@@ -170,7 +170,7 @@ export default function TermsPage() {
               <p className="text-muted-foreground">
                 We may update these Terms from time to time. Material changes will be communicated
                 via email or in-app notice at least 14 days before taking effect. Continued use of
-                TruckCast after changes take effect constitutes acceptance of the revised Terms.
+                VendCast after changes take effect constitutes acceptance of the revised Terms.
               </p>
             </section>
 
@@ -178,8 +178,8 @@ export default function TermsPage() {
               <h2 className="text-lg font-semibold mb-3">14. Contact</h2>
               <p className="text-muted-foreground">
                 Questions about these Terms can be directed to{" "}
-                <a href="mailto:support@truckcast.app" className="text-primary hover:underline">
-                  support@truckcast.app
+                <a href="mailto:support@vendcast.co" className="text-primary hover:underline">
+                  support@vendcast.co
                 </a>.
               </p>
             </section>

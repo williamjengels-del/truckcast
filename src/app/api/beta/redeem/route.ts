@@ -96,7 +96,7 @@ export async function POST(request: Request) {
       success: true,
       grantedTier: invite.granted_tier,
       trialDays: invite.trial_days,
-      message: `Welcome to the TruckCast beta! Your account has been upgraded to ${invite.granted_tier} for ${invite.trial_days} days.`,
+      message: `Welcome to the VendCast beta! Your account has been upgraded to ${invite.granted_tier} for ${invite.trial_days} days.`,
     });
   } catch (err) {
     return NextResponse.json(

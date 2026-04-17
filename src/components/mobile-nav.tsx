@@ -85,7 +85,7 @@ export function MobileNav() {
       <SheetContent side="left" showCloseButton={false} className="w-64 p-0">
         <SheetHeader className="flex flex-row items-center gap-2 px-6 py-5 border-b">
           <TruckIcon className="h-7 w-7 text-primary" />
-          <SheetTitle className="text-xl font-bold">TruckCast</SheetTitle>
+          <SheetTitle className="text-xl font-bold">VendCast</SheetTitle>
         </SheetHeader>
 
         <nav className="flex-1 overflow-y-auto px-3 py-4 space-y-1">

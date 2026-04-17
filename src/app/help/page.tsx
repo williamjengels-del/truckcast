@@ -3,8 +3,8 @@ import Link from "next/link";
 import { TruckIcon, ChevronRight } from "lucide-react";
 
 export const metadata: Metadata = {
-  title: "Help Center — TruckCast",
-  description: "Answers to common questions about TruckCast — forecasting, events, POS integrations, billing, and more.",
+  title: "Help Center — VendCast",
+  description: "Answers to common questions about VendCast — forecasting, events, POS integrations, billing, and more.",
 };
 
 const sections = [
@@ -18,7 +18,7 @@ const sections = [
       },
       {
         q: "What is a \"net sales\" figure?",
-        a: "Net sales is the total revenue from food and drink sales before subtracting any venue fees or commissions. Do not subtract credit card processing fees — TruckCast handles fee types separately through the fee calculator.",
+        a: "Net sales is the total revenue from food and drink sales before subtracting any venue fees or commissions. Do not subtract credit card processing fees — VendCast handles fee types separately through the fee calculator.",
       },
       {
         q: "How do I import my historical data?",
@@ -36,7 +36,7 @@ const sections = [
     faqs: [
       {
         q: "How does the forecast engine work?",
-        a: "TruckCast uses a four-level hierarchy. First, it looks for direct history for that exact event. If there isn't enough, it falls back to similar events (same type + area), then to all events of that type, and finally to your monthly average. It tells you which level was used so you know how confident to be.",
+        a: "VendCast uses a four-level hierarchy. First, it looks for direct history for that exact event. If there isn't enough, it falls back to similar events (same type + area), then to all events of that type, and finally to your monthly average. It tells you which level was used so you know how confident to be.",
       },
       {
         q: "Why does my forecast show LOW confidence?",
@@ -44,7 +44,7 @@ const sections = [
       },
       {
         q: "How does weather affect the forecast?",
-        a: "TruckCast applies a weather coefficient to outdoor events based on the forecast for that day. Rain During Event = 53% of normal, Storms = 30%, Hot (90°F+) = 63%, Cold (≤40°F) = 55%. These coefficients come from 244+ real Wok-O Taco events and recalibrate as your own data accumulates.",
+        a: "VendCast applies a weather coefficient to outdoor events based on the forecast for that day. Rain During Event = 53% of normal, Storms = 30%, Hot (90°F+) = 63%, Cold (≤40°F) = 55%. These coefficients come from 244+ real Wok-O Taco events and recalibrate as your own data accumulates.",
       },
       {
         q: "Can I override a forecast?",
@@ -80,11 +80,11 @@ const sections = [
     faqs: [
       {
         q: "Which POS systems are supported?",
-        a: "TruckCast supports Square (OAuth), Clover (OAuth), and Toast (email parsing). POS integrations require a Pro or Premium subscription.",
+        a: "VendCast supports Square (OAuth), Clover (OAuth), and Toast (email parsing). POS integrations require a Pro or Premium subscription.",
       },
       {
         q: "How does Toast integration work?",
-        a: "Toast's API is restricted to enterprise partners, so TruckCast uses email parsing instead. After each service, Toast sends you a daily summary email. Go to Settings → POS → Toast, set up your account, then paste that email into the import panel to pull in your sales.",
+        a: "Toast's API is restricted to enterprise partners, so VendCast uses email parsing instead. After each service, Toast sends you a daily summary email. Go to Settings → POS → Toast, set up your account, then paste that email into the import panel to pull in your sales.",
       },
       {
         q: "How often does Square/Clover sync?",
@@ -113,7 +113,7 @@ const sections = [
         a: "Go to Dashboard → Settings → Billing and click \"Manage Subscription\". This opens the Stripe billing portal where you can upgrade, downgrade, or cancel.",
       },
       {
-        q: "Can I try TruckCast before paying?",
+        q: "Can I try VendCast before paying?",
         a: "Yes — every new account gets a 14-day free trial with no credit card required. Sign up at vendcast.co and you'll have full access from day one.",
       },
     ],
@@ -123,8 +123,8 @@ const sections = [
     slug: "privacy",
     faqs: [
       {
-        q: "Can other TruckCast users see my data?",
-        a: "No. TruckCast enforces strict tenant isolation — your events, sales, contacts, and forecasts are only visible to you. Row-level security is enforced at the database level.",
+        q: "Can other VendCast users see my data?",
+        a: "No. VendCast enforces strict tenant isolation — your events, sales, contacts, and forecasts are only visible to you. Row-level security is enforced at the database level.",
       },
       {
         q: "Are my POS credentials stored securely?",
@@ -146,7 +146,7 @@ export default function HelpPage() {
         <div className="container mx-auto flex h-16 items-center justify-between px-4">
           <Link href="/" className="flex items-center gap-2">
             <TruckIcon className="h-7 w-7 text-primary" />
-            <span className="text-xl font-bold">TruckCast</span>
+            <span className="text-xl font-bold">VendCast</span>
           </Link>
           <div className="flex items-center gap-3 text-sm text-muted-foreground">
             <Link href="/login" className="hover:text-foreground transition-colors">Sign in</Link>
@@ -161,7 +161,7 @@ export default function HelpPage() {
           <div className="container mx-auto px-4 text-center">
             <h1 className="text-3xl font-bold">Help Center</h1>
             <p className="mt-2 text-muted-foreground">
-              Everything you need to get the most out of TruckCast
+              Everything you need to get the most out of VendCast
             </p>
           </div>
         </div>
@@ -207,10 +207,10 @@ export default function HelpPage() {
               Reach out and Julian will get back to you personally.
             </p>
             <a
-              href="mailto:support@truckcast.app"
+              href="mailto:support@vendcast.co"
               className="mt-3 inline-block text-sm text-primary hover:underline"
             >
-              support@truckcast.app
+              support@vendcast.co
             </a>
           </div>
         </div>
@@ -218,7 +218,7 @@ export default function HelpPage() {
 
       <footer className="border-t py-6">
         <div className="container mx-auto px-4 text-center text-sm text-muted-foreground">
-          &copy; {new Date().getFullYear()} TruckCast.{" "}
+          &copy; {new Date().getFullYear()} VendCast.{" "}
           <Link href="/" className="hover:underline">Back to home</Link>
         </div>
       </footer>

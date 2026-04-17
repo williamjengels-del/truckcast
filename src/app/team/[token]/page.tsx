@@ -198,7 +198,7 @@ export default async function TeamViewPage({ params }: Props) {
         <div className="container mx-auto px-4 text-center text-xs text-muted-foreground">
           Powered by{" "}
           <Link href="/" className="text-primary hover:underline">
-            TruckCast
+            VendCast
           </Link>
         </div>
       </footer>

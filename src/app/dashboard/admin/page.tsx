@@ -114,7 +114,7 @@ export default async function AdminOverviewPage() {
       {/* Header */}
       <div className="flex items-start justify-between flex-wrap gap-3">
         <div>
-          <h1 className="text-2xl font-bold">TruckCast Admin</h1>
+          <h1 className="text-2xl font-bold">VendCast Admin</h1>
           <p className="text-sm text-muted-foreground">
             {today} &middot; {ADMIN_EMAIL}
           </p>

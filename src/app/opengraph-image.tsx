@@ -1,7 +1,7 @@
 import { ImageResponse } from "next/og";
 
 export const runtime = "edge";
-export const alt = "TruckCast — Event Forecasting for Food Trucks";
+export const alt = "VendCast — Event Forecasting for Food Trucks";
 export const size = { width: 1200, height: 630 };
 export const contentType = "image/png";
 
@@ -63,14 +63,9 @@ export default function OgImage() {
           >
             🚚
           </div>
-          <div style={{ display: "flex", flexDirection: "column", lineHeight: 1 }}>
-            <span style={{ fontSize: 38, fontWeight: 800, color: "#fff", letterSpacing: -1 }}>
-              TruckCast
-            </span>
-            <span style={{ fontSize: 14, color: "#94a3b8", fontWeight: 500, letterSpacing: 2, textTransform: "uppercase", marginTop: 4 }}>
-              by VendCast
-            </span>
-          </div>
+          <span style={{ fontSize: 38, fontWeight: 800, color: "#fff", letterSpacing: -1 }}>
+            VendCast
+          </span>
         </div>
 
         {/* Headline */}

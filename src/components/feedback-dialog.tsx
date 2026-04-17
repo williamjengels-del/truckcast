@@ -78,7 +78,7 @@ export function FeedbackDialog() {
         <DialogHeader>
           <DialogTitle>Send Feedback</DialogTitle>
           <DialogDescription>
-            Help us improve TruckCast. Bug reports, feature requests, and
+            Help us improve VendCast. Bug reports, feature requests, and
             general feedback are all welcome.
           </DialogDescription>
         </DialogHeader>

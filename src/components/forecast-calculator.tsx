@@ -488,7 +488,7 @@ export function ForecastCalculator({
                   <CardContent className="pt-5 text-center space-y-3">
                     <TrendingUp className="h-8 w-8 mx-auto text-orange-500" />
                     <p className="text-sm font-medium">Want forecasts calibrated to your actual history?</p>
-                    <p className="text-xs text-muted-foreground">TruckCast uses your real event data for accuracy — not just industry averages.</p>
+                    <p className="text-xs text-muted-foreground">VendCast uses your real event data for accuracy — not just industry averages.</p>
                     <Link href="/signup">
                       <Button size="sm" className="w-full gap-1.5">
                         Start free trial

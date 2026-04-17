@@ -4,7 +4,7 @@ import { useEffect } from "react";
 
 /**
  * Suppresses unhandled "Failed to fetch" errors that come from browser extensions.
- * These are not TruckCast bugs — they're caused by extensions making requests that
+ * These are not VendCast bugs — they're caused by extensions making requests that
  * get blocked by CORS or ad blockers. Without this, they show up in the console
  * as uncaught errors which looks bad.
  */

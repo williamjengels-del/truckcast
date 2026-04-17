@@ -29,7 +29,7 @@ const FALLBACK_TESTIMONIALS = [
   {
     id: "fallback-1",
     content:
-      "I used to guess whether to book an event based on gut feel. Now I pull up TruckCast and I know within a few hundred dollars what I'll make. That's a game changer when you're deciding between two events on the same day.",
+      "I used to guess whether to book an event based on gut feel. Now I pull up VendCast and I know within a few hundred dollars what I'll make. That's a game changer when you're deciding between two events on the same day.",
     author_name: "Julian Engels",
     author_title: "Owner, Wok-O Taco · St. Louis, MO",
     rating: 5,
@@ -37,7 +37,7 @@ const FALLBACK_TESTIMONIALS = [
   {
     id: "fallback-2",
     content:
-      "The weather adjustment feature alone is worth it. I had no idea how badly heat and rain were tanking my numbers — TruckCast showed me exactly which events to avoid in July.",
+      "The weather adjustment feature alone is worth it. I had no idea how badly heat and rain were tanking my numbers — VendCast showed me exactly which events to avoid in July.",
     author_name: "Beta Tester",
     author_title: "Food truck operator · Midwest",
     rating: 5,
@@ -113,10 +113,7 @@ export default async function LandingPage() {
         <div className="container mx-auto flex h-16 items-center justify-between px-4">
           <div className="flex items-center gap-2">
             <TruckIcon className="h-7 w-7 text-primary" />
-            <div className="flex flex-col leading-none">
-              <span className="text-xl font-bold">TruckCast</span>
-              <span className="text-[10px] text-muted-foreground font-medium tracking-wide">by VendCast</span>
-            </div>
+            <span className="text-xl font-bold">VendCast</span>
           </div>
           <div className="flex items-center gap-3">
             <Link href="/roadmap" className="hidden sm:block text-sm text-muted-foreground hover:text-foreground transition-colors">
@@ -161,7 +158,7 @@ export default async function LandingPage() {
               Built for food truck operators
             </h2>
             <p className="text-center text-sm text-muted-foreground -mt-8 mb-12">
-              TruckCast is the first product from <span className="font-medium text-foreground">VendCast</span> — software for mobile vendor businesses.
+              <span className="font-medium text-foreground">VendCast</span> — purpose-built software for mobile vendor businesses.
             </p>
             <div className="grid gap-8 md:grid-cols-2 lg:grid-cols-4">
               {[
@@ -278,14 +275,14 @@ export default async function LandingPage() {
                 icon: ClipboardList,
                 title: "Log your sales",
                 description:
-                  "After each event, record your net sales. TruckCast automatically calculates performance, trends, and fee impact.",
+                  "After each event, record your net sales. VendCast automatically calculates performance, trends, and fee impact.",
               },
               {
                 number: "3",
                 icon: LineChart,
                 title: "Get smarter forecasts",
                 description:
-                  "TruckCast learns from your history to predict future revenue — adjusted for weather, day of week, and event type.",
+                  "VendCast learns from your history to predict future revenue — adjusted for weather, day of week, and event type.",
               },
             ].map((step) => (
               <div key={step.number} className="flex flex-col items-center text-center">
@@ -405,9 +402,9 @@ export default async function LandingPage() {
             <Link href="/roadmap" className="hover:text-foreground transition-colors">Roadmap</Link>
             <Link href="/help" className="hover:text-foreground transition-colors">Help Center</Link>
             <Link href="/signup" className="hover:text-foreground transition-colors">Get Started</Link>
-            <a href="mailto:support@truckcast.app" className="hover:text-foreground transition-colors">Contact</a>
+            <a href="mailto:support@vendcast.co" className="hover:text-foreground transition-colors">Contact</a>
           </div>
-          <p>&copy; {new Date().getFullYear()} VendCast · TruckCast is built for food truck operators, by a food truck operator.</p>
+          <p>&copy; {new Date().getFullYear()} VendCast — built for food truck operators, by a food truck operator.</p>
           <p className="text-xs opacity-60">Also at <a href="https://vendcast.co" className="hover:text-foreground transition-colors">vendcast.co</a> · <a href="https://truckcast.co" className="hover:text-foreground transition-colors">truckcast.co</a></p>
         </div>
       </footer>
