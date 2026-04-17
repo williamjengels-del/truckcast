@@ -43,10 +43,24 @@ export async function recalculateForUserWithClient(userId: string, supabase: any
   for (const event of upcomingEvents) {
     const result = calculateForecast(event, allEvents, { calibratedCoefficients: calibrated });
     if (result) {
+      const { low, high } = forecastRange(result.forecast, result.confidenceScore);
       await supabase
         .from("events")
-        .update({ forecast_sales: result.forecast })
+        .update({
+          forecast_sales: result.forecast,
+          forecast_low: low,
+          forecast_high: high,
+          forecast_confidence: result.confidence,
+        })
         .eq("id", event.id);
     }
   }
+}
+
+function forecastRange(forecast: number, confidenceScore: number): { low: number; high: number } {
+  const pct = confidenceScore >= 0.7 ? 0.15 : confidenceScore >= 0.4 ? 0.25 : 0.40;
+  return {
+    low:  Math.round(forecast * (1 - pct) * 100) / 100,
+    high: Math.round(forecast * (1 + pct) * 100) / 100,
+  };
 }

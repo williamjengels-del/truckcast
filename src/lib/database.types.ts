@@ -82,6 +82,9 @@ export interface Event {
   sales_minimum: number;
   net_after_fees: number | null;
   forecast_sales: number | null;
+  forecast_low: number | null;
+  forecast_high: number | null;
+  forecast_confidence: "HIGH" | "MEDIUM" | "LOW" | null;
   food_cost: number | null;
   labor_cost: number | null;
   other_costs: number | null;

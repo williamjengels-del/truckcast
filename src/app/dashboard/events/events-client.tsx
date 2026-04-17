@@ -876,7 +876,14 @@ export function EventsClient({ initialEvents, userId = "", businessName = "", us
                   </div>
                   {event.forecast_sales && (
                     <p className="text-xs text-muted-foreground mt-1 flex items-center flex-wrap gap-x-1">
-                      Forecast: <span className="font-medium text-foreground">{formatCurrency(event.forecast_sales)}</span>
+                      Forecast:{" "}
+                      {event.forecast_low && event.forecast_high ? (
+                        <span className="font-medium text-foreground">
+                          {formatCurrency(event.forecast_low)} – {formatCurrency(event.forecast_high)}
+                        </span>
+                      ) : (
+                        <span className="font-medium text-foreground">{formatCurrency(event.forecast_sales)}</span>
+                      )}
                       <WeatherForecastImpact event={event} />
                     </p>
                   )}
@@ -933,8 +940,8 @@ export function EventsClient({ initialEvents, userId = "", businessName = "", us
     const dollarImpact = Math.round(event.forecast_sales - baseForecast);
     const absImpact = Math.abs(dollarImpact);
 
-    // Only show when impact is > $10
-    if (absImpact < 10) return null;
+    // Only show when impact is meaningful: at least $50 AND at least 5% of the forecast
+    if (absImpact < 50 || absImpact < event.forecast_sales * 0.05) return null;
 
     const isNegative = dollarImpact < 0;
     const sign = isNegative ? "-" : "+";
@@ -1301,7 +1308,18 @@ export function EventsClient({ initialEvents, userId = "", businessName = "", us
                         {formatCurrency(event.net_after_fees)}
                       </TableCell>
                       <TableCell className="hidden lg:table-cell text-right text-sm text-muted-foreground">
-                        <div>{formatCurrency(event.forecast_sales)}</div>
+                        {event.forecast_low && event.forecast_high ? (
+                          <div className="leading-tight">
+                            <div>{formatCurrency(event.forecast_low)} – {formatCurrency(event.forecast_high)}</div>
+                            {event.forecast_confidence && (
+                              <div className={`text-[10px] ${event.forecast_confidence === "HIGH" ? "text-green-600" : event.forecast_confidence === "MEDIUM" ? "text-amber-600" : "text-red-500"}`}>
+                                {event.forecast_confidence} confidence
+                              </div>
+                            )}
+                          </div>
+                        ) : (
+                          <div>{formatCurrency(event.forecast_sales)}</div>
+                        )}
                         {event.event_date >= today && (
                           <WeatherForecastImpact event={event} />
                         )}
