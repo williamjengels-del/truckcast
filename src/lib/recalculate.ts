@@ -140,13 +140,14 @@ export async function recalculateForUser(userId: string) {
 
 /**
  * Derive a forecast range (low / high) from the point forecast and confidence score.
- * Confidence score is 0–1 from the engine; higher = tighter range.
- *   HIGH  (score ≥ 0.7): ±15%
- *   MEDIUM (score ≥ 0.4): ±25%
- *   LOW   (score < 0.4):  ±40%
+ * Thresholds mirror confidenceScoreToLabel in forecast-engine.ts so the pill
+ * and the range width stay aligned — a HIGH-pill forecast always gets ±15%.
+ *   HIGH   (score ≥ 0.65): ±15%
+ *   MEDIUM (score ≥ 0.40): ±25%
+ *   LOW    (score < 0.40): ±40%
  */
 function forecastRange(forecast: number, confidenceScore: number): { low: number; high: number } {
-  const pct = confidenceScore >= 0.7 ? 0.15 : confidenceScore >= 0.4 ? 0.25 : 0.40;
+  const pct = confidenceScore >= 0.65 ? 0.15 : confidenceScore >= 0.4 ? 0.25 : 0.40;
   return {
     low:  Math.round(forecast * (1 - pct) * 100) / 100,
     high: Math.round(forecast * (1 + pct) * 100) / 100,

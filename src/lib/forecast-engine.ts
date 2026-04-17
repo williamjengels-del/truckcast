@@ -40,6 +40,11 @@ export interface ForecastResult {
   /** Platform cross-user data available for this event */
   platformOperatorCount?: number;
   platformMedianSales?: number;
+  /** Cross-user platform data actually changed the forecast number
+   *  (either blended into Level 1 personal history or served as the
+   *  base for Level 0 cold-start). UI uses this to decide when to
+   *  surface the "based on X other operators" language. */
+  platformBlendApplied: boolean;
 }
 
 export interface ForecastOptions {
@@ -384,12 +389,16 @@ function detectEventFrequencyDays(events: Event[]): number {
 }
 
 /**
- * Calculate a numeric confidence score from 0 to 1 based on:
- * - Number of similar historical events (data depth)
- * - Data recency (relative to the event's natural frequency)
- * - Whether calibrated or default coefficients are used
- * - Consistency of the data
- * - Event tier (Tier A/B events are more established)
+ * Calculate a numeric confidence score from 0 to 1 based on 7 components:
+ * - Data depth:        up to 0.30  (log-scaled, maxes at 10+ matches)
+ * - Recency:           up to 0.20  (adaptive window; annual events not penalised)
+ * - Calibration:       0 or 0.15   (per-user coefficients active at ≥ 10 valid events)
+ * - Consistency:       up to 0.20  (1 − stddev/mean across matches)
+ * - Venue familiarity: 0 or 0.10   (blended ≥ 2 events at same normalized venue, level > 1)
+ * - Tier (auto):       0 / 0.05 / 0.10   (see deriveEventTier)
+ * - Community:         0 / 0.05 / 0.10   (≥ 3 / ≥ 8 other operators in platform registry)
+ *
+ * Components are additive; total capped at 1.0.
  */
 function calculateConfidenceScore(
   dataPoints: number,
@@ -397,16 +406,12 @@ function calculateConfidenceScore(
   calibrated: boolean,
   consistency: number,
   venueFamiliar: boolean,
-  eventTier?: string | null
+  eventTier: "A" | "B" | null,
+  platformOperatorCount: number
 ): number {
-  // Data depth score: 0-0.3. Reaches maximum at 10+ events.
   const depthScore = Math.min(0.3, 0.3 * (Math.log2(dataPoints + 1) / Math.log2(11)));
 
-  // Recency score: 0-0.2 (was 0.25, reduced to make room for tier bonus)
-  // The recency window adapts to the event's frequency so that annual events
-  // (Grub N Groove, Shutterfest) don't get zero credit for data that's 11 months old.
   const freqDays = detectEventFrequencyDays(events);
-  // Window = 1.3× the typical recurrence period, minimum 6 months, maximum 18 months
   const windowMs = Math.min(
     18 * 30 * 24 * 60 * 60 * 1000,
     Math.max(SIX_MONTHS_MS, freqDays * 1.3 * 24 * 60 * 60 * 1000)
@@ -417,26 +422,33 @@ function calculateConfidenceScore(
   }).length;
   const recencyScore = events.length > 0 ? 0.2 * (recentCount / events.length) : 0;
 
-  // Calibration bonus: 0 or 0.15
   const calibrationScore = calibrated ? 0.15 : 0;
-
-  // Consistency score: 0-0.2
   const consistencyScore = 0.2 * Math.max(0, consistency);
-
-  // Venue familiarity bonus: 0 or 0.1
   const venueScore = venueFamiliar ? 0.1 : 0;
-
-  // Event tier bonus: established events (A/B) get a small lift because
-  // the operator has explicitly rated them as reliable, higher-value events.
-  // A = +0.1, B = +0.05, C/D/unknown = 0
   const tierScore = eventTier === "A" ? 0.1 : eventTier === "B" ? 0.05 : 0;
 
-  return Math.min(1, depthScore + recencyScore + calibrationScore + consistencyScore + venueScore + tierScore);
+  // Community agreement bonus: ≥ 8 operators in the platform registry for
+  // this event → 0.10; 3–7 → 0.05; < 3 → 0. Rewards the user for running
+  // events where independent operators are producing similar numbers.
+  const communityScore =
+    platformOperatorCount >= 8 ? 0.1 :
+    platformOperatorCount >= 3 ? 0.05 : 0;
+
+  return Math.min(
+    1,
+    depthScore + recencyScore + calibrationScore + consistencyScore + venueScore + tierScore + communityScore
+  );
 }
 
+// Single source of truth for the three score-to-label cutoffs. The
+// forecast-range band widths in forecast-display.ts and
+// recalculate-service.ts share these same thresholds.
+export const CONFIDENCE_HIGH_THRESHOLD = 0.65;
+export const CONFIDENCE_MEDIUM_THRESHOLD = 0.4;
+
 function confidenceScoreToLabel(score: number): "HIGH" | "MEDIUM" | "LOW" {
-  if (score >= 0.6) return "HIGH";
-  if (score >= 0.35) return "MEDIUM";
+  if (score >= CONFIDENCE_HIGH_THRESHOLD) return "HIGH";
+  if (score >= CONFIDENCE_MEDIUM_THRESHOLD) return "MEDIUM";
   return "LOW";
 }
 
@@ -501,10 +513,14 @@ export function calculateForecast(
       result.dataPoints >= 3 ? 0.75 :
       result.dataPoints >= 2 ? 0.65 : 0.55;
     const blended = result.forecast * personalWeight + platformMedian * (1 - personalWeight);
+    // Set platform fields BEFORE applyAdjustments so calculateConfidenceScore
+    // can credit the community component. Setting them after was a silent
+    // bug: blended forecasts skipped their community bonus.
+    result.platformOperatorCount = platformOpCount;
+    result.platformMedianSales = Math.round(platformMedian * 100) / 100;
+    result.platformBlendApplied = true;
     const finalResult = applyAdjustments(result, target, validEvents, calibrated, venueHistory);
     finalResult.forecast = Math.round(blended * 100) / 100;
-    finalResult.platformOperatorCount = platformOpCount;
-    finalResult.platformMedianSales = Math.round(platformMedian * 100) / 100;
     return finalResult;
   }
 
@@ -525,11 +541,13 @@ export function calculateForecast(
       attendanceAdjustment: null,
       venueFamiliarityApplied: false,
       dataPoints: platformEvent?.total_instances ?? 0,
-      confidence: platformOpCount >= 8 ? "HIGH" : platformOpCount >= 4 ? "MEDIUM" : "LOW",
-      confidenceScore: Math.min(0.9, 0.4 + (platformOpCount / 20) * 0.5),
+      // Placeholder — overwritten by score-based label in applyAdjustments.
+      confidence: "LOW",
+      confidenceScore: 0,
       calibrated: false,
       platformOperatorCount: platformOpCount,
       platformMedianSales: Math.round(platformMedian * 100) / 100,
+      platformBlendApplied: true,
     };
     return applyAdjustments(platformResult, target, validEvents, calibrated, venueHistory);
   }
@@ -550,13 +568,14 @@ export function calculateForecast(
 }
 
 function makeResult(
-  partial: Omit<ForecastResult, "confidenceScore" | "calibrated" | "venueFamiliarityApplied">
+  partial: Omit<ForecastResult, "confidenceScore" | "calibrated" | "venueFamiliarityApplied" | "platformBlendApplied">
 ): ForecastResult {
   return {
     ...partial,
     confidenceScore: 0,
     calibrated: false,
     venueFamiliarityApplied: false,
+    platformBlendApplied: false,
   };
 }
 
@@ -622,7 +641,8 @@ function tryLevel1(
     dayOfWeekCoefficient: null,
     attendanceAdjustment: null,
     dataPoints: matching.length,
-    confidence: getConfidence(matching.length, calculateConsistency(matching)),
+    // Placeholder — overwritten by score-based label in applyAdjustments.
+    confidence: "LOW",
   });
 }
 
@@ -652,7 +672,8 @@ function tryLevel2(
     dayOfWeekCoefficient: null,
     attendanceAdjustment: null,
     dataPoints: matching.length,
-    confidence: getConfidence(matching.length, calculateConsistency(matching)),
+    // Placeholder — overwritten by score-based label in applyAdjustments.
+    confidence: "LOW",
   });
 }
 
@@ -688,7 +709,8 @@ function tryLevel3(
     dayOfWeekCoefficient: null,
     attendanceAdjustment: null,
     dataPoints: matching.length,
-    confidence: getConfidence(matching.length, calculateConsistency(matching)),
+    // Placeholder — overwritten by score-based label in applyAdjustments.
+    confidence: "LOW",
   });
 }
 
@@ -849,7 +871,8 @@ function applyAdjustments(
   // Calculate numeric confidence score.
   // Tier is auto-derived from name-match history + consistency (see
   // deriveEventTier); the stored events.event_tier column is no longer
-  // read for scoring.
+  // read for scoring. Community component reads result.platformOperatorCount
+  // which is set by the L0/L1-blend paths.
   const matchingEvents = getMatchingEventsForLevel(result.level, target, allEvents);
   const derivedTier = target.event_name
     ? deriveEventTier(target.event_name, allEvents)
@@ -860,7 +883,8 @@ function applyAdjustments(
     isCalibrated,
     calculateConsistency(matchingEvents),
     result.venueFamiliarityApplied,
-    derivedTier
+    derivedTier,
+    result.platformOperatorCount ?? 0
   );
 
   // Override label with score-based label for consistency
@@ -932,15 +956,6 @@ function calculateConsistency(events: Event[]): number {
     sales.reduce((sum, s) => sum + Math.pow(s - mean, 2), 0) / sales.length;
   const stddev = Math.sqrt(variance);
   return Math.max(0, 1 - stddev / mean);
-}
-
-function getConfidence(
-  count: number,
-  consistency: number
-): "HIGH" | "MEDIUM" | "LOW" {
-  if (count >= 5 && consistency >= 0.7) return "HIGH";
-  if (count >= 2 && consistency >= 0.5) return "MEDIUM";
-  return "LOW";
 }
 
 /**

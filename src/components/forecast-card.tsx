@@ -174,6 +174,12 @@ export function ForecastInline({ event, forecast }: ForecastInlineProps) {
     high = event.forecast_high;
   }
 
+  // L0 cold-start chip: the dense row shows no context sentence, so without
+  // this hint users see "Learning" next to a number and wonder where it
+  // came from. Only surfaces for true cold-start; blended-L1 rows stay
+  // clean (trust gets built on the full card, not in the list).
+  const isColdStart = forecast?.level === 0 && (forecast.platformOperatorCount ?? 0) >= 3;
+
   return (
     <div className="leading-tight space-y-0.5">
       {low !== null && high !== null ? (
@@ -185,11 +191,18 @@ export function ForecastInline({ event, forecast }: ForecastInlineProps) {
           {formatDollars(forecast?.forecast ?? event.forecast_sales ?? 0)}
         </div>
       )}
-      <span
-        className={`inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-medium ${pill.className}`}
-      >
-        {pill.label}
-      </span>
+      <div className="flex items-center gap-1 flex-wrap">
+        <span
+          className={`inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-medium ${pill.className}`}
+        >
+          {pill.label}
+        </span>
+        {isColdStart && (
+          <span className="inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-medium bg-neutral-100 text-neutral-600 dark:bg-neutral-800 dark:text-neutral-400">
+            from {forecast!.platformOperatorCount} ops
+          </span>
+        )}
+      </div>
     </div>
   );
 }

@@ -58,7 +58,9 @@ export async function recalculateForUserWithClient(userId: string, supabase: any
 }
 
 function forecastRange(forecast: number, confidenceScore: number): { low: number; high: number } {
-  const pct = confidenceScore >= 0.7 ? 0.15 : confidenceScore >= 0.4 ? 0.25 : 0.40;
+  // Thresholds mirror confidenceScoreToLabel + forecast-display.forecastRangePct
+  // so the stored DB columns, the live UI range, and the pill agree.
+  const pct = confidenceScore >= 0.65 ? 0.15 : confidenceScore >= 0.4 ? 0.25 : 0.40;
   return {
     low:  Math.round(forecast * (1 - pct) * 100) / 100,
     high: Math.round(forecast * (1 + pct) * 100) / 100,

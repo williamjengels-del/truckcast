@@ -43,9 +43,12 @@ export function dataDensityPill(density: DataDensity): DataDensityPill {
 }
 
 // Matches recalculate-service.ts forecastRange() so the stored DB columns
-// and live-computed ranges agree. Kept in one place on purpose.
+// and live-computed ranges agree. Kept in one place on purpose. Thresholds
+// mirror confidenceScoreToLabel in forecast-engine so the pill (Calibrated /
+// Building / Learning) and the range width stay aligned — a HIGH-pill
+// forecast always gets the tight ±15% band.
 export function forecastRangePct(confidenceScore: number): number {
-  if (confidenceScore >= 0.7) return 0.15;
+  if (confidenceScore >= 0.65) return 0.15;
   if (confidenceScore >= 0.4) return 0.25;
   return 0.4;
 }
@@ -72,28 +75,41 @@ export function formatForecastRange(low: number, high: number): string {
 // Context sentence — plain English description of what the forecast is
 // grounded in. Keyed off the method level and data points. Falls back to
 // something short when details are missing.
+//
+// Platform-blend variants (L1 + cross-user data and L0 cold-start) are
+// handled here so the phrasing stays consistent across /forecasts and the
+// events list. Copy deliberately terse to avoid wrap on card widths.
 export function forecastContextSentence(
   forecast: ForecastResult,
   event: Event
 ): string {
   const n = forecast.dataPoints;
+  const ops = forecast.platformOperatorCount ?? 0;
   const dow = new Date(event.event_date + "T00:00:00").toLocaleDateString(
     "en-US",
     { weekday: "long" }
   );
   const type = event.event_type ? event.event_type.toLowerCase() : "event";
 
+  // Level 0: cold-start from platform data only, no personal history.
+  if (forecast.level === 0) {
+    return `Based on ${ops} other operators' data — you haven't booked it yet`;
+  }
+
+  // Level 1 with a platform blend actually applied.
+  if (forecast.level === 1 && forecast.platformBlendApplied && ops >= 2) {
+    return `Based on your ${n} prior booking${n === 1 ? "" : "s"} + ${ops} other operators' data`;
+  }
+
   switch (forecast.level) {
     case 1:
-      return `Based on ${n} prior time${n === 1 ? "" : "s"} you've run this event`;
+      return `Based on your ${n} prior booking${n === 1 ? "" : "s"} at this event`;
     case 2:
       return `Based on ${n} similar ${type} ${pluralize(dow)} in your history`;
     case 3:
       return `Based on ${n} past ${type} event${n === 1 ? "" : "s"} in your history`;
     case 4:
       return `Based on ${n} past event${n === 1 ? "" : "s"} in the same season`;
-    case 0:
-      return `Based on ${forecast.platformOperatorCount ?? n} operators running similar events`;
     default:
       return `Based on ${n} event${n === 1 ? "" : "s"} in your history`;
   }
@@ -165,12 +181,12 @@ export function plainEnglishAdjustments(
     out.push("Venue familiarity: applied (you've worked this venue before)");
   }
   if (
+    forecast.platformBlendApplied &&
     forecast.platformOperatorCount !== undefined &&
-    forecast.platformOperatorCount >= 2 &&
     forecast.platformMedianSales != null
   ) {
     out.push(
-      `Community benchmark: ${forecast.platformOperatorCount} other operators, median ${formatDollars(forecast.platformMedianSales)}`
+      `Community data: ${forecast.platformOperatorCount} operators agree · median ${formatDollars(forecast.platformMedianSales)}`
     );
   }
 

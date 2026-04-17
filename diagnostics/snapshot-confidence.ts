@@ -64,7 +64,8 @@ function scoreComponents(
   calibrated: boolean,
   consistency: number,
   venueFamiliar: boolean,
-  tierBonus: number
+  tierBonus: number,
+  platformOperatorCount: number
 ) {
   const depth = Math.min(0.3, 0.3 * (Math.log2(dataPoints + 1) / Math.log2(11)));
 
@@ -84,12 +85,15 @@ function scoreComponents(
   const consistencyScore = 0.2 * Math.max(0, consistency);
   const venue = venueFamiliar ? 0.1 : 0;
   const tier = tierBonus;
+  const community =
+    platformOperatorCount >= 8 ? 0.1 :
+    platformOperatorCount >= 3 ? 0.05 : 0;
 
   const total = Math.min(
     1,
-    depth + recency + calibration + consistencyScore + venue + tier
+    depth + recency + calibration + consistencyScore + venue + tier + community
   );
-  return { depth, recency, calibration, consistencyScore, venue, tier, total };
+  return { depth, recency, calibration, consistencyScore, venue, tier, community, total };
 }
 
 function getMatchingEventsForLevel(
@@ -189,7 +193,8 @@ async function main() {
       isCalibrated,
       consistency,
       result.venueFamiliarityApplied,
-      tierBonus
+      tierBonus,
+      result.platformOperatorCount ?? 0
     );
 
     rows.push({
@@ -206,6 +211,7 @@ async function main() {
       storedTier: ev.event_tier,
       derivedTier,
       platformOperatorCount: result.platformOperatorCount ?? null,
+      platformBlendApplied: result.platformBlendApplied,
       components: {
         depth: Number(c.depth.toFixed(3)),
         recency: Number(c.recency.toFixed(3)),
@@ -213,6 +219,7 @@ async function main() {
         consistencyScore: Number(c.consistencyScore.toFixed(3)),
         venue: Number(c.venue.toFixed(3)),
         tier: Number(c.tier.toFixed(3)),
+        community: Number(c.community.toFixed(3)),
       },
       total: Number(c.total.toFixed(3)),
       label: result.confidence,
