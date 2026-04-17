@@ -27,8 +27,11 @@ export async function TrialBanner() {
 
     if (!profile) return null;
 
-  // Paid subscribers — no banner
+  // Paid subscribers or manually-granted tiers — no banner.
+  // Covers Stripe subs AND legacy beta-code or admin-grant paths that set
+  // subscription_tier directly without attaching a Stripe customer.
   if (profile.stripe_subscription_id) return null;
+  if (profile.subscription_tier && profile.subscription_tier !== "trial") return null;
 
   const now = new Date();
 
@@ -44,14 +47,15 @@ export async function TrialBanner() {
   const msLeft = trialEnd.getTime() - now.getTime();
   const daysLeft = Math.ceil(msLeft / (1000 * 60 * 60 * 24));
 
-  // Trial expired
+  // Trial expired — informational amber, not alarming red. The hard-gate
+  // date in middleware.ts still enforces access cutoff; no need to yell.
   if (daysLeft <= 0) {
     const hardGateActive = now >= HARD_GATE_DATE;
     return (
-      <div className="bg-destructive/10 border-b border-destructive/20 px-4 py-2.5 flex items-center justify-between gap-3 flex-wrap">
+      <div className="bg-amber-50 border-b border-amber-200 dark:bg-amber-950/20 dark:border-amber-800/30 px-4 py-2.5 flex items-center justify-between gap-3 flex-wrap">
         <div className="flex items-center gap-2 text-sm">
-          <AlertTriangle className="h-4 w-4 text-destructive shrink-0" />
-          <span className="text-destructive font-medium">Your free trial has ended.</span>
+          <AlertTriangle className="h-4 w-4 text-amber-600 shrink-0" />
+          <span className="text-amber-800 dark:text-amber-400 font-medium">Your free trial has ended.</span>
           {hardGateActive ? (
             <span className="text-muted-foreground hidden sm:inline">Upgrade to keep your data and continue using VendCast.</span>
           ) : (
@@ -62,7 +66,7 @@ export async function TrialBanner() {
         </div>
         <Link
           href="/dashboard/settings?upgrade=true"
-          className="shrink-0 inline-flex items-center gap-1.5 rounded-md bg-destructive px-3 py-1.5 text-xs font-semibold text-destructive-foreground hover:bg-destructive/90 transition-colors"
+          className="shrink-0 inline-flex items-center gap-1.5 rounded-md bg-amber-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-amber-700 transition-colors"
         >
           <Sparkles className="h-3.5 w-3.5" />
           Upgrade now

@@ -343,11 +343,28 @@ export default async function AnalyticsPage({ searchParams }: PageProps) {
   const periodEvents = filterEvents(events, selectedYear, selectedMonth);
   const metrics = computeMetrics(periodEvents);
 
-  // Filter events for comparison period
-  const compareEvents =
+  // Filter events for comparison period.
+  //
+  // YTD normalization: when the user is viewing the current year in full-year
+  // mode (selectedMonth === null) and comparing against a prior year, cap the
+  // compare window to the same Jan..<current month> range. Otherwise the
+  // delta compares 4 months of 2026 against 12 months of 2025 and produces
+  // nonsense like "-87.3% vs 2025".
+  const now = new Date();
+  const isYTDCurrent =
+    selectedMonth === null && selectedYear === currentYear;
+  const ytdCapMonth = isYTDCurrent ? now.getMonth() : null;
+
+  let compareEvents =
     compareEnabled && compareYear !== null
       ? filterEvents(events, compareYear, compareMonth)
       : null;
+  if (compareEvents !== null && ytdCapMonth !== null && compareMonth === null) {
+    compareEvents = compareEvents.filter((e) => {
+      const d = new Date(e.event_date + "T00:00:00");
+      return d.getMonth() <= ytdCapMonth;
+    });
+  }
   const compareMetrics =
     compareEvents !== null ? computeMetrics(compareEvents) : null;
 
@@ -482,12 +499,16 @@ export default async function AnalyticsPage({ searchParams }: PageProps) {
   const periodLabel =
     selectedMonth !== null
       ? `${MONTHS_FULL[selectedMonth]} ${selectedYear}`
-      : `${selectedYear}`;
+      : ytdCapMonth !== null
+        ? `Jan–${MONTH_SHORT[ytdCapMonth]} ${selectedYear}`
+        : `${selectedYear}`;
   const comparePeriodLabel =
     compareEnabled && compareYear !== null
       ? compareMonth !== null
         ? `${MONTHS_FULL[compareMonth]} ${compareYear}`
-        : `${compareYear}`
+        : ytdCapMonth !== null
+          ? `Jan–${MONTH_SHORT[ytdCapMonth]} ${compareYear}`
+          : `${compareYear}`
       : "";
 
   // Delta helper
