@@ -13,7 +13,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import Link from "next/link";
-import { CloudSun, Calculator, ClipboardList, CloudRain, Sun, Cloud, Thermometer, Wind } from "lucide-react";
+import { CloudSun, Calculator, ClipboardList } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { calculateForecast, calibrateCoefficients } from "@/lib/forecast-engine";
 import { getPlatformEvents } from "@/lib/platform-registry";
@@ -21,6 +21,8 @@ import { TIER_COLORS } from "@/lib/constants";
 import type { Event } from "@/lib/database.types";
 import { ForecastExplainer } from "./forecast-explainer";
 import { WhatIfPanel } from "@/components/what-if-panel";
+import { ForecastCard, ForecastInline } from "@/components/forecast-card";
+import { isFixedRevenueEvent } from "@/lib/forecast-display";
 
 function formatCurrency(val: number | null): string {
   if (val === null || val === undefined) return "—";
@@ -171,9 +173,9 @@ export default async function ForecastsPage() {
                   key={event.id}
                   className="border rounded-lg p-4 space-y-3"
                 >
-                  <div className="flex items-start justify-between">
-                    <div>
-                      <h3 className="font-semibold text-lg">
+                  <div className="flex items-start justify-between gap-4">
+                    <div className="min-w-0">
+                      <h3 className="font-semibold text-lg truncate">
                         {event.event_name}
                       </h3>
                       <p className="text-sm text-muted-foreground">
@@ -181,128 +183,16 @@ export default async function ForecastsPage() {
                         {event.location && ` at ${event.location}`}
                       </p>
                     </div>
-                    <div className="text-right space-y-1">
-                      <div className="text-xl font-bold">
-                        {formatCurrency(
-                          forecast?.forecast ?? event.forecast_sales
-                        )}
-                      </div>
-                      {/* Weather impact badge — shown prominently when it's meaningfully adjusting the forecast */}
-                      {forecast?.weatherCoefficient && forecast.weatherCoefficient !== 1 && (
-                        <div className={`inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full ${
-                          forecast.weatherCoefficient > 1
-                            ? "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400"
-                            : "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400"
-                        }`}>
-                          <CloudSun className="h-3 w-3" />
-                          {forecast.weatherCoefficient > 1 ? "+" : ""}
-                          {formatCurrency(forecast.weatherAdjustment ?? 0)} weather
-                        </div>
-                      )}
-                      {forecast && (
-                        <div className="flex flex-col items-end gap-1">
-                          <Badge
-                            variant="secondary"
-                            className={
-                              forecast.confidence === "HIGH"
-                                ? "bg-green-100 text-green-800"
-                                : forecast.confidence === "MEDIUM"
-                                  ? "bg-yellow-100 text-yellow-800"
-                                  : "bg-red-100 text-red-800"
-                            }
-                          >
-                            {forecast.confidence} ({Math.round(forecast.confidenceScore * 100)}%)
-                          </Badge>
-                          {forecast.calibrated && (
-                            <span className="text-xs text-muted-foreground">Calibrated</span>
-                          )}
-                        </div>
-                      )}
+                    <div className="text-right shrink-0">
+                      <ForecastCard event={event} forecast={forecast} />
                     </div>
                   </div>
 
-                  {/* Weather not set nudge — for upcoming events with no weather data */}
-                  {!event.event_weather && (
+                  {/* Weather not set nudge — skip for fixed-revenue contracts. */}
+                  {!event.event_weather && !isFixedRevenueEvent(event) && (
                     <div className="flex items-center gap-1.5 text-xs text-muted-foreground bg-muted/40 rounded px-2.5 py-1.5">
                       <CloudSun className="h-3.5 w-3.5 shrink-0" />
                       <span>No weather set — <a href={`/dashboard/events?edit=${event.id}`} className="underline underline-offset-2 hover:text-foreground">add it</a> for a more accurate forecast</span>
-                    </div>
-                  )}
-
-                  {forecast && (
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
-                      <div>
-                        <span className="text-muted-foreground">Method: </span>
-                        <span className="font-medium">
-                          L{forecast.level} — {forecast.levelName}
-                        </span>
-                      </div>
-                      <div>
-                        <span className="text-muted-foreground">
-                          Data points:{" "}
-                        </span>
-                        <span className="font-medium">
-                          {forecast.dataPoints}
-                        </span>
-                      </div>
-                      <div>
-                        <span className="text-muted-foreground">Base: </span>
-                        <span className="font-medium">
-                          {formatCurrency(forecast.baseForecast)}
-                        </span>
-                      </div>
-                      <div>
-                        <span className="text-muted-foreground">Signal: </span>
-                        <span className="font-medium">{forecast.signal}</span>
-                      </div>
-                      {forecast.weatherCoefficient &&
-                        forecast.weatherCoefficient !== 1 && (
-                          <div className="col-span-2">
-                            <span className="text-muted-foreground">
-                              Weather adj:{" "}
-                            </span>
-                            <span className="font-medium">
-                              {event.event_weather} (
-                              {forecast.weatherCoefficient}x ={" "}
-                              {formatCurrency(forecast.weatherAdjustment)})
-                            </span>
-                          </div>
-                        )}
-                      {forecast.dayOfWeekCoefficient &&
-                        forecast.dayOfWeekCoefficient !== 1 && (
-                          <div className="col-span-2">
-                            <span className="text-muted-foreground">
-                              Day adj:{" "}
-                            </span>
-                            <span className="font-medium">
-                              {forecast.dayOfWeekCoefficient}x ={" "}
-                              {formatCurrency(forecast.dayOfWeekAdjustment)}
-                            </span>
-                          </div>
-                        )}
-                      {forecast.venueFamiliarityApplied && (
-                        <div className="col-span-2">
-                          <span className="text-muted-foreground">
-                            Venue familiarity:{" "}
-                          </span>
-                          <span className="font-medium text-green-700">
-                            Applied (prior history at this location)
-                          </span>
-                        </div>
-                      )}
-                      {forecast.platformOperatorCount != null &&
-                        forecast.platformOperatorCount >= 2 && (
-                          <div className="col-span-2">
-                            <span className="text-muted-foreground">
-                              Platform benchmark:{" "}
-                            </span>
-                            <span className="font-medium text-blue-700 dark:text-blue-400">
-                              {forecast.platformOperatorCount} operators, median{" "}
-                              {formatCurrency(forecast.platformMedianSales ?? null)}
-                              {forecast.level === 0 ? " (base)" : " (blended)"}
-                            </span>
-                          </div>
-                        )}
                     </div>
                   )}
 
@@ -321,12 +211,14 @@ export default async function ForecastsPage() {
                     {event.event_weather && (
                       <Badge variant="outline">{event.event_weather}</Badge>
                     )}
-                    <WhatIfPanel
-                      event={event}
-                      currentForecast={forecast?.forecast ?? event.forecast_sales ?? 0}
-                      calibratedCoefficients={calibrated}
-                      eventTypeAvgs={eventTypeAvgs}
-                    />
+                    {!isFixedRevenueEvent(event) && (
+                      <WhatIfPanel
+                        event={event}
+                        currentForecast={forecast?.forecast ?? event.forecast_sales ?? 0}
+                        calibratedCoefficients={calibrated}
+                        eventTypeAvgs={eventTypeAvgs}
+                      />
+                    )}
                   </div>
                 </div>
               ))}
@@ -355,13 +247,11 @@ export default async function ForecastsPage() {
                   <TableHead className="hidden md:table-cell">Date</TableHead>
                   <TableHead className="hidden md:table-cell">Type</TableHead>
                   <TableHead className="text-right">Forecast</TableHead>
-                  <TableHead className="text-right hidden sm:table-cell">Confidence</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {unbookedEvents.map((event) => {
                   const result = calculateForecast(event, events, { calibratedCoefficients: calibrated });
-                  const forecastVal = result?.forecast ?? event.forecast_sales;
                   return (
                     <TableRow key={event.id} className="opacity-75">
                       <TableCell>
@@ -380,23 +270,7 @@ export default async function ForecastsPage() {
                         ) : "—"}
                       </TableCell>
                       <TableCell className="text-right font-semibold">
-                        {formatCurrency(forecastVal)}
-                      </TableCell>
-                      <TableCell className="text-right hidden sm:table-cell">
-                        {result ? (
-                          <Badge
-                            variant="secondary"
-                            className={
-                              result.confidence === "HIGH"
-                                ? "bg-green-100 text-green-800 text-xs"
-                                : result.confidence === "MEDIUM"
-                                  ? "bg-yellow-100 text-yellow-800 text-xs"
-                                  : "bg-red-100 text-red-800 text-xs"
-                            }
-                          >
-                            {result.confidence}
-                          </Badge>
-                        ) : "—"}
+                        <ForecastInline event={event} forecast={result} />
                       </TableCell>
                     </TableRow>
                   );

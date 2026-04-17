@@ -65,6 +65,7 @@ import { normalizeCityForGeocoding } from "@/lib/weather";
 import type { Event } from "@/lib/database.types";
 import type { EventFormData } from "@/app/dashboard/events/actions";
 import { DataImportTrigger } from "@/components/data-import-guide";
+import { ForecastInline } from "@/components/forecast-card";
 
 type SortField =
   | "event_date"
@@ -875,17 +876,11 @@ export function EventsClient({ initialEvents, userId = "", businessName = "", us
                     </div>
                   </div>
                   {event.forecast_sales && (
-                    <p className="text-xs text-muted-foreground mt-1 flex items-center flex-wrap gap-x-1">
-                      Forecast:{" "}
-                      {event.forecast_low && event.forecast_high ? (
-                        <span className="font-medium text-foreground">
-                          {formatCurrency(event.forecast_low)} – {formatCurrency(event.forecast_high)}
-                        </span>
-                      ) : (
-                        <span className="font-medium text-foreground">{formatCurrency(event.forecast_sales)}</span>
-                      )}
+                    <div className="mt-1 flex items-center flex-wrap gap-x-2 text-xs text-muted-foreground">
+                      <span>Forecast:</span>
+                      <ForecastInline event={event} />
                       <WeatherForecastImpact event={event} />
-                    </p>
+                    </div>
                   )}
                 </div>
               );
@@ -1308,18 +1303,7 @@ export function EventsClient({ initialEvents, userId = "", businessName = "", us
                         {formatCurrency(event.net_after_fees)}
                       </TableCell>
                       <TableCell className="hidden lg:table-cell text-right text-sm text-muted-foreground">
-                        {event.forecast_low && event.forecast_high ? (
-                          <div className="leading-tight">
-                            <div>{formatCurrency(event.forecast_low)} – {formatCurrency(event.forecast_high)}</div>
-                            {event.forecast_confidence && (
-                              <div className={`text-[10px] ${event.forecast_confidence === "HIGH" ? "text-green-600" : event.forecast_confidence === "MEDIUM" ? "text-amber-600" : "text-red-500"}`}>
-                                {event.forecast_confidence} confidence
-                              </div>
-                            )}
-                          </div>
-                        ) : (
-                          <div>{formatCurrency(event.forecast_sales)}</div>
-                        )}
+                        <ForecastInline event={event} />
                         {event.event_date >= today && (
                           <WeatherForecastImpact event={event} />
                         )}
