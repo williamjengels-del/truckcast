@@ -549,7 +549,7 @@ export function EventsClient({ initialEvents, userId = "", businessName = "", us
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `truckcast-events-${new Date().toISOString().split("T")[0]}.csv`;
+    a.download = `vendcast-events-${new Date().toISOString().split("T")[0]}.csv`;
     a.click();
     URL.revokeObjectURL(url);
   }
@@ -576,7 +576,7 @@ export function EventsClient({ initialEvents, userId = "", businessName = "", us
     const name = businessName || "Our food truck";
     const city = userCity || "";
     const cityTag = city ? `#${city.replace(/\s+/g, "")}FoodTruck` : "#FoodTruck";
-    const scheduleUrl = userId ? `truckcast.co/schedule/${userId}` : "truckcast.co";
+    const scheduleUrl = userId ? `vendcast.co/schedule/${userId}` : "vendcast.co";
 
     const soonestBooked = [...upcomingEvents]
       .sort((a, b) => new Date(a.event_date + "T00:00:00").getTime() - new Date(b.event_date + "T00:00:00").getTime())

@@ -15,6 +15,9 @@ import {
   BarChart3,
 } from "lucide-react";
 
+// Intentional: legacy key from pre-rename. Renaming would re-trigger the tour
+// for every existing user. Bump to vendcast_tour_v2_done when we ship a
+// materially new tour, not as collateral from a brand rename.
 const STORAGE_KEY = "truckcast_tour_v1_done";
 
 // ─── Slide definitions ──────────────────────────────────────────────────────

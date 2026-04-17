@@ -1170,7 +1170,7 @@ export default function ImportPage() {
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = "truckcast-import-template.csv";
+    a.download = "vendcast-import-template.csv";
     a.click();
     URL.revokeObjectURL(url);
   }
