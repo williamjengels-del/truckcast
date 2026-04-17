@@ -15,17 +15,25 @@ async function EventsContent() {
   let events: Event[] = [];
   let profile: Profile | null = null;
   if (user) {
+    // If the logged-in user is a manager, load the owner's profile + events instead
+    const { data: myProfile } = await supabase
+      .from("profiles")
+      .select("*")
+      .eq("id", user.id)
+      .single();
+
+    const effectiveUserId = (myProfile as Profile | null)?.owner_user_id ?? user.id;
+
     const [eventsResult, profileResult] = await Promise.all([
       supabase
         .from("events")
         .select("*")
-        .eq("user_id", user.id)
+        .eq("user_id", effectiveUserId)
         .order("event_date", { ascending: false }),
-      supabase
-        .from("profiles")
-        .select("*")
-        .eq("id", user.id)
-        .single(),
+      // Load owner's profile for business name / city / tier
+      effectiveUserId !== user.id
+        ? supabase.from("profiles").select("*").eq("id", effectiveUserId).single()
+        : Promise.resolve({ data: myProfile }),
     ]);
     events = (eventsResult.data ?? []) as Event[];
     profile = (profileResult.data ?? null) as Profile | null;

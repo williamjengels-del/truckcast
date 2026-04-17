@@ -48,6 +48,7 @@ export interface Profile {
   data_sharing_enabled: boolean;
   email_reminders_enabled?: boolean | null;
   team_share_token?: string | null;
+  owner_user_id?: string | null;
   trial_extended_until?: string | null;
   created_at: string;
   updated_at: string;
@@ -132,6 +133,17 @@ export interface Contact {
 }
 
 export type PosProvider = "square" | "clover" | "toast" | "sumup";
+
+export interface TeamMember {
+  id: string;
+  owner_user_id: string;
+  member_user_id: string | null;
+  member_email: string;
+  status: "pending" | "active";
+  can_view_revenue: boolean;
+  can_view_forecasts: boolean;
+  created_at: string;
+}
 
 export interface PosConnection {
   id: string;

@@ -29,14 +29,26 @@ export default async function DashboardLayout({
   const { data: { user } } = await supabase.auth.getUser();
 
   let isPro = false;
+  let managerBanner: { ownerName: string } | null = null;
+
   if (user) {
     const { data: profile } = await supabase
       .from("profiles")
-      .select("subscription_tier")
+      .select("subscription_tier, owner_user_id")
       .eq("id", user.id)
       .single();
     const tier = profile?.subscription_tier ?? "starter";
     isPro = tier === "pro" || tier === "premium";
+
+    // If this user is a manager, fetch the owner's business name for the banner
+    if (profile?.owner_user_id) {
+      const { data: ownerProfile } = await supabase
+        .from("profiles")
+        .select("business_name")
+        .eq("id", profile.owner_user_id)
+        .single();
+      managerBanner = { ownerName: ownerProfile?.business_name ?? "your operator's account" };
+    }
   }
 
   return (
@@ -45,6 +57,11 @@ export default async function DashboardLayout({
       <div className="flex flex-1 flex-col overflow-hidden">
         <Header />
         <TrialBanner />
+        {managerBanner && (
+          <div className="shrink-0 bg-violet-600 text-white text-xs text-center py-1.5 px-4 font-medium">
+            You&apos;re managing <span className="font-bold">{managerBanner.ownerName}</span>&apos;s account
+          </div>
+        )}
         <main className="flex-1 overflow-y-auto bg-muted/30 p-4 lg:p-6">
           <ErrorBoundary>
             {children}

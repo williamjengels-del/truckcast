@@ -313,6 +313,7 @@ function SettingsContent() {
       />
 
       <TeamAccessCard profile={profile} />
+      <ManagerInviteCard profile={profile} />
     </div>
   );
 }
@@ -728,6 +729,191 @@ function FollowMyTruckSection({ profile }: { profile: Profile | null }) {
               </div>
             </div>
           </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Manager Invite Card
+// ---------------------------------------------------------------------------
+
+interface TeamMemberRow {
+  id: string;
+  member_email: string;
+  status: "pending" | "active";
+  can_view_revenue: boolean;
+  can_view_forecasts: boolean;
+}
+
+function ManagerInviteCard({ profile }: { profile: Profile | null }) {
+  const [members, setMembers] = useState<TeamMemberRow[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [email, setEmail] = useState("");
+  const [canViewRevenue, setCanViewRevenue] = useState(false);
+  const [canViewForecasts, setCanViewForecasts] = useState(false);
+  const [inviting, setInviting] = useState(false);
+  const [revoking, setRevoking] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState<string | null>(null);
+
+  const tier = profile?.subscription_tier ?? "starter";
+  const limit = tier === "premium" ? 5 : tier === "pro" ? 1 : 0;
+  const isPro = tier === "pro" || tier === "premium";
+
+  async function loadMembers() {
+    const res = await fetch("/api/team/invite");
+    const data = await res.json();
+    setMembers(data.members ?? []);
+    setLoading(false);
+  }
+
+  useEffect(() => { loadMembers(); }, []);
+
+  async function handleInvite(e: React.FormEvent) {
+    e.preventDefault();
+    if (!email.trim()) return;
+    setInviting(true);
+    setError(null);
+    setSuccess(null);
+    const res = await fetch("/api/team/invite", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email: email.trim(), can_view_revenue: canViewRevenue, can_view_forecasts: canViewForecasts }),
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      setError(data.error ?? "Invite failed.");
+    } else {
+      setSuccess(`Invite sent to ${email.trim()}.`);
+      setEmail("");
+      setCanViewRevenue(false);
+      setCanViewForecasts(false);
+      await loadMembers();
+    }
+    setInviting(false);
+  }
+
+  async function handleRevoke(memberId: string) {
+    if (!confirm("Remove this manager's access?")) return;
+    setRevoking(memberId);
+    await fetch("/api/team/invite", {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ memberId }),
+    });
+    await loadMembers();
+    setRevoking(null);
+  }
+
+  return (
+    <Card className="max-w-2xl" id="managers">
+      <CardHeader>
+        <CardTitle>Manager Access</CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <p className="text-sm text-muted-foreground">
+          Invite managers to log event bookings and sales on your behalf.
+          They get their own login — no password sharing.
+        </p>
+
+        {!isPro && (
+          <div className="rounded-md bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 p-3">
+            <p className="text-sm text-amber-800 dark:text-amber-200">
+              Manager access requires a Pro or Premium subscription.{" "}
+              <a href="/dashboard/settings" className="underline font-medium">Upgrade your plan</a>
+            </p>
+          </div>
+        )}
+
+        {/* Current members */}
+        {isPro && (
+          <>
+            {loading ? (
+              <p className="text-sm text-muted-foreground">Loading…</p>
+            ) : members.length > 0 ? (
+              <div className="space-y-2">
+                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                  Current managers ({members.length}/{limit})
+                </p>
+                {members.map((m) => (
+                  <div key={m.id} className="flex items-center justify-between rounded-md border px-3 py-2 text-sm">
+                    <div className="space-y-0.5">
+                      <p className="font-medium">{m.member_email}</p>
+                      <p className="text-xs text-muted-foreground">
+                        {m.status === "pending" ? "⏳ Invite pending" : "✓ Active"}
+                        {m.can_view_revenue && " · can see revenue"}
+                        {m.can_view_forecasts && " · can see forecasts"}
+                      </p>
+                    </div>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="text-destructive hover:text-destructive shrink-0"
+                      onClick={() => handleRevoke(m.id)}
+                      disabled={revoking === m.id}
+                    >
+                      {revoking === m.id ? "Removing…" : "Remove"}
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="text-sm text-muted-foreground">No managers yet.</p>
+            )}
+
+            {/* Invite form */}
+            {members.length < limit && (
+              <form onSubmit={handleInvite} className="space-y-3 rounded-md border p-4">
+                <p className="text-sm font-medium">Invite a manager</p>
+                <div className="space-y-1">
+                  <Label htmlFor="manager-email">Email address</Label>
+                  <Input
+                    id="manager-email"
+                    type="email"
+                    placeholder="manager@example.com"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    required
+                  />
+                </div>
+                <div className="space-y-2">
+                  <p className="text-xs text-muted-foreground font-medium">Permissions</p>
+                  <label className="flex items-center gap-2 text-sm cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={canViewForecasts}
+                      onChange={(e) => setCanViewForecasts(e.target.checked)}
+                      className="rounded"
+                    />
+                    Can view revenue forecasts
+                  </label>
+                  <label className="flex items-center gap-2 text-sm cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={canViewRevenue}
+                      onChange={(e) => setCanViewRevenue(e.target.checked)}
+                      className="rounded"
+                    />
+                    Can view actual revenue &amp; profit
+                  </label>
+                </div>
+                {error && <p className="text-sm text-destructive">{error}</p>}
+                {success && <p className="text-sm text-green-700 dark:text-green-400">{success}</p>}
+                <Button type="submit" size="sm" disabled={inviting || !email.trim()}>
+                  {inviting ? "Sending invite…" : "Send Invite"}
+                </Button>
+              </form>
+            )}
+
+            {members.length >= limit && (
+              <p className="text-xs text-muted-foreground">
+                You&apos;ve reached the manager limit for your plan.{" "}
+                {tier === "pro" && <a href="/dashboard/settings" className="text-primary hover:underline">Upgrade to Premium for up to 5 managers.</a>}
+              </p>
+            )}
+          </>
         )}
       </CardContent>
     </Card>
