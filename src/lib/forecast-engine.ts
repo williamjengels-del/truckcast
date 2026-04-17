@@ -309,10 +309,9 @@ export function getVenueHistory(
 }
 
 /**
- * Auto-derive an event tier from the user's name-match history.
- * Replaces the legacy user-maintained event_tier column as the input to
- * the confidence score's tier component. Stored event_tier is preserved
- * on the row but no longer read for scoring.
+ * Auto-derive an event tier from the user's name-match history, together
+ * with the inputs that decided it. Useful for UIs that want to explain
+ * why a given tier was assigned.
  *
  *  - "A": ≥ 3 valid prior instances AND consistency ≥ 0.70   (+0.10 score)
  *  - "B": ≥ 2 prior instances AND consistency ≥ 0.50,
@@ -326,11 +325,17 @@ export function getVenueHistory(
  * always forecast via Level 1. Events routed to Level 3/4 by definition have
  * no name history and therefore no derived tier.
  */
-export function deriveEventTier(
+export interface DerivedTierDetails {
+  tier: "A" | "B" | null;
+  instances: number;
+  consistency: number;
+}
+
+export function getDerivedTierDetails(
   eventName: string,
   historicalEvents: Event[]
-): "A" | "B" | null {
-  if (!eventName) return null;
+): DerivedTierDetails {
+  if (!eventName) return { tier: null, instances: 0, consistency: 0 };
   const nameNorm = eventName.toLowerCase().trim();
   const matches = historicalEvents.filter(
     (e) =>
@@ -340,11 +345,18 @@ export function deriveEventTier(
       hasRevenue(e) &&
       e.anomaly_flag !== "disrupted"
   );
-  if (matches.length < 2) return null;
-  const cons = calculateConsistency(matches);
-  if (matches.length >= 3 && cons >= 0.7) return "A";
-  if (matches.length >= 2 && cons >= 0.5) return "B";
-  return null;
+  const consistency = calculateConsistency(matches);
+  let tier: "A" | "B" | null = null;
+  if (matches.length >= 3 && consistency >= 0.7) tier = "A";
+  else if (matches.length >= 2 && consistency >= 0.5) tier = "B";
+  return { tier, instances: matches.length, consistency };
+}
+
+export function deriveEventTier(
+  eventName: string,
+  historicalEvents: Event[]
+): "A" | "B" | null {
+  return getDerivedTierDetails(eventName, historicalEvents).tier;
 }
 
 // --- Confidence scoring ---

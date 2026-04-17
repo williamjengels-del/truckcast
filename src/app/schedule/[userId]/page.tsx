@@ -4,7 +4,6 @@ import Link from "next/link";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { TruckIcon, MapPin, Clock, Calendar } from "lucide-react";
-import { TIER_COLORS } from "@/lib/constants";
 
 interface Props {
   params: Promise<{ userId: string }>;
@@ -56,7 +55,7 @@ export default async function PublicSchedulePage({ params }: Props) {
   const { data: events } = await supabase
     .from("events")
     .select(
-      "event_name, event_date, start_time, end_time, location, city, event_type, event_tier"
+      "event_name, event_date, start_time, end_time, location, city, event_type"
     )
     .eq("user_id", userId)
     .eq("booked", true)
@@ -142,16 +141,6 @@ export default async function PublicSchedulePage({ params }: Props) {
                             )}
                           </div>
                           <div className="flex gap-2">
-                            {event.event_tier && (
-                              <Badge
-                                variant="outline"
-                                className={
-                                  TIER_COLORS[event.event_tier] ?? ""
-                                }
-                              >
-                                {event.event_tier}
-                              </Badge>
-                            )}
                             {event.event_type && (
                               <Badge variant="outline">
                                 {event.event_type}

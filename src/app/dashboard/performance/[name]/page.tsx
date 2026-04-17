@@ -24,6 +24,7 @@ import {
 } from "lucide-react";
 import { CONFIDENCE_COLORS, TREND_COLORS, TIER_COLORS } from "@/lib/constants";
 import type { Event, EventPerformance } from "@/lib/database.types";
+import { getDerivedTierDetails } from "@/lib/forecast-engine";
 
 export async function generateMetadata({
   params,
@@ -135,6 +136,21 @@ export default async function EventDrilldownPage({ params }: PageProps) {
 
   const maxYearAvg = Math.max(...yearStats.map((y) => y.avg), 1);
 
+  // Auto-derived tier from name-match history — the real input to scoring now.
+  const tierDetails = getDerivedTierDetails(eventName, allBookings);
+
+  // Legacy stored tier — preserved historical signal. Aggregate across all
+  // past rows for this event name; show the most common non-null rating.
+  const storedTierCounts = new Map<string, number>();
+  for (const e of allBookings) {
+    if (e.event_tier) {
+      storedTierCounts.set(e.event_tier, (storedTierCounts.get(e.event_tier) ?? 0) + 1);
+    }
+  }
+  const mostCommonStoredTier = [...storedTierCounts.entries()].sort(
+    (a, b) => b[1] - a[1]
+  )[0]?.[0] ?? null;
+
   if (!perf && allBookings.length === 0) {
     redirect("/dashboard/performance");
   }
@@ -219,6 +235,57 @@ export default async function EventDrilldownPage({ params }: PageProps) {
           </Card>
         </div>
       )}
+
+      {/* Tier signal: auto-derived vs. legacy stored rating.
+          Auto-derived drives the confidence score; stored is historical. */}
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base">Tier</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3 pt-0">
+          <div className="flex items-start gap-3">
+            {tierDetails.tier ? (
+              <Badge
+                variant="outline"
+                className={`text-base px-2.5 py-0.5 ${TIER_COLORS[tierDetails.tier] ?? ""}`}
+              >
+                {tierDetails.tier}
+              </Badge>
+            ) : (
+              <Badge variant="outline" className="text-base px-2.5 py-0.5 text-muted-foreground">
+                —
+              </Badge>
+            )}
+            <div className="text-sm">
+              <div className="font-medium">
+                {tierDetails.tier ? "Current signal" : "Not yet established"}
+              </div>
+              <div className="text-xs text-muted-foreground mt-0.5">
+                {tierDetails.instances === 0
+                  ? "No valid prior instances yet."
+                  : `Auto-derived from ${tierDetails.instances} instance${tierDetails.instances === 1 ? "" : "s"} · ${(tierDetails.consistency * 100).toFixed(0)}% consistency.`}
+                {!tierDetails.tier && tierDetails.instances > 0 && (
+                  <> Needs ≥ 3 instances at ≥ 70% (A) or ≥ 2 at ≥ 50% (B).</>
+                )}
+              </div>
+            </div>
+          </div>
+          <div className="flex items-center gap-2 text-xs text-muted-foreground pt-2 border-t">
+            <span>Your previous rating:</span>
+            {mostCommonStoredTier ? (
+              <Badge
+                variant="outline"
+                className={`text-[10px] ${TIER_COLORS[mostCommonStoredTier] ?? ""}`}
+              >
+                {mostCommonStoredTier}
+              </Badge>
+            ) : (
+              <span className="italic">Not rated</span>
+            )}
+            <span className="text-[10px] opacity-70">(stored manually · no longer drives the score)</span>
+          </div>
+        </CardContent>
+      </Card>
 
       {/* Year-over-year bar chart */}
       {yearStats.length >= 2 && (
@@ -351,11 +418,6 @@ export default async function EventDrilldownPage({ params }: PageProps) {
                         </TableCell>
                         <TableCell className="text-right font-semibold">
                           {formatCurrency(rev)}
-                          {e.event_tier && (
-                            <Badge variant="outline" className={`ml-1.5 text-[10px] ${TIER_COLORS[e.event_tier] ?? ""}`}>
-                              T{e.event_tier}
-                            </Badge>
-                          )}
                         </TableCell>
                         <TableCell className="text-right hidden sm:table-cell text-sm text-muted-foreground">
                           {formatCurrency(e.forecast_sales)}
