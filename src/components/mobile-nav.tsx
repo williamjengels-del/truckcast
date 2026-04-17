@@ -24,6 +24,7 @@ export function MobileNav() {
   const supabase = createClient();
   const [tier, setTier] = useState<SubscriptionTier | null>(null);
   const [unloggedCount, setUnloggedCount] = useState(0);
+  const [isManager, setIsManager] = useState(false);
 
   useEffect(() => {
     async function load() {
@@ -31,7 +32,7 @@ export function MobileNav() {
       if (!user) return;
 
       const [profileRes, unloggedRes] = await Promise.all([
-        supabase.from("profiles").select("subscription_tier").eq("id", user.id).single(),
+        supabase.from("profiles").select("subscription_tier, owner_user_id").eq("id", user.id).single(),
         supabase
           .from("events")
           .select("id, event_mode, invoice_revenue, anomaly_flag, cancellation_reason")
@@ -43,7 +44,10 @@ export function MobileNav() {
           .lt("event_date", new Date().toISOString().split("T")[0]),
       ]);
 
-      if (profileRes.data) setTier(profileRes.data.subscription_tier);
+      if (profileRes.data) {
+        setTier(profileRes.data.subscription_tier);
+        setIsManager(!!profileRes.data.owner_user_id);
+      }
 
       // Mirror the Needs Attention tab filter exactly:
       // exclude catering with invoice revenue, and disrupted events
@@ -86,7 +90,10 @@ export function MobileNav() {
 
         <nav className="flex-1 overflow-y-auto px-3 py-4 space-y-1">
           {navItems
-            .filter((item) => !item.tier || item.tier === tier)
+            .filter((item) => {
+              if (isManager) return ["/dashboard", "/dashboard/events", "/dashboard/settings"].includes(item.href);
+              return !item.tier || item.tier === tier;
+            })
             .map((item) => {
               const isActive =
                 pathname === item.href ||
