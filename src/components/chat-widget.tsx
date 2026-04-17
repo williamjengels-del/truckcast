@@ -12,9 +12,16 @@ interface Message {
 
 interface ChatWidgetProps {
   isPro: boolean;
+  // TODO: Re-enable when ANTHROPIC_API_KEY is added to Vercel; gated behind
+  // Pro/Premium tier. Parent (dashboard layout) sets this to false when the
+  // key is missing, and we render nothing so the user never sees a dead
+  // button or a 500 from /api/chat.
+  enabled: boolean;
 }
 
-export function ChatWidget({ isPro }: ChatWidgetProps) {
+export function ChatWidget({ isPro, enabled }: ChatWidgetProps) {
+  if (!enabled) return null;
+
   const [open, setOpen] = useState(false);
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");

@@ -30,6 +30,11 @@ export default async function DashboardLayout({
 
   let isPro = false;
   let managerBanner: { ownerName: string } | null = null;
+  // TODO: Re-enable chat widget when ANTHROPIC_API_KEY is added to Vercel;
+  // gated behind Pro/Premium tier. When the env var is absent, the widget
+  // does not render at all (prevents client from hitting /api/chat which
+  // would 500). Add the key in Vercel → Settings → Environment Variables.
+  const chatEnabled = Boolean(process.env.ANTHROPIC_API_KEY);
 
   if (user) {
     const { data: profile } = await supabase
@@ -70,7 +75,7 @@ export default async function DashboardLayout({
       </div>
       <FeedbackDialog />
       <WelcomeTour />
-      <ChatWidget isPro={isPro} />
+      <ChatWidget isPro={isPro} enabled={chatEnabled} />
     </div>
   );
 }

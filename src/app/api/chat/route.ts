@@ -4,6 +4,16 @@ import { createClient } from "@/lib/supabase/server";
 
 export async function POST(req: NextRequest) {
   try {
+    // TODO: Re-enable when ANTHROPIC_API_KEY is added to Vercel; gated behind
+    // Pro/Premium tier. The ChatWidget also refuses to render when the env
+    // var is absent, so in practice this guard is belt-and-suspenders.
+    if (!process.env.ANTHROPIC_API_KEY) {
+      return new Response(
+        JSON.stringify({ error: "AI assistant is temporarily unavailable" }),
+        { status: 503, headers: { "Content-Type": "application/json" } }
+      );
+    }
+
     const supabase = await createClient();
     const {
       data: { user },
