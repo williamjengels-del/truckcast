@@ -222,9 +222,63 @@ export function calibrateCoefficients(
 
 // --- Venue familiarity ---
 
+// Words that, when appearing as the suffix after a dash, describe a sub-area
+// of a larger venue (a parking lot, stage, meadow, etc.) rather than a distinct
+// venue. Stripping them lets "Tower Grove Park" match "Tower Grove Park - South
+// Meadow". Kept deliberately narrow — if every word in the trailing segment is
+// in this set, strip; otherwise leave the suffix alone.
+const VENUE_SUBAREA_WORDS = new Set([
+  // directional / positional
+  "north", "south", "east", "west", "main", "upper", "lower", "front",
+  "back", "inner", "outer", "side",
+  // sub-area types
+  "stage", "lot", "pavilion", "meadow", "field", "entrance", "gate", "lobby",
+  "wing", "hall", "parking", "area", "section", "room", "tent", "court",
+  "plaza", "deck", "patio", "block", "floor", "level", "door", "balcony",
+  "mezzanine", "garden", "patio", "terrace", "arena",
+]);
+
+/**
+ * Normalize a location string for venue-familiarity matching.
+ *
+ *  - lowercase, trim
+ *  - strip parentheticals:    "Kiener Plaza (North Lot)" → "kiener plaza"
+ *  - strip dash-suffixes whose every word is a known venue sub-area:
+ *      "Tower Grove Park - South Meadow" → "tower grove park"
+ *      "Ballpark Village - Upper Deck"   → "ballpark village"
+ *    (a suffix like "- Jazz Concert" is preserved — "jazz" and "concert"
+ *    aren't sub-area words)
+ *  - collapse multiple whitespace runs
+ *
+ * Applied at comparison time only; the stored location string is never
+ * modified.
+ */
+export function normalizeLocation(raw: string): string {
+  if (!raw) return "";
+  let s = raw.toLowerCase();
+  // strip parenthetical qualifiers
+  s = s.replace(/\s*\([^)]*\)\s*/g, " ");
+  // strip trailing dash-suffix if every word is a sub-area term.
+  // accepts " - ", " – ", " — " or just "-" with optional whitespace.
+  const parts = s.split(/\s*[–—-]\s*/);
+  if (parts.length >= 2) {
+    const suffix = parts[parts.length - 1].trim();
+    if (suffix) {
+      const words = suffix.split(/\s+/).filter(Boolean);
+      if (words.length > 0 && words.every((w) => VENUE_SUBAREA_WORDS.has(w))) {
+        s = parts.slice(0, -1).join(" - ");
+      }
+    }
+  }
+  // collapse whitespace
+  return s.replace(/\s+/g, " ").trim();
+}
+
 /**
  * Get venue history for a given location from historical events.
- * Matches on normalized location string.
+ * Matches on normalized location string (strips sub-area suffixes like
+ * "- South Meadow" so repeat bookings at the same venue match across
+ * different cosmetic location strings).
  */
 export function getVenueHistory(
   location: string,
@@ -232,11 +286,13 @@ export function getVenueHistory(
 ): VenueHistory | null {
   if (!location) return null;
 
-  const normalized = location.toLowerCase().trim();
+  const normalized = normalizeLocation(location);
+  if (!normalized) return null;
+
   const venueEvents = historicalEvents.filter(
     (e) =>
       e.location &&
-      e.location.toLowerCase().trim() === normalized &&
+      normalizeLocation(e.location) === normalized &&
       e.booked &&
       !e.cancellation_reason &&
       hasRevenue(e) &&
@@ -250,6 +306,45 @@ export function getVenueHistory(
     venueCount: venueEvents.length,
     venueConsistency: calculateConsistency(venueEvents),
   };
+}
+
+/**
+ * Auto-derive an event tier from the user's name-match history.
+ * Replaces the legacy user-maintained event_tier column as the input to
+ * the confidence score's tier component. Stored event_tier is preserved
+ * on the row but no longer read for scoring.
+ *
+ *  - "A": ≥ 3 valid prior instances AND consistency ≥ 0.70   (+0.10 score)
+ *  - "B": ≥ 2 prior instances AND consistency ≥ 0.50,
+ *          OR ≥ 3 prior instances with consistency 0.50–0.69  (+0.05 score)
+ *  - null: otherwise                                          (0)
+ *
+ * Valid = booked + has revenue + not cancelled + not anomaly=disrupted
+ * (matches the filter used everywhere else in the engine).
+ *
+ * Note: because Level 1 fires whenever ≥ 1 name match exists, tiered events
+ * always forecast via Level 1. Events routed to Level 3/4 by definition have
+ * no name history and therefore no derived tier.
+ */
+export function deriveEventTier(
+  eventName: string,
+  historicalEvents: Event[]
+): "A" | "B" | null {
+  if (!eventName) return null;
+  const nameNorm = eventName.toLowerCase().trim();
+  const matches = historicalEvents.filter(
+    (e) =>
+      e.event_name.toLowerCase().trim() === nameNorm &&
+      e.booked &&
+      !e.cancellation_reason &&
+      hasRevenue(e) &&
+      e.anomaly_flag !== "disrupted"
+  );
+  if (matches.length < 2) return null;
+  const cons = calculateConsistency(matches);
+  if (matches.length >= 3 && cons >= 0.7) return "A";
+  if (matches.length >= 2 && cons >= 0.5) return "B";
+  return null;
 }
 
 // --- Confidence scoring ---
@@ -739,15 +834,21 @@ function applyAdjustments(
 
   result.forecast = Math.round(adjusted * 100) / 100;
 
-  // Calculate numeric confidence score
+  // Calculate numeric confidence score.
+  // Tier is auto-derived from name-match history + consistency (see
+  // deriveEventTier); the stored events.event_tier column is no longer
+  // read for scoring.
   const matchingEvents = getMatchingEventsForLevel(result.level, target, allEvents);
+  const derivedTier = target.event_name
+    ? deriveEventTier(target.event_name, allEvents)
+    : null;
   result.confidenceScore = calculateConfidenceScore(
     result.dataPoints,
     matchingEvents,
     isCalibrated,
     calculateConsistency(matchingEvents),
     result.venueFamiliarityApplied,
-    target.event_tier
+    derivedTier
   );
 
   // Override label with score-based label for consistency

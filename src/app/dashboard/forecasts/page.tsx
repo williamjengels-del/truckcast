@@ -17,7 +17,6 @@ import { CloudSun, Calculator, ClipboardList } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { calculateForecast, calibrateCoefficients } from "@/lib/forecast-engine";
 import { getPlatformEvents } from "@/lib/platform-registry";
-import { TIER_COLORS } from "@/lib/constants";
 import type { Event } from "@/lib/database.types";
 import { ForecastExplainer } from "./forecast-explainer";
 import { WhatIfPanel } from "@/components/what-if-panel";
@@ -197,14 +196,6 @@ export default async function ForecastsPage() {
                   )}
 
                   <div className="flex items-center gap-2 flex-wrap">
-                    {event.event_tier && (
-                      <Badge
-                        variant="outline"
-                        className={TIER_COLORS[event.event_tier] ?? ""}
-                      >
-                        Tier {event.event_tier}
-                      </Badge>
-                    )}
                     {event.event_type && (
                       <Badge variant="outline">{event.event_type}</Badge>
                     )}

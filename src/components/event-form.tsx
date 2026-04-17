@@ -539,23 +539,6 @@ export function EventForm({
                     </Select>
                     <p className="text-xs text-muted-foreground">Helps find similar past events for comparison</p>
                   </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="event_tier">Tier</Label>
-                    <Select
-                      name="event_tier"
-                      defaultValue={initialData?.event_tier ?? ""}
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select tier" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="A">A - Destination</SelectItem>
-                        <SelectItem value="B">B - Solid Recurring</SelectItem>
-                        <SelectItem value="C">C - Smaller/Newer</SelectItem>
-                        <SelectItem value="D">D - Niche/Low-Value</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
                 </div>
               </div>
 

@@ -60,7 +60,7 @@ import {
   deleteAllEvents,
   dismissFlaggedEvent,
 } from "@/app/dashboard/events/actions";
-import { TIER_COLORS, WEATHER_COEFFICIENTS } from "@/lib/constants";
+import { WEATHER_COEFFICIENTS } from "@/lib/constants";
 import { normalizeCityForGeocoding } from "@/lib/weather";
 import type { Event } from "@/lib/database.types";
 import type { EventFormData } from "@/app/dashboard/events/actions";
@@ -117,14 +117,6 @@ function getWeatherIconSmall(code: number): React.ReactNode {
   if (code <= 86) return <CloudSnow className="h-3 w-3 text-blue-300" />;
   return <Zap className="h-3 w-3 text-yellow-600" />;
 }
-
-// Calendar tier chip colors
-const TIER_CHIP_COLORS: Record<string, string> = {
-  A: "bg-green-100 text-green-800 border-green-300",
-  B: "bg-blue-100 text-blue-800 border-blue-300",
-  C: "bg-amber-100 text-amber-800 border-amber-300",
-  D: "bg-red-100 text-red-800 border-red-300",
-};
 
 export function EventsClient({ initialEvents, userId = "", businessName = "", userCity = "" }: EventsClientProps) {
   const [showForm, setShowForm] = useState(false);
@@ -708,24 +700,15 @@ export function EventsClient({ initialEvents, userId = "", businessName = "", us
                   <p className={`text-xs font-semibold ${isToday ? "text-primary" : "text-muted-foreground"}`}>
                     {dateLabel}
                   </p>
-                  {dayEvents.map((event) => {
-                    const chipClass =
-                      event.event_tier
-                        ? TIER_CHIP_COLORS[event.event_tier] ?? "bg-primary/10 text-primary border-primary/20"
-                        : "bg-primary/10 text-primary border-primary/20";
-                    return (
-                      <button
-                        key={event.id}
-                        onClick={() => setEditingEvent(event)}
-                        className="flex items-center gap-2 w-full text-left rounded-md border bg-card px-3 py-2 hover:bg-muted transition-colors"
-                      >
-                        <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded border ${chipClass}`}>
-                          {event.event_tier ?? "—"}
-                        </span>
-                        <span className="text-sm font-medium truncate">{event.event_name}</span>
-                      </button>
-                    );
-                  })}
+                  {dayEvents.map((event) => (
+                    <button
+                      key={event.id}
+                      onClick={() => setEditingEvent(event)}
+                      className="flex items-center gap-2 w-full text-left rounded-md border bg-card px-3 py-2 hover:bg-muted transition-colors"
+                    >
+                      <span className="text-sm font-medium truncate">{event.event_name}</span>
+                    </button>
+                  ))}
                 </div>
               );
             })
@@ -779,10 +762,6 @@ export function EventsClient({ initialEvents, userId = "", businessName = "", us
                   )}
 
                   {dayEvents.slice(0, 3).map((event) => {
-                    const chipClass =
-                      event.event_tier
-                        ? TIER_CHIP_COLORS[event.event_tier] ?? "bg-primary/10 text-primary border-primary/20"
-                        : "bg-primary/10 text-primary border-primary/20";
                     const cateringBorderClass = (event.event_mode ?? "food_truck") === "catering"
                       ? "border-l-2 border-l-violet-500"
                       : "border-l-2 border-l-transparent";
@@ -790,7 +769,7 @@ export function EventsClient({ initialEvents, userId = "", businessName = "", us
                       <button
                         key={event.id}
                         onClick={() => setEditingEvent(event)}
-                        className={`text-left text-[10px] font-medium px-1 py-0.5 rounded border truncate w-full leading-tight ${chipClass} ${cateringBorderClass} hover:opacity-80 transition-opacity`}
+                        className={`text-left text-[10px] font-medium px-1 py-0.5 rounded border truncate w-full leading-tight bg-primary/10 text-primary border-primary/20 ${cateringBorderClass} hover:opacity-80 transition-opacity`}
                         title={event.event_name}
                       >
                         {event.event_name}
@@ -832,10 +811,6 @@ export function EventsClient({ initialEvents, userId = "", businessName = "", us
           <div className="flex-1 overflow-y-auto space-y-2 pr-1">
             {sortedUpcoming.map((event) => {
               const wx = weatherMap.get(event.id);
-              const chipClass =
-                event.event_tier
-                  ? TIER_CHIP_COLORS[event.event_tier] ?? "bg-primary/10 text-primary border-primary/20"
-                  : "bg-primary/10 text-primary border-primary/20";
               return (
                 <div
                   key={event.id}
@@ -844,9 +819,6 @@ export function EventsClient({ initialEvents, userId = "", businessName = "", us
                   <div className="flex items-start justify-between gap-2">
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-1.5 flex-wrap">
-                        <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded border ${chipClass}`}>
-                          {event.event_tier ?? "—"}
-                        </span>
                         <span className="text-sm font-medium truncate">{event.event_name}</span>
                       </div>
                       <p className="text-xs text-muted-foreground mt-0.5">
@@ -1178,15 +1150,6 @@ export function EventsClient({ initialEvents, userId = "", businessName = "", us
                       </span>
                     </TableHead>
                     <TableHead
-                      className="hidden md:table-cell cursor-pointer select-none pl-4"
-                      onClick={() => handleSort("event_tier")}
-                    >
-                      <span className="inline-flex items-center">
-                        Tier
-                        <SortIcon field="event_tier" />
-                      </span>
-                    </TableHead>
-                    <TableHead
                       className="hidden xl:table-cell cursor-pointer select-none"
                       onClick={() => handleSort("location")}
                     >
@@ -1273,18 +1236,6 @@ export function EventsClient({ initialEvents, userId = "", businessName = "", us
                       </TableCell>
                       <TableCell className="hidden md:table-cell text-sm text-muted-foreground pl-6 pr-4">
                         {event.event_type ?? "—"}
-                      </TableCell>
-                      <TableCell className="hidden md:table-cell pl-4">
-                        {event.event_tier ? (
-                          <Badge
-                            variant="outline"
-                            className={TIER_COLORS[event.event_tier] ?? ""}
-                          >
-                            {event.event_tier}
-                          </Badge>
-                        ) : (
-                          "—"
-                        )}
                       </TableCell>
                       <TableCell className="hidden xl:table-cell text-sm text-muted-foreground">
                         {event.location ?? event.city ?? "—"}
