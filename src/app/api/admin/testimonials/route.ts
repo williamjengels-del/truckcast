@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient as createServiceClient } from "@supabase/supabase-js";
 import { getAdminUser } from "@/lib/admin";
+import { logAdminAction } from "@/lib/admin-audit";
 
 async function getAdminServiceClient() {
   if (!(await getAdminUser())) return null;
@@ -33,6 +34,8 @@ export async function POST(request: NextRequest) {
   if (!serviceClient) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
+  const admin = await getAdminUser();
+  if (!admin) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const body = await request.json();
   const { author_name, author_title, content, rating, display_order } = body;
@@ -57,6 +60,17 @@ export async function POST(request: NextRequest) {
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
+
+  await logAdminAction(
+    {
+      adminUserId: admin.id,
+      action: "testimonial.create",
+      targetType: "testimonial",
+      targetId: data?.id ?? null,
+      metadata: { author_name, rating: rating ?? 5 },
+    },
+    serviceClient
+  );
 
   return NextResponse.json({ testimonial: data });
 }

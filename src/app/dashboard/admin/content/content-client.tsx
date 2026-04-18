@@ -17,6 +17,7 @@ const adminNavItems = [
   { href: "/dashboard/admin/beta", label: "Invites" },
   { href: "/dashboard/admin/feedback", label: "Feedback" },
   { href: "/dashboard/admin/content", label: "Content", active: true },
+  { href: "/dashboard/admin/activity", label: "Activity" },
 ];
 
 export function ContentClient() {

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient as createServiceClient } from "@supabase/supabase-js";
 import { getAdminUser } from "@/lib/admin";
+import { logAdminAction } from "@/lib/admin-audit";
 
 async function getAdminServiceClient() {
   if (!(await getAdminUser())) return null;
@@ -18,6 +19,8 @@ export async function PATCH(
   if (!serviceClient) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
+  const admin = await getAdminUser();
+  if (!admin) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const { id } = await params;
   const body = await request.json();
@@ -50,6 +53,17 @@ export async function PATCH(
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
+  await logAdminAction(
+    {
+      adminUserId: admin.id,
+      action: "testimonial.update",
+      targetType: "testimonial",
+      targetId: id,
+      metadata: { changes: Object.keys(update) },
+    },
+    serviceClient
+  );
+
   return NextResponse.json({ success: true });
 }
 
@@ -61,8 +75,18 @@ export async function DELETE(
   if (!serviceClient) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
+  const admin = await getAdminUser();
+  if (!admin) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const { id } = await params;
+
+  // Capture author name BEFORE delete — so the audit row can say
+  // "deleted 'Jane Doe'" instead of a bare UUID.
+  const { data: snapshot } = await serviceClient
+    .from("testimonials")
+    .select("author_name")
+    .eq("id", id)
+    .maybeSingle();
 
   const { error } = await serviceClient
     .from("testimonials")
@@ -72,6 +96,17 @@ export async function DELETE(
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
+
+  await logAdminAction(
+    {
+      adminUserId: admin.id,
+      action: "testimonial.delete",
+      targetType: "testimonial",
+      targetId: id,
+      metadata: { author_name: snapshot?.author_name ?? null },
+    },
+    serviceClient
+  );
 
   return NextResponse.json({ success: true });
 }

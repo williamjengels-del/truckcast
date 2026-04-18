@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { createClient as createServiceClient } from "@supabase/supabase-js";
 import { getAdminUser } from "@/lib/admin";
+import { logAdminAction } from "@/lib/admin-audit";
 
 export async function POST(request: Request) {
   try {
@@ -76,7 +77,8 @@ export async function GET() {
 
 export async function DELETE(request: Request) {
   try {
-    if (!(await getAdminUser())) {
+    const admin = await getAdminUser();
+    if (!admin) {
       return Response.json({ error: "Forbidden" }, { status: 403 });
     }
 
@@ -90,6 +92,17 @@ export async function DELETE(request: Request) {
 
     const { error } = await serviceClient.from("feedback").delete().eq("id", id);
     if (error) return Response.json({ error: error.message }, { status: 500 });
+
+    await logAdminAction(
+      {
+        adminUserId: admin.id,
+        action: "feedback.delete",
+        targetType: "feedback",
+        targetId: id,
+        metadata: null,
+      },
+      serviceClient
+    );
 
     return Response.json({ success: true });
   } catch {

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient as createServiceClient } from "@supabase/supabase-js";
 import { getAdminUser } from "@/lib/admin";
+import { logAdminAction } from "@/lib/admin-audit";
 
 function getServiceClient() {
   return createServiceClient(
@@ -32,7 +33,8 @@ function generateCode(): string {
  */
 export async function POST(request: Request) {
   try {
-    if (!(await getAdminUser())) {
+    const admin = await getAdminUser();
+    if (!admin) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
@@ -60,6 +62,22 @@ export async function POST(request: Request) {
     if (error) {
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
+
+    await logAdminAction(
+      {
+        adminUserId: admin.id,
+        action: "invite.generate",
+        targetType: "invite",
+        targetId: count === 1 ? data?.[0]?.code ?? null : null,
+        metadata: {
+          count,
+          tier: grantedTier,
+          trial_days: trialDays,
+          restricted_email: email,
+        },
+      },
+      service
+    );
 
     return NextResponse.json({ codes: data });
   } catch (err) {

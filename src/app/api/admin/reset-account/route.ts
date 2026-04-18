@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient as createServiceClient } from "@supabase/supabase-js";
 import { getAdminUser } from "@/lib/admin";
+import { logAdminAction } from "@/lib/admin-audit";
 
 function getServiceClient() {
   return createServiceClient(
@@ -38,6 +39,17 @@ export async function POST() {
       team_share_token: null,
     })
     .eq("id", userId);
+
+  await logAdminAction(
+    {
+      adminUserId: userId,
+      action: "self.account_reset",
+      targetType: "self",
+      targetId: userId,
+      metadata: null,
+    },
+    service
+  );
 
   return NextResponse.json({ success: true, message: "Account data wiped. Onboarding reset." });
 }

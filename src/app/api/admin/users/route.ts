@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient as createServiceClient } from "@supabase/supabase-js";
 import { getAdminUser } from "@/lib/admin";
+import { logAdminAction } from "@/lib/admin-audit";
 
 async function getServiceClient() {
   if (!(await getAdminUser())) return null;
@@ -67,11 +68,24 @@ export async function DELETE(request: NextRequest) {
   const { userId } = await request.json();
   if (!userId) return NextResponse.json({ error: "userId required" }, { status: 400 });
 
-  // Prevent self-deletion
+  // Prevent self-deletion. `getServiceClient()` above already gated on
+  // admin status, so getAdminUser() here is guaranteed non-null — but
+  // narrow the type explicitly for the compiler.
   const me = await getAdminUser();
-  if (me?.id === userId) {
+  if (!me) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  if (me.id === userId) {
     return NextResponse.json({ error: "Cannot delete your own account" }, { status: 400 });
   }
+
+  // Capture profile + email BEFORE delete so the audit row has context
+  // (the humans reading /admin/activity want to see "deleted Jane's
+  // Food Truck", not a bare uuid).
+  const { data: profileSnapshot } = await service
+    .from("profiles")
+    .select("business_name")
+    .eq("id", userId)
+    .maybeSingle();
+  const { data: authUser } = await service.auth.admin.getUserById(userId);
 
   // Delete all user data in order (respect FK constraints)
   await service.from("event_performance").delete().eq("user_id", userId);
@@ -86,12 +100,29 @@ export async function DELETE(request: NextRequest) {
   const { error: authError } = await service.auth.admin.deleteUser(userId);
   if (authError) return NextResponse.json({ error: authError.message }, { status: 500 });
 
+  await logAdminAction(
+    {
+      adminUserId: me.id,
+      action: "user.delete",
+      targetType: "user",
+      targetId: userId,
+      metadata: {
+        email: authUser?.user?.email ?? null,
+        business_name: profileSnapshot?.business_name ?? null,
+      },
+    },
+    service
+  );
+
   return NextResponse.json({ success: true });
 }
 
 export async function PATCH(request: NextRequest) {
   const service = await getServiceClient();
   if (!service) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+
+  const admin = await getAdminUser();
+  if (!admin) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
   const body = await request.json();
   const { userId } = body;
@@ -101,6 +132,19 @@ export async function PATCH(request: NextRequest) {
   }
 
   const updateData: Record<string, unknown> = {};
+
+  // We need the current subscription_tier BEFORE mutating, so the audit
+  // row can record "from -> to". Pull it now if the caller is changing
+  // the tier.
+  let previousTier: string | null = null;
+  if (body.subscription_tier !== undefined) {
+    const { data: prev } = await service
+      .from("profiles")
+      .select("subscription_tier")
+      .eq("id", userId)
+      .maybeSingle();
+    previousTier = prev?.subscription_tier ?? null;
+  }
 
   // Update subscription tier
   if (body.subscription_tier !== undefined) {
@@ -112,6 +156,8 @@ export async function PATCH(request: NextRequest) {
   }
 
   // Extend trial by N days (admin tool for beta users)
+  let trialExtendDays: number | null = null;
+  let trialExtendUntilIso: string | null = null;
   if (body.extend_trial_days !== undefined) {
     const days = parseInt(body.extend_trial_days, 10);
     if (isNaN(days) || days < 1 || days > 365) {
@@ -119,7 +165,9 @@ export async function PATCH(request: NextRequest) {
     }
     const extendUntil = new Date();
     extendUntil.setDate(extendUntil.getDate() + days);
-    updateData.trial_extended_until = extendUntil.toISOString();
+    trialExtendDays = days;
+    trialExtendUntilIso = extendUntil.toISOString();
+    updateData.trial_extended_until = trialExtendUntilIso;
   }
 
   if (Object.keys(updateData).length === 0) {
@@ -132,6 +180,34 @@ export async function PATCH(request: NextRequest) {
     .eq("id", userId);
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+  // Log each semantic action separately — a single PATCH can carry a
+  // tier change AND a trial extension, but they're two distinct
+  // policy decisions and the activity feed should reflect both.
+  if (body.subscription_tier !== undefined) {
+    await logAdminAction(
+      {
+        adminUserId: admin.id,
+        action: "user.tier_change",
+        targetType: "user",
+        targetId: userId,
+        metadata: { from: previousTier, to: body.subscription_tier },
+      },
+      service
+    );
+  }
+  if (trialExtendDays !== null) {
+    await logAdminAction(
+      {
+        adminUserId: admin.id,
+        action: "user.trial_extend",
+        targetType: "user",
+        targetId: userId,
+        metadata: { days: trialExtendDays, until: trialExtendUntilIso },
+      },
+      service
+    );
+  }
 
   return NextResponse.json({ success: true });
 }

@@ -15,6 +15,7 @@ const adminNavItems = [
   { href: "/dashboard/admin/beta", label: "Invites" },
   { href: "/dashboard/admin/feedback", label: "Feedback" },
   { href: "/dashboard/admin/content", label: "Content" },
+  { href: "/dashboard/admin/activity", label: "Activity" },
 ];
 
 interface AdminUser {

@@ -89,6 +89,7 @@ export default async function AdminOverviewPage() {
     { href: "/dashboard/admin/beta", label: "Invites" },
     { href: "/dashboard/admin/feedback", label: "Feedback" },
     { href: "/dashboard/admin/content", label: "Content" },
+    { href: "/dashboard/admin/activity", label: "Activity" },
   ];
 
   // Check if Stripe is in test mode (key starts with "sk_test_")
