@@ -148,31 +148,63 @@ export function InstallPrompt() {
   }
 
   if (showIOS) {
+    // iOS Safari blocks programmatic install — this card is informational
+    // only, guiding the user to Safari's built-in Share → Add to Home Screen.
+    // Numbered steps + explicit "In Safari" framing so users don't tap the
+    // card expecting an install action to fire.
     return (
       <div
         role="dialog"
-        aria-label="Add VendCast to Home Screen"
-        className="fixed bottom-4 left-4 right-4 z-50 rounded-xl border bg-card shadow-lg p-4"
+        aria-label="Install VendCast instructions"
+        className="fixed bottom-4 left-4 right-4 z-50 rounded-xl border bg-card shadow-lg"
       >
-        <div className="flex items-start gap-3">
-          <div className="mt-0.5 h-10 w-10 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
-            <Share className="h-5 w-5 text-primary" />
-          </div>
-          <div className="flex-1 min-w-0">
-            <p className="font-semibold text-sm">Add VendCast to Home Screen</p>
-            <p className="text-xs text-muted-foreground mt-1 leading-relaxed">
-              Tap <Share className="inline h-3 w-3 mx-0.5 -translate-y-px" /> Share,
-              then <span className="font-medium">Add to Home Screen</span> for
-              full-screen access + notifications.
-            </p>
+        <div className="flex items-start justify-between gap-2 p-4 pb-2">
+          <div className="flex items-center gap-2">
+            <div className="h-9 w-9 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
+              <Share className="h-4 w-4 text-primary" />
+            </div>
+            <p className="font-semibold text-sm">Install VendCast on iPhone</p>
           </div>
           <button
             onClick={handleIOSDismiss}
-            className="shrink-0 p-1 rounded hover:bg-muted text-muted-foreground"
+            className="shrink-0 p-1.5 rounded hover:bg-muted text-muted-foreground -mt-0.5 -mr-1"
             aria-label="Dismiss"
           >
             <X className="h-4 w-4" />
           </button>
+        </div>
+        <ol className="px-4 pb-3 space-y-2 text-sm">
+          <li className="flex gap-3">
+            <span className="shrink-0 h-5 w-5 rounded-full bg-muted text-[11px] font-bold flex items-center justify-center">1</span>
+            <span>
+              In Safari, tap the{" "}
+              <Share className="inline h-3.5 w-3.5 -translate-y-px mx-0.5 text-primary" />
+              <span className="font-medium">Share</span> button
+              <span className="text-muted-foreground"> (bottom of the screen)</span>
+            </span>
+          </li>
+          <li className="flex gap-3">
+            <span className="shrink-0 h-5 w-5 rounded-full bg-muted text-[11px] font-bold flex items-center justify-center">2</span>
+            <span>
+              Scroll down and tap <span className="font-medium">Add to Home Screen</span>
+            </span>
+          </li>
+          <li className="flex gap-3">
+            <span className="shrink-0 h-5 w-5 rounded-full bg-muted text-[11px] font-bold flex items-center justify-center">3</span>
+            <span>
+              Tap <span className="font-medium">Add</span> — VendCast opens full-screen from your home screen
+            </span>
+          </li>
+        </ol>
+        <div className="px-4 pb-3 pt-1 border-t">
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={handleIOSDismiss}
+            className="h-11 w-full text-sm"
+          >
+            Got it
+          </Button>
         </div>
       </div>
     );
