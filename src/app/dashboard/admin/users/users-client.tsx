@@ -1,22 +1,13 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import Link from "next/link";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { RefreshCw, CheckCircle, Trash2 } from "lucide-react";
-
-const adminNavItems = [
-  { href: "/dashboard/admin", label: "Overview" },
-  { href: "/dashboard/admin/users", label: "Users", active: true },
-  { href: "/dashboard/admin/data", label: "Event Data" },
-  { href: "/dashboard/admin/beta", label: "Invites" },
-  { href: "/dashboard/admin/feedback", label: "Feedback" },
-  { href: "/dashboard/admin/content", label: "Content" },
-  { href: "/dashboard/admin/activity", label: "Activity" },
-];
+import { RefreshCw, CheckCircle, Trash2, Search } from "lucide-react";
 
 interface AdminUser {
   id: string;
@@ -50,6 +41,27 @@ export function UsersClient() {
   const [saved, setSaved] = useState<string | null>(null);
   const [deleting, setDeleting] = useState<string | null>(null);
   const [extending, setExtending] = useState<string | null>(null);
+  const [query, setQuery] = useState("");
+
+  // Client-side filter. User base is small enough (tens to low hundreds)
+  // that this runs instantly and avoids a round-trip on every keystroke.
+  // Search matches business_name, email, or city — the three fields
+  // someone typically has in mind when looking up a specific user.
+  const filteredUsers = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return users;
+    return users.filter((u) => {
+      const haystack = [
+        u.business_name ?? "",
+        u.email ?? "",
+        u.city ?? "",
+        u.state ?? "",
+      ]
+        .join(" ")
+        .toLowerCase();
+      return haystack.includes(q);
+    });
+  }, [users, query]);
 
   async function load() {
     setLoading(true);
@@ -129,29 +141,25 @@ export function UsersClient() {
           <h1 className="text-2xl font-bold">Users</h1>
           <p className="text-sm text-muted-foreground">
             {totalUsers} total · {byTier.starter ?? 0} Starter · {byTier.pro ?? 0} Pro · {byTier.premium ?? 0} Premium
+            {query && ` · ${filteredUsers.length} match${filteredUsers.length === 1 ? "" : "es"}`}
           </p>
         </div>
-        <Button variant="outline" size="sm" onClick={load} disabled={loading}>
-          <RefreshCw className="h-4 w-4 mr-2" />
-          Refresh
-        </Button>
-      </div>
-
-      {/* Admin nav */}
-      <div className="flex gap-1 border-b pb-0 -mb-2 overflow-x-auto">
-        {adminNavItems.map((item) => (
-          <Link
-            key={item.href}
-            href={item.href}
-            className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${
-              item.active
-                ? "border-primary text-foreground"
-                : "border-transparent text-muted-foreground hover:text-foreground hover:border-muted-foreground"
-            }`}
-          >
-            {item.label}
-          </Link>
-        ))}
+        <div className="flex items-center gap-2 flex-wrap">
+          <div className="relative">
+            <Search className="h-4 w-4 absolute left-2.5 top-2.5 text-muted-foreground pointer-events-none" />
+            <Input
+              type="search"
+              placeholder="Search business, email, city…"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              className="pl-8 w-64 h-9"
+            />
+          </div>
+          <Button variant="outline" size="sm" onClick={load} disabled={loading}>
+            <RefreshCw className="h-4 w-4 mr-2" />
+            Refresh
+          </Button>
+        </div>
       </div>
 
       {/* Stats */}
@@ -206,15 +214,22 @@ export function UsersClient() {
               <tbody>
                 {loading ? (
                   <tr><td colSpan={11} className="text-center p-8 text-muted-foreground">Loading...</td></tr>
-                ) : users.length === 0 ? (
-                  <tr><td colSpan={11} className="text-center p-8 text-muted-foreground">No users found.</td></tr>
+                ) : filteredUsers.length === 0 ? (
+                  <tr><td colSpan={11} className="text-center p-8 text-muted-foreground">
+                    {query ? `No users match "${query}"` : "No users found."}
+                  </td></tr>
                 ) : (
-                  users.map((user) => (
+                  filteredUsers.map((user) => (
                     <tr key={user.id} className="border-b last:border-0 hover:bg-muted/30">
                       <td className="p-3">
-                        <div className="font-medium">{user.business_name ?? <span className="text-muted-foreground italic">Unnamed</span>}</div>
+                        <Link
+                          href={`/dashboard/admin/users/${user.id}`}
+                          className="font-medium hover:underline"
+                        >
+                          {user.business_name ?? <span className="text-muted-foreground italic">Unnamed</span>}
+                        </Link>
                         {!user.onboarding_completed && (
-                          <span className="text-xs text-amber-600">Onboarding incomplete</span>
+                          <div className="text-xs text-amber-600">Onboarding incomplete</div>
                         )}
                       </td>
                       <td className="p-3 text-muted-foreground text-xs">

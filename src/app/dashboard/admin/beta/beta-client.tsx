@@ -1,23 +1,12 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import Link from "next/link";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Copy, Plus, RefreshCw } from "lucide-react";
-
-const adminNavItems = [
-  { href: "/dashboard/admin", label: "Overview" },
-  { href: "/dashboard/admin/users", label: "Users" },
-  { href: "/dashboard/admin/data", label: "Event Data" },
-  { href: "/dashboard/admin/beta", label: "Invites", active: true },
-  { href: "/dashboard/admin/feedback", label: "Feedback" },
-  { href: "/dashboard/admin/content", label: "Content" },
-  { href: "/dashboard/admin/activity", label: "Activity" },
-];
 
 interface Invite {
   id: string;
@@ -100,23 +89,6 @@ export function BetaClient() {
         <p className="text-muted-foreground">
           Generate and manage invite codes for beta testers
         </p>
-      </div>
-
-      {/* Admin nav strip */}
-      <div className="flex gap-1 border-b pb-0 -mb-2">
-        {adminNavItems.map((item) => (
-          <Link
-            key={item.href}
-            href={item.href}
-            className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
-              item.active
-                ? "border-primary text-foreground"
-                : "border-transparent text-muted-foreground hover:text-foreground hover:border-muted-foreground"
-            }`}
-          >
-            {item.label}
-          </Link>
-        ))}
       </div>
 
       {error && (

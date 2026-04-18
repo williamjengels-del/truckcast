@@ -1,18 +1,6 @@
 import { createClient as createServiceClient } from "@supabase/supabase-js";
-import Link from "next/link";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { requireAdmin } from "@/lib/admin";
-
-const adminNavItems = [
-  { href: "/dashboard/admin", label: "Overview" },
-  { href: "/dashboard/admin/users", label: "Users" },
-  { href: "/dashboard/admin/data", label: "Event Data" },
-  { href: "/dashboard/admin/beta", label: "Invites" },
-  { href: "/dashboard/admin/feedback", label: "Feedback" },
-  { href: "/dashboard/admin/content", label: "Content" },
-  { href: "/dashboard/admin/activity", label: "Activity", active: true },
-];
 
 interface AdminActionRow {
   id: string;
@@ -80,8 +68,7 @@ function formatTimestamp(iso: string): string {
 }
 
 export default async function AdminActivityPage() {
-  await requireAdmin();
-
+  // Auth handled by /dashboard/admin/layout.tsx
   const service = createServiceClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.SUPABASE_SERVICE_ROLE_KEY!
@@ -115,22 +102,6 @@ export default async function AdminActivityPage() {
             ? `Last ${PAGE_SIZE} actions`
             : `${rows.length} action${rows.length === 1 ? "" : "s"}`}
         </p>
-      </div>
-
-      <div className="flex gap-1 border-b pb-0 -mb-2 flex-wrap">
-        {adminNavItems.map((item) => (
-          <Link
-            key={item.href}
-            href={item.href}
-            className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
-              item.active
-                ? "border-primary text-foreground"
-                : "border-transparent text-muted-foreground hover:text-foreground hover:border-muted-foreground"
-            }`}
-          >
-            {item.label}
-          </Link>
-        ))}
       </div>
 
       {error && (

@@ -1,7 +1,6 @@
-import { requireAdmin } from "@/lib/admin";
 import { DataClient } from "./data-client";
 
-export default async function AdminDataPage() {
-  await requireAdmin();
+// Auth gated by /dashboard/admin/layout.tsx.
+export default function AdminDataPage() {
   return <DataClient />;
 }

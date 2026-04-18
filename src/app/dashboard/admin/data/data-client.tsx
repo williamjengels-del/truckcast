@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import Link from "next/link";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -14,16 +13,6 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { RefreshCw, ChevronLeft, ChevronRight, ChevronUp, ChevronDown, ChevronsUpDown } from "lucide-react";
-
-const adminNavItems = [
-  { href: "/dashboard/admin", label: "Overview" },
-  { href: "/dashboard/admin/users", label: "Users" },
-  { href: "/dashboard/admin/data", label: "Event Data", active: true },
-  { href: "/dashboard/admin/beta", label: "Invites" },
-  { href: "/dashboard/admin/feedback", label: "Feedback" },
-  { href: "/dashboard/admin/content", label: "Content" },
-  { href: "/dashboard/admin/activity", label: "Activity" },
-];
 
 interface AdminEvent {
   id: string;
@@ -147,23 +136,6 @@ export function DataClient() {
           <RefreshCw className="h-4 w-4 mr-2" />
           Refresh
         </Button>
-      </div>
-
-      {/* Admin nav strip */}
-      <div className="flex gap-1 border-b pb-0 -mb-2">
-        {adminNavItems.map((item) => (
-          <Link
-            key={item.href}
-            href={item.href}
-            className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
-              item.active
-                ? "border-primary text-foreground"
-                : "border-transparent text-muted-foreground hover:text-foreground hover:border-muted-foreground"
-            }`}
-          >
-            {item.label}
-          </Link>
-        ))}
       </div>
 
       {/* Stats */}

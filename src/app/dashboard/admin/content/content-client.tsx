@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import Link from "next/link";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -9,16 +8,6 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Star, Plus, Trash2, ChevronUp, ChevronDown, RefreshCw } from "lucide-react";
 import type { Testimonial } from "@/lib/database.types";
-
-const adminNavItems = [
-  { href: "/dashboard/admin", label: "Overview" },
-  { href: "/dashboard/admin/users", label: "Users" },
-  { href: "/dashboard/admin/data", label: "Event Data" },
-  { href: "/dashboard/admin/beta", label: "Invites" },
-  { href: "/dashboard/admin/feedback", label: "Feedback" },
-  { href: "/dashboard/admin/content", label: "Content", active: true },
-  { href: "/dashboard/admin/activity", label: "Activity" },
-];
 
 export function ContentClient() {
   const [testimonials, setTestimonials] = useState<Testimonial[]>([]);
@@ -137,23 +126,6 @@ export function ContentClient() {
       <div>
         <h1 className="text-2xl font-bold">Site Content</h1>
         <p className="text-sm text-muted-foreground">Manage testimonials shown on the landing page</p>
-      </div>
-
-      {/* Admin nav strip */}
-      <div className="flex gap-1 border-b pb-0 -mb-2">
-        {adminNavItems.map((item) => (
-          <Link
-            key={item.href}
-            href={item.href}
-            className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
-              item.active
-                ? "border-primary text-foreground"
-                : "border-transparent text-muted-foreground hover:text-foreground hover:border-muted-foreground"
-            }`}
-          >
-            {item.label}
-          </Link>
-        ))}
       </div>
 
       {error && (
