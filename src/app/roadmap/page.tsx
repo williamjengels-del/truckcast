@@ -4,7 +4,7 @@ import { TruckIcon, CheckCircle2, Circle, Clock } from "lucide-react";
 
 export const metadata: Metadata = {
   title: "VendCast Roadmap — Built for Food Truck Operators",
-  description: "See how VendCast grew from an Airtable spreadsheet to a full AI-powered forecasting platform for food truck operators.",
+  description: "From a single operator's spreadsheet to the operating system for mobile vendors. See what shipped and what's next.",
 };
 
 type MilestoneStatus = "done" | "in_progress" | "planned";
@@ -96,8 +96,8 @@ const PHASES: Phase[] = [
   },
   {
     number: 4,
-    name: "Go to Market",
-    tagline: "Real pricing, a free trial, and a beta program for early operators.",
+    name: "Pricing & Onboarding",
+    tagline: "Real pricing, a free trial, a beta program, and the tooling to get new operators in fast.",
     color: "bg-orange-50 dark:bg-orange-950/20",
     accent: "border-orange-300 dark:border-orange-700",
     badge: "bg-orange-100 text-orange-700 dark:bg-orange-900/50 dark:text-orange-300",
@@ -156,12 +156,12 @@ const PHASES: Phase[] = [
     color: "bg-amber-50 dark:bg-amber-950/20",
     accent: "border-amber-300 dark:border-amber-700",
     badge: "bg-amber-100 text-amber-700 dark:bg-amber-900/50 dark:text-amber-300",
-    status: "planned",
+    status: "in_progress",
     milestones: [
-      { label: "Organizer ratings — automatically score which event organizers bring in the most revenue", status: "planned" },
-      { label: "Fan / follower system — let customers subscribe to your schedule (Premium)", status: "planned" },
+      { label: "Organizer ratings — automatically score which event organizers bring in the most revenue", status: "done" },
+      { label: "Fan / follower system — let customers subscribe to your schedule (Premium)", status: "done" },
+      { label: "Public booking page + Inbox — inquiries land in one place instead of scattered DMs", status: "done" },
       { label: "Multi-truck accounts — manage a whole fleet under one login", status: "planned" },
-      { label: "Discover events near you — connect with organizers actively looking for food trucks", status: "planned" },
       { label: "Open to developers — API access for custom integrations", status: "planned" },
       { label: "Beyond food trucks — farmers markets, pop-ups, mobile retail, and more", status: "planned" },
     ],
@@ -183,6 +183,23 @@ const PHASES: Phase[] = [
       { label: "Profitability dashboard — which events are actually worth doing?", status: "planned" },
       { label: "Break-even tool — know the minimum sales you need before rolling out", status: "planned" },
       { label: "Cost templates per event type — set your usual costs once, apply them automatically", status: "planned" },
+    ],
+  },
+  {
+    number: 9,
+    name: "Brand Redesign",
+    tagline: "A fresh look that feels as professional as the system behind it — built for real operators.",
+    color: "bg-violet-50 dark:bg-violet-950/20",
+    accent: "border-violet-300 dark:border-violet-700",
+    badge: "bg-violet-100 text-violet-700 dark:bg-violet-900/50 dark:text-violet-300",
+    status: "in_progress",
+    milestones: [
+      { label: "New color palette and typography — clean, modern, and easy on the eyes", status: "in_progress" },
+      { label: "Refreshed logo and brand identity", status: "planned" },
+      { label: "Updated marketing site — clearer messaging for food truck operators", status: "planned" },
+      { label: "Polished dashboard UI — every screen gets a visual pass", status: "planned" },
+      { label: "Mobile-first tweaks — tighter layout for phones operators actually use mid-event", status: "planned" },
+      { label: "Dark mode refinements — better contrast and color balance", status: "planned" },
     ],
   },
   {
@@ -219,30 +236,13 @@ const PHASES: Phase[] = [
       { label: "No booking commissions — ever. Your subscription covers everything.", status: "planned", note: "Companies like Food Fleet take 20–30% of your revenue. We don't." },
     ],
   },
-  {
-    number: 9,
-    name: "Brand Redesign",
-    tagline: "A fresh look that feels as professional as the system behind it — built for real operators.",
-    color: "bg-violet-50 dark:bg-violet-950/20",
-    accent: "border-violet-300 dark:border-violet-700",
-    badge: "bg-violet-100 text-violet-700 dark:bg-violet-900/50 dark:text-violet-300",
-    status: "in_progress",
-    milestones: [
-      { label: "New color palette and typography — clean, modern, and easy on the eyes", status: "in_progress" },
-      { label: "Refreshed logo and brand identity", status: "planned" },
-      { label: "Updated marketing site — clearer messaging for food truck operators", status: "planned" },
-      { label: "Polished dashboard UI — every screen gets a visual pass", status: "planned" },
-      { label: "Mobile-first tweaks — tighter layout for phones operators actually use mid-event", status: "planned" },
-      { label: "Dark mode refinements — better contrast and color balance", status: "planned" },
-    ],
-  },
 ];
 
 const STATS = [
   { label: "Phases completed", value: "7" },
   { label: "Features shipped", value: "50+" },
-  { label: "POS integrations", value: "3" },
-  { label: "Automated tests", value: "119" },
+  { label: "POS integrations", value: "4" },
+  { label: "Years operator history", value: "5" },
 ];
 
 function StatusIcon({ status }: { status: MilestoneStatus }) {
@@ -306,7 +306,7 @@ export default function RoadmapPage() {
             Built by a food truck operator, for food truck operators
           </div>
           <h1 className="text-4xl sm:text-5xl font-bold tracking-tight mb-4">
-            From Guesswork to Real Forecasts
+            From spreadsheets to one operating system
           </h1>
           <p className="text-xl text-muted-foreground max-w-2xl mx-auto">
             VendCast started as one food truck owner&apos;s spreadsheet in St. Louis.
@@ -420,9 +420,9 @@ export default function RoadmapPage() {
         {/* CTA footer */}
         <div className="mt-20 text-center rounded-2xl border bg-primary/5 border-primary/20 p-10">
           <TruckIcon className="h-10 w-10 text-primary mx-auto mb-4" />
-          <h2 className="text-2xl font-bold mb-2">Ready to forecast your revenue?</h2>
+          <h2 className="text-2xl font-bold mb-2">Ready to run your truck from one place?</h2>
           <p className="text-muted-foreground mb-6 max-w-md mx-auto">
-            VendCast is the only platform built specifically for food truck event forecasting.
+            Inquiries, bookings, calendar, sales, and forecasts — in one place.
             14-day free trial, no credit card required.
           </p>
           <div className="flex gap-3 justify-center flex-wrap">

@@ -5,14 +5,14 @@ import { Button } from "@/components/ui/button";
 import {
   TruckIcon,
   BarChart3,
-  CloudSun,
   CalendarDays,
   DollarSign,
   ArrowRight,
   CheckCircle,
   Star,
-  ClipboardList,
   LineChart,
+  Inbox,
+  Plug,
 } from "lucide-react";
 
 // Disable Next.js fetch caching so testimonials always load fresh from the DB
@@ -20,9 +20,9 @@ export const revalidate = 0;
 export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
-  title: "VendCast — The Home Base for Your Food Truck Calendar",
+  title: "VendCast — The operating system for mobile vendors",
   description:
-    "Track every event, know your schedule at a glance — and the only tool that tells you which bookings are actually worth taking. Built for food truck operators by VendCast.",
+    "Inquiries, bookings, calendar, sales, and forecasts — in one place. Built by a food truck operator, for food truck operators.",
 };
 
 const FALLBACK_TESTIMONIALS = [
@@ -133,13 +133,12 @@ export default async function LandingPage() {
       <section className="flex-1">
         <div className="container mx-auto px-4 py-20 text-center">
           <h1 className="text-4xl font-bold tracking-tight sm:text-5xl lg:text-6xl">
-            The home base for your
-            <br />
-            <span className="text-primary">food truck calendar.</span>
+            The operating system for{" "}
+            <span className="text-primary">mobile vendors.</span>
           </h1>
           <p className="mx-auto mt-6 max-w-2xl text-lg text-muted-foreground">
-            Track every event, know your schedule at a glance — and the only
-            tool that tells you which bookings are actually worth taking.
+            Inquiries, bookings, calendar, sales, and forecasts — in one place.
+            Built by a food truck operator, for food truck operators.
           </p>
           <div className="mt-10 flex flex-col items-center justify-center gap-3">
             <Link href="/signup">
@@ -151,83 +150,14 @@ export default async function LandingPage() {
           </div>
         </div>
 
-        {/* Features */}
+        {/* Testimonials — moved up, trust signal hits before features */}
         <div className="border-t bg-muted/30">
-          <div className="container mx-auto px-4 py-20">
-            <h2 className="text-center text-3xl font-bold mb-12">
-              Built for food truck operators
-            </h2>
-            <p className="text-center text-sm text-muted-foreground -mt-8 mb-12">
-              <span className="font-medium text-foreground">VendCast</span> — purpose-built software for mobile vendor businesses.
-            </p>
-            <div className="grid gap-8 md:grid-cols-2 lg:grid-cols-4">
-              {[
-                {
-                  icon: CalendarDays,
-                  title: "Event Scheduling & Tracking",
-                  description:
-                    "Log every event with sales, fees, and notes. See your full calendar and track which events are worth rebooking.",
-                },
-                {
-                  icon: BarChart3,
-                  title: "Event Forecasting",
-                  description:
-                    "AI-powered revenue predictions based on your history, event type, and location patterns.",
-                },
-                {
-                  icon: CloudSun,
-                  title: "Weather Intelligence",
-                  description:
-                    "Automatic weather-adjusted forecasts so you know the real expected revenue.",
-                },
-                {
-                  icon: DollarSign,
-                  title: "Fee Calculator",
-                  description:
-                    "Flat fees, percentages, minimums -- know your take-home before you commit.",
-                },
-              ].map((feature) => (
-                <div
-                  key={feature.title}
-                  className="rounded-lg border bg-card p-6"
-                >
-                  <feature.icon className="h-10 w-10 text-primary mb-4" />
-                  <h3 className="font-semibold text-lg mb-2">
-                    {feature.title}
-                  </h3>
-                  <p className="text-sm text-muted-foreground">
-                    {feature.description}
-                  </p>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-
-        {/* Social Proof — validated numbers */}
-        <div className="container mx-auto px-4 py-16">
-          <div className="grid gap-6 md:grid-cols-3 max-w-3xl mx-auto text-center">
-            {[
-              { stat: `${eventCount.toLocaleString()}+`, label: "Events analyzed — and more added every day as operators log their results" },
-              { stat: "Within 16%", label: "Aggregate forecast accuracy on real event data" },
-              { stat: "Zero", label: "Spreadsheets required — it's all built in" },
-            ].map((s) => (
-              <div key={s.label} className="space-y-1">
-                <p className="text-4xl font-bold text-primary">{s.stat}</p>
-                <p className="text-sm text-muted-foreground">{s.label}</p>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {/* Testimonials */}
-        <div className="border-t bg-muted/30">
-          <div className="container mx-auto px-4 py-20">
+          <div className="container mx-auto px-4 py-16">
             <h2 className="text-center text-3xl font-bold mb-4">
               What food truckers are saying
             </h2>
             <p className="text-center text-muted-foreground mb-12">
-              Built by a food truck operator. Validated by real event data. A <span className="font-medium text-foreground">VendCast</span> product.
+              Built by a food truck operator. Validated by real event data.
             </p>
             <div className="grid gap-6 md:grid-cols-3 max-w-5xl mx-auto">
               {testimonials.map((t) => (
@@ -255,6 +185,83 @@ export default async function LandingPage() {
           </div>
         </div>
 
+        {/* Features */}
+        <div className="border-t">
+          <div className="container mx-auto px-4 py-20">
+            <h2 className="text-center text-3xl font-bold mb-4">
+              Built for food truck operators
+            </h2>
+            <p className="text-center text-sm text-muted-foreground mb-12">
+              Purpose-built software for mobile vendor businesses.
+            </p>
+            <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+              {[
+                {
+                  icon: Inbox,
+                  title: "Inquiry & Booking Inbox",
+                  description:
+                    "Public booking page, inbound inquiries organized in one inbox, and Contact CRM — stop losing bookings in your DMs and email threads.",
+                },
+                {
+                  icon: CalendarDays,
+                  title: "Event Scheduling & Tracking",
+                  description:
+                    "Log every event with sales, fees, and notes. See your full calendar and track which events are worth rebooking.",
+                },
+                {
+                  icon: Plug,
+                  title: "POS & CSV Sync",
+                  description:
+                    "Connect Square, Clover, Toast, or SumUp — sales log themselves. Or import a spreadsheet in seconds.",
+                },
+                {
+                  icon: BarChart3,
+                  title: "Event Forecasting",
+                  description:
+                    "Revenue predictions based on your history, event type, weather, and day of week — with ranges, not just point estimates.",
+                },
+                {
+                  icon: DollarSign,
+                  title: "Fee Calculator",
+                  description:
+                    "Flat fees, percentages, minimums — know your take-home before you commit.",
+                },
+              ].map((feature) => (
+                <div
+                  key={feature.title}
+                  className="rounded-lg border bg-card p-6"
+                >
+                  <feature.icon className="h-10 w-10 text-primary mb-4" />
+                  <h3 className="font-semibold text-lg mb-2">
+                    {feature.title}
+                  </h3>
+                  <p className="text-sm text-muted-foreground">
+                    {feature.description}
+                  </p>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        {/* Social Proof — validated numbers */}
+        <div className="border-t bg-muted/30">
+          <div className="container mx-auto px-4 py-16">
+            <div className="grid gap-6 md:grid-cols-3 max-w-3xl mx-auto text-center">
+              {[
+                { stat: `${eventCount.toLocaleString()}+`, label: "Events analyzed across operator history" },
+                { stat: "Within 16%", label: "Forecast accuracy on real event data" },
+                { stat: "5 years", label: "Of operator history baked into the engine" },
+              ].map((s) => (
+                <div key={s.label} className="space-y-1">
+                  <p className="text-4xl font-bold text-primary">{s.stat}</p>
+                  <p className="text-sm text-muted-foreground">{s.label}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+
         {/* How it works */}
         <div className="container mx-auto px-4 py-20">
           <h2 className="text-center text-3xl font-bold mb-4">How it works</h2>
@@ -265,24 +272,24 @@ export default async function LandingPage() {
             {[
               {
                 number: "1",
-                icon: CalendarDays,
-                title: "Add your events",
+                icon: Plug,
+                title: "Connect your calendar and POS",
                 description:
-                  "Log upcoming and past events with the event name, type, location, and any organizer fees. Import from CSV or connect your POS.",
+                  "Import past events from a spreadsheet, or connect Square, Clover, Toast, or SumUp so sales flow in automatically. Your historical events become your forecasting baseline.",
               },
               {
                 number: "2",
-                icon: ClipboardList,
-                title: "Log your sales",
+                icon: Inbox,
+                title: "Take inquiries, log sales",
                 description:
-                  "After each event, record your net sales. VendCast automatically calculates performance, trends, and fee impact.",
+                  "A public booking page routes new inquiries into one Inbox. After events wrap, sales log themselves from your POS — or enter them manually in seconds.",
               },
               {
                 number: "3",
                 icon: LineChart,
-                title: "Get smarter forecasts",
+                title: "Get smarter forecasts and insights",
                 description:
-                  "VendCast learns from your history to predict future revenue — adjusted for weather, day of week, and event type.",
+                  "Revenue forecasts for every upcoming booking — adjusted for weather, day of week, and event type. Plus analytics, reports, and Key Takeaways on what's actually driving your numbers.",
               },
             ].map((step) => (
               <div key={step.number} className="flex flex-col items-center text-center">
