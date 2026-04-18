@@ -9,6 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { EmbedWidgetSection } from "@/components/embed-widget-section";
+import { InstallSettingsCard } from "@/components/install-settings-card";
 import type { Profile } from "@/lib/database.types";
 
 const US_TIMEZONES = [
@@ -297,6 +298,8 @@ function SettingsContent() {
           subscriptionTier={profile.subscription_tier ?? "starter"}
         />
       )}
+
+      <InstallSettingsCard />
 
       <NotificationsCard
         profile={profile}

@@ -10,6 +10,7 @@ import { ErrorBoundary } from "@/components/error-boundary";
 import { TrialBanner } from "@/components/trial-banner";
 import { WelcomeTour } from "@/components/welcome-tour";
 import { ChatWidget } from "@/components/chat-widget";
+import { InstallPrompt } from "@/components/install-prompt";
 import { createClient } from "@/lib/supabase/server";
 
 export const metadata: Metadata = {
@@ -76,6 +77,7 @@ export default async function DashboardLayout({
       <FeedbackDialog />
       <WelcomeTour />
       <ChatWidget isPro={isPro} enabled={chatEnabled} />
+      <InstallPrompt />
     </div>
   );
 }

@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import { ErrorBoundary } from "@/components/error-boundary";
 import { GlobalErrorHandler } from "@/components/global-error-handler";
@@ -27,6 +27,15 @@ export const metadata: Metadata = {
     statusBarStyle: "default",
     title: "VendCast",
   },
+  icons: {
+    icon: [
+      { url: "/icon-192.png", sizes: "192x192", type: "image/png" },
+      { url: "/icon-512.png", sizes: "512x512", type: "image/png" },
+    ],
+    // iOS home-screen icon — Apple uses 180×180; the 192 asset scales
+    // down cleanly and is what Safari reaches for.
+    apple: [{ url: "/icon-192.png", sizes: "192x192", type: "image/png" }],
+  },
   openGraph: {
     type: "website",
     siteName: "VendCast",
@@ -47,6 +56,12 @@ export const metadata: Metadata = {
   other: {
     "mobile-web-app-capable": "yes",
   },
+};
+
+export const viewport: Viewport = {
+  themeColor: "#f97316",
+  width: "device-width",
+  initialScale: 1,
 };
 
 export default function RootLayout({
