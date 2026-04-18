@@ -1,3 +1,4 @@
+import { after } from "next/server";
 import { createClient as createServiceClient } from "@supabase/supabase-js";
 import { sendPushToSubscriptions, type PushSubscriptionRow } from "@/lib/push";
 
@@ -8,8 +9,10 @@ import { sendPushToSubscriptions, type PushSubscriptionRow } from "@/lib/push";
 // (booking_requests doesn't allow anonymous inserts via anon key) and
 // fires a push notification to the operator after successful insert.
 //
-// Push is fire-and-forget. The booking submission response does not
-// block on delivery; a push failure never fails the insert.
+// The push trigger runs inside Next.js's `after()` hook so it survives
+// past the 200 response. Without `after()`, Vercel freezes the Lambda
+// container within ~50ms of returning, cancelling the web-push HTTPS
+// request to APNs mid-flight and silently dropping the notification.
 export async function POST(req: Request) {
   let body: {
     truck_user_id?: string;
@@ -67,17 +70,18 @@ export async function POST(req: Request) {
     );
   }
 
-  // Fire-and-forget push notification to the operator.
-  // Runs inline but we don't await — any failure is logged, never surfaced
-  // to the booker. If push plumbing is misconfigured the booking itself
-  // still lands cleanly.
-  notifyOperatorOfBooking(service, truck_user_id, {
-    bookingId: inserted.id as string,
-    requesterName: requester_name.trim(),
-    eventDate: (inserted.event_date as string | null) ?? null,
-  }).catch((err) => {
-    console.error("[book/submit] push notification failed:", err);
-  });
+  // Post-response push. `after()` keeps the Lambda alive until the
+  // callback resolves — same response latency for the booker, but the
+  // web-push HTTPS call actually completes.
+  after(() =>
+    notifyOperatorOfBooking(service, truck_user_id, {
+      bookingId: inserted.id as string,
+      requesterName: requester_name.trim(),
+      eventDate: (inserted.event_date as string | null) ?? null,
+    }).catch((err) => {
+      console.error("[push] book/submit notification failed:", err);
+    })
+  );
 
   return Response.json({ ok: true });
 }
@@ -93,7 +97,14 @@ async function notifyOperatorOfBooking(
     .select("id, endpoint, p256dh, auth")
     .eq("user_id", operatorUserId);
 
-  if (error || !subs || subs.length === 0) return;
+  if (error) {
+    console.error(`[push] book/submit subscription lookup failed for ${operatorUserId}:`, error.message);
+    return;
+  }
+  if (!subs || subs.length === 0) {
+    console.log(`[push] book/submit no subscriptions for ${operatorUserId} — skipping`);
+    return;
+  }
 
   const dateText = booking.eventDate
     ? new Date(booking.eventDate + "T00:00:00").toLocaleDateString("en-US", {
@@ -109,11 +120,27 @@ async function notifyOperatorOfBooking(
     tag: `booking-${booking.bookingId}`,
   });
 
-  // Clean up dead endpoints so this operator's next push doesn't retry them.
+  console.log(
+    `[push] book/submit user=${operatorUserId} subs=${subs.length} delivered=${result.delivered} failed=${result.failed} cleaned=${result.invalidEndpoints.length}`
+  );
+
+  // Clean up dead endpoints so the next push doesn't retry them.
   if (result.invalidEndpoints.length > 0) {
     await service
       .from("push_subscriptions")
       .delete()
       .in("endpoint", result.invalidEndpoints);
+  }
+
+  // Touch last_used_at for surviving subs — gives visibility into which
+  // devices are actually reachable at send time.
+  const survivingEndpoints = (subs as PushSubscriptionRow[])
+    .map((s) => s.endpoint)
+    .filter((e) => !result.invalidEndpoints.includes(e));
+  if (survivingEndpoints.length > 0) {
+    await service
+      .from("push_subscriptions")
+      .update({ last_used_at: new Date().toISOString() })
+      .in("endpoint", survivingEndpoints);
   }
 }
