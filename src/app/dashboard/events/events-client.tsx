@@ -154,13 +154,14 @@ export function EventsClient({ initialEvents, userId = "", businessName = "", us
 
   const today = new Date().toISOString().split("T")[0];
 
-  // Load view mode from localStorage (default: "split")
+  // Load view mode from localStorage (default: "split").
+  // Force-fallback split → list at <sm: split needs desktop width to be
+  // useful, and the split toggle button is hidden on mobile anyway.
   useEffect(() => {
     const saved = localStorage.getItem("events_view_mode");
-    if (saved === "calendar" || saved === "list" || saved === "split") {
-      setViewMode(saved);
-    }
-    // if no saved preference, stay with "split" default
+    if (saved !== "calendar" && saved !== "list" && saved !== "split") return;
+    const isNarrow = !window.matchMedia("(min-width: 640px)").matches;
+    setViewMode(saved === "split" && isNarrow ? "list" : saved);
   }, []);
 
   // Load calendar filter from localStorage (default: "booked")
