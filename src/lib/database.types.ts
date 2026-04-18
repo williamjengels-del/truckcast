@@ -184,11 +184,27 @@ export interface BookingRequest {
   requester_phone: string | null;
   event_date: string | null;
   event_type: string | null;
+  // Legacy integer column — kept for historical rows. New form collects
+  // attendance_range instead; submissions from /api/book/submit leave
+  // estimated_attendance null.
   estimated_attendance: number | null;
+  attendance_range: string | null;
+  location: string | null;
+  start_time: string | null;
+  end_time: string | null;
   message: string | null;
   status: "new" | "read" | "replied" | "declined";
   created_at: string;
 }
+
+export const ATTENDANCE_RANGES = [
+  "Under 50",
+  "50\u2013100",
+  "100\u2013250",
+  "250\u2013500",
+  "500+",
+] as const;
+export type AttendanceRange = (typeof ATTENDANCE_RANGES)[number];
 
 export interface WeatherCache {
   id: string;

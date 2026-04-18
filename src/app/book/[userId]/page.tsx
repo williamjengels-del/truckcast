@@ -6,14 +6,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { createClient } from "@/lib/supabase/client";
-
-const EVENT_TYPES = [
-  "Festival",
-  "Corporate",
-  "Private/Catering",
-  "Wedding",
-  "Other",
-];
+import { EVENT_TYPES } from "@/lib/constants";
+import { ATTENDANCE_RANGES } from "@/lib/database.types";
 
 export default function BookingPage({ params }: { params: Promise<{ userId: string }> }) {
   const { userId } = use(params);
@@ -27,8 +21,11 @@ export default function BookingPage({ params }: { params: Promise<{ userId: stri
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
   const [eventDate, setEventDate] = useState("");
+  const [startTime, setStartTime] = useState("");
+  const [endTime, setEndTime] = useState("");
   const [eventType, setEventType] = useState("");
-  const [attendance, setAttendance] = useState("");
+  const [location, setLocation] = useState("");
+  const [attendanceRange, setAttendanceRange] = useState("");
   const [message, setMessage] = useState("");
 
   // Load business name
@@ -50,9 +47,26 @@ export default function BookingPage({ params }: { params: Promise<{ userId: stri
     setSubmitting(true);
     setError(null);
 
-    // Server route handles the insert (service-role bypass for RLS) and
-    // fires a push notification to the operator. Client no longer inserts
-    // directly via anon key.
+    // Client-side validation — required fields enforced by the browser
+    // (required attribute on inputs) AND by the server route. Belt and
+    // braces because HTML required only catches empty-string; we also
+    // enforce it in /api/book/submit for safety against API misuse.
+    if (!location.trim()) {
+      setError("Event location is required.");
+      setSubmitting(false);
+      return;
+    }
+    if (!attendanceRange) {
+      setError("Expected attendance is required.");
+      setSubmitting(false);
+      return;
+    }
+    if (!eventType) {
+      setError("Event type is required.");
+      setSubmitting(false);
+      return;
+    }
+
     try {
       const res = await fetch("/api/book/submit", {
         method: "POST",
@@ -63,15 +77,19 @@ export default function BookingPage({ params }: { params: Promise<{ userId: stri
           requester_email: email.trim(),
           requester_phone: phone.trim() || null,
           event_date: eventDate || null,
-          event_type: eventType || null,
-          estimated_attendance: attendance ? parseInt(attendance) : null,
+          start_time: startTime || null,
+          end_time: endTime || null,
+          event_type: eventType,
+          location: location.trim(),
+          attendance_range: attendanceRange,
           message: message.trim() || null,
         }),
       });
 
       setSubmitting(false);
       if (!res.ok) {
-        setError("Something went wrong. Please try again.");
+        const data = (await res.json().catch(() => ({}))) as { error?: string };
+        setError(data.error ?? "Something went wrong. Please try again.");
         return;
       }
       setSubmitted(true);
@@ -133,6 +151,7 @@ export default function BookingPage({ params }: { params: Promise<{ userId: stri
             )}
 
             <form onSubmit={handleSubmit} className="space-y-4 rounded-lg border bg-card p-6">
+              {/* Name + Email */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="space-y-1">
                   <Label htmlFor="name">Your Name *</Label>
@@ -157,8 +176,12 @@ export default function BookingPage({ params }: { params: Promise<{ userId: stri
                 </div>
               </div>
 
+              {/* Phone */}
               <div className="space-y-1">
-                <Label htmlFor="phone">Phone Number <span className="text-muted-foreground font-normal">(optional)</span></Label>
+                <Label htmlFor="phone">
+                  Phone Number{" "}
+                  <span className="text-muted-foreground font-normal">(optional)</span>
+                </Label>
                 <Input
                   id="phone"
                   type="tel"
@@ -168,52 +191,104 @@ export default function BookingPage({ params }: { params: Promise<{ userId: stri
                 />
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div className="space-y-1">
-                  <Label htmlFor="event-date">Event Date</Label>
-                  <Input
-                    id="event-date"
-                    type="date"
-                    value={eventDate}
-                    onChange={(e) => setEventDate(e.target.value)}
-                  />
-                </div>
-                <div className="space-y-1">
-                  <Label htmlFor="event-type">Event Type</Label>
-                  <select
-                    id="event-type"
-                    className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-                    value={eventType}
-                    onChange={(e) => setEventType(e.target.value)}
-                  >
-                    <option value="">Select type...</option>
-                    {EVENT_TYPES.map((t) => (
-                      <option key={t} value={t}>{t}</option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-
+              {/* Event date */}
               <div className="space-y-1">
-                <Label htmlFor="attendance">Expected Attendance <span className="text-muted-foreground font-normal">(optional)</span></Label>
+                <Label htmlFor="event-date">Event Date *</Label>
                 <Input
-                  id="attendance"
-                  type="number"
-                  min={1}
-                  value={attendance}
-                  onChange={(e) => setAttendance(e.target.value)}
-                  placeholder="500"
+                  id="event-date"
+                  type="date"
+                  required
+                  value={eventDate}
+                  onChange={(e) => setEventDate(e.target.value)}
                 />
               </div>
 
+              {/* Start / end times — side-by-side on sm+, stacked on mobile */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="space-y-1">
+                  <Label htmlFor="start-time">
+                    Start Time{" "}
+                    <span className="text-muted-foreground font-normal">(optional)</span>
+                  </Label>
+                  <Input
+                    id="start-time"
+                    type="time"
+                    value={startTime}
+                    onChange={(e) => setStartTime(e.target.value)}
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label htmlFor="end-time">
+                    End Time{" "}
+                    <span className="text-muted-foreground font-normal">(optional)</span>
+                  </Label>
+                  <Input
+                    id="end-time"
+                    type="time"
+                    value={endTime}
+                    onChange={(e) => setEndTime(e.target.value)}
+                  />
+                </div>
+              </div>
+
+              {/* Event type (required dropdown) */}
               <div className="space-y-1">
-                <Label htmlFor="message">Message / Details <span className="text-muted-foreground font-normal">(optional)</span></Label>
+                <Label htmlFor="event-type">Event Type *</Label>
+                <select
+                  id="event-type"
+                  required
+                  className="h-11 md:h-8 w-full rounded-md border border-input bg-background px-3 text-base md:text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                  value={eventType}
+                  onChange={(e) => setEventType(e.target.value)}
+                >
+                  <option value="">Select type...</option>
+                  {EVENT_TYPES.map((t) => (
+                    <option key={t} value={t}>{t}</option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Location (required) */}
+              <div className="space-y-1">
+                <Label htmlFor="location">Event Location *</Label>
+                <Input
+                  id="location"
+                  required
+                  value={location}
+                  onChange={(e) => setLocation(e.target.value)}
+                  placeholder="e.g., Forest Park, Kiener Plaza, 123 Main St"
+                />
+              </div>
+
+              {/* Attendance range (required dropdown) */}
+              <div className="space-y-1">
+                <Label htmlFor="attendance-range">Expected Attendance *</Label>
+                <select
+                  id="attendance-range"
+                  required
+                  className="h-11 md:h-8 w-full rounded-md border border-input bg-background px-3 text-base md:text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                  value={attendanceRange}
+                  onChange={(e) => setAttendanceRange(e.target.value)}
+                >
+                  <option value="">Select a range...</option>
+                  {ATTENDANCE_RANGES.map((r) => (
+                    <option key={r} value={r}>{r}</option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Message */}
+              <div className="space-y-1">
+                <Label htmlFor="message">
+                  Event Description / Notes{" "}
+                  <span className="text-muted-foreground font-normal">(optional)</span>
+                </Label>
                 <textarea
                   id="message"
-                  className="w-full min-h-[100px] rounded-md border border-input bg-background px-3 py-2 text-sm resize-y focus:outline-none focus:ring-2 focus:ring-ring"
+                  className="w-full min-h-[100px] rounded-md border border-input bg-background px-3 py-2 text-base md:text-sm resize-y focus:outline-none focus:ring-2 focus:ring-ring"
                   value={message}
                   onChange={(e) => setMessage(e.target.value)}
-                  placeholder="Tell us about your event, location, and any special requests..."
+                  placeholder="Tell us about your event, any special requests..."
                 />
               </div>
 

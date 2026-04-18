@@ -2,6 +2,11 @@ import { after } from "next/server";
 import { createClient as createServiceClient } from "@supabase/supabase-js";
 import { sendPushToSubscriptions, type PushSubscriptionRow } from "@/lib/push";
 import { sendBookingInquiryEmail } from "@/lib/email";
+import { ATTENDANCE_RANGES } from "@/lib/database.types";
+import { EVENT_TYPES } from "@/lib/constants";
+
+const EVENT_TYPE_SET = new Set<string>(EVENT_TYPES);
+const ATTENDANCE_RANGE_SET = new Set<string>(ATTENDANCE_RANGES);
 
 // POST /api/book/submit
 //
@@ -21,7 +26,12 @@ export async function POST(req: Request) {
     requester_email?: string;
     requester_phone?: string | null;
     event_date?: string | null;
+    start_time?: string | null;
+    end_time?: string | null;
     event_type?: string | null;
+    location?: string | null;
+    attendance_range?: string | null;
+    // Deprecated — legacy integer column. New submissions ignore this.
     estimated_attendance?: number | null;
     message?: string | null;
   };
@@ -31,17 +41,31 @@ export async function POST(req: Request) {
     return Response.json({ error: "Invalid JSON" }, { status: 400 });
   }
 
-  const {
-    truck_user_id,
-    requester_name,
-    requester_email,
-  } = body;
+  const truck_user_id = body.truck_user_id;
+  const requester_name = body.requester_name?.trim();
+  const requester_email = body.requester_email?.trim();
+  const event_date = body.event_date || null;
+  const event_type = body.event_type?.trim() || null;
+  const location = body.location?.trim() || null;
+  const attendance_range = body.attendance_range?.trim() || null;
 
-  if (!truck_user_id || !requester_name?.trim() || !requester_email?.trim()) {
+  if (!truck_user_id || !requester_name || !requester_email) {
     return Response.json(
-      { error: "Missing required fields (truck_user_id, requester_name, requester_email)" },
+      { error: "Missing required fields: name, email, truck." },
       { status: 400 }
     );
+  }
+  if (!event_date) {
+    return Response.json({ error: "Event date is required." }, { status: 400 });
+  }
+  if (!event_type || !EVENT_TYPE_SET.has(event_type)) {
+    return Response.json({ error: "Event type is required." }, { status: 400 });
+  }
+  if (!location) {
+    return Response.json({ error: "Event location is required." }, { status: 400 });
+  }
+  if (!attendance_range || !ATTENDANCE_RANGE_SET.has(attendance_range)) {
+    return Response.json({ error: "Expected attendance is required." }, { status: 400 });
   }
 
   const service = createServiceClient(
@@ -53,12 +77,17 @@ export async function POST(req: Request) {
     .from("booking_requests")
     .insert({
       truck_user_id,
-      requester_name: requester_name.trim(),
-      requester_email: requester_email.trim(),
+      requester_name,
+      requester_email,
       requester_phone: body.requester_phone?.trim() || null,
-      event_date: body.event_date || null,
-      event_type: body.event_type || null,
-      estimated_attendance: body.estimated_attendance ?? null,
+      event_date,
+      start_time: body.start_time || null,
+      end_time: body.end_time || null,
+      event_type,
+      location,
+      attendance_range,
+      // Legacy INTEGER column — new form doesn't collect it, leave null.
+      estimated_attendance: null,
       message: body.message?.trim() || null,
     })
     .select("id, event_date")
@@ -79,8 +108,9 @@ export async function POST(req: Request) {
   after(() =>
     notifyOperatorOfBooking(service, truck_user_id, {
       bookingId: inserted.id as string,
-      requesterName: requester_name.trim(),
+      requesterName: requester_name,
       eventDate: (inserted.event_date as string | null) ?? null,
+      location,
     }).catch((err) => {
       console.error("[push] book/submit notification failed:", err);
     })
@@ -88,12 +118,15 @@ export async function POST(req: Request) {
 
   after(() =>
     emailOperatorOfBooking(service, truck_user_id, {
-      requesterName: requester_name.trim(),
-      requesterEmail: requester_email.trim(),
+      requesterName: requester_name,
+      requesterEmail: requester_email,
       requesterPhone: body.requester_phone?.trim() || null,
       eventDate: (inserted.event_date as string | null) ?? null,
-      eventType: body.event_type ?? null,
-      estimatedAttendance: body.estimated_attendance ?? null,
+      startTime: body.start_time || null,
+      endTime: body.end_time || null,
+      eventType: event_type,
+      location,
+      attendanceRange: attendance_range,
       message: body.message?.trim() || null,
     }).catch((err) => {
       console.error("[email] book/submit notification failed:", err);
@@ -107,7 +140,12 @@ async function notifyOperatorOfBooking(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   service: any,
   operatorUserId: string,
-  booking: { bookingId: string; requesterName: string; eventDate: string | null }
+  booking: {
+    bookingId: string;
+    requesterName: string;
+    eventDate: string | null;
+    location: string;
+  }
 ) {
   const { data: subs, error } = await service
     .from("push_subscriptions")
@@ -128,11 +166,22 @@ async function notifyOperatorOfBooking(
         month: "short",
         day: "numeric",
       })
-    : "an event";
+    : null;
+
+  // Payload target: "[name] wants to book you for [date] at [location]",
+  // under 100 chars to avoid iOS truncation. Location is triage-critical,
+  // so if we go over budget we drop the date first.
+  const withDate =
+    dateText
+      ? `${booking.requesterName} wants to book you for ${dateText} at ${booking.location}`
+      : `${booking.requesterName} wants to book you at ${booking.location}`;
+  const body = withDate.length > 100
+    ? `${booking.requesterName} wants to book you at ${booking.location}`
+    : withDate;
 
   const result = await sendPushToSubscriptions(subs as PushSubscriptionRow[], {
     title: "New booking inquiry",
-    body: `${booking.requesterName} wants to book you for ${dateText}`,
+    body,
     url: "/dashboard/bookings",
     tag: `booking-${booking.bookingId}`,
   });
@@ -171,8 +220,11 @@ async function emailOperatorOfBooking(
     requesterEmail: string;
     requesterPhone: string | null;
     eventDate: string | null;
-    eventType: string | null;
-    estimatedAttendance: number | null;
+    startTime: string | null;
+    endTime: string | null;
+    eventType: string;
+    location: string;
+    attendanceRange: string;
     message: string | null;
   }
 ) {

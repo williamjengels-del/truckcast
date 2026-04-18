@@ -202,9 +202,26 @@ export interface BookingInquiryEmailPayload {
   requesterEmail: string;
   requesterPhone: string | null;
   eventDate: string | null;
-  eventType: string | null;
-  estimatedAttendance: number | null;
+  startTime: string | null;
+  endTime: string | null;
+  eventType: string;
+  location: string;
+  attendanceRange: string;
   message: string | null;
+}
+
+function formatTimeRange(start: string | null, end: string | null): string | null {
+  if (!start && !end) return null;
+  const fmt = (t: string) => {
+    // input is HH:MM (24h). Render as 12h with am/pm.
+    const [h, m] = t.split(":").map(Number);
+    if (Number.isNaN(h)) return t;
+    const period = h >= 12 ? "pm" : "am";
+    const hour12 = ((h + 11) % 12) + 1;
+    return m ? `${hour12}:${String(m).padStart(2, "0")}${period}` : `${hour12}${period}`;
+  };
+  if (start && end) return `${fmt(start)}–${fmt(end)}`;
+  return start ? `${fmt(start)} start` : `${fmt(end!)} end`;
 }
 
 export async function sendBookingInquiryEmail(
@@ -223,11 +240,15 @@ export async function sendBookingInquiryEmail(
       year: "numeric",
     });
 
+  // Priority order for triage: location → attendance → event type → date →
+  // time → contact info. Message gets its own separated block below.
   const detailRows: { label: string; value: string }[] = [];
+  detailRows.push({ label: "Location", value: payload.location });
+  detailRows.push({ label: "Expected attendance", value: payload.attendanceRange });
+  detailRows.push({ label: "Event type", value: payload.eventType });
   if (payload.eventDate) detailRows.push({ label: "Event date", value: formatDate(payload.eventDate) });
-  if (payload.eventType) detailRows.push({ label: "Event type", value: payload.eventType });
-  if (payload.estimatedAttendance != null)
-    detailRows.push({ label: "Expected attendance", value: payload.estimatedAttendance.toLocaleString("en-US") });
+  const timeRange = formatTimeRange(payload.startTime, payload.endTime);
+  if (timeRange) detailRows.push({ label: "Time", value: timeRange });
   detailRows.push({ label: "Contact email", value: payload.requesterEmail });
   if (payload.requesterPhone) detailRows.push({ label: "Contact phone", value: payload.requesterPhone });
 
