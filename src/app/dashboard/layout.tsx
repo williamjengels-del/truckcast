@@ -11,7 +11,12 @@ import { TrialBanner } from "@/components/trial-banner";
 import { WelcomeTour } from "@/components/welcome-tour";
 import { ChatWidget } from "@/components/chat-widget";
 import { InstallPrompt } from "@/components/install-prompt";
+import {
+  ImpersonationProvider,
+  type ImpersonationState,
+} from "@/components/impersonation-context";
 import { createClient } from "@/lib/supabase/server";
+import { resolveScopedSupabase } from "@/lib/dashboard-scope";
 
 export const metadata: Metadata = {
   title: {
@@ -57,27 +62,74 @@ export default async function DashboardLayout({
     }
   }
 
+  // ── Impersonation context (Commit 5c-i) ──────────────────────────
+  // Resolve the dashboard scope once per render and populate the
+  // client-side provider so client components (sidebar, nav, etc.)
+  // can read the effective user id without round-tripping.
+  //
+  // 5c-i populates the provider; nothing consumes it yet. Impersonation
+  // reads + banner + admin button ship in 5c-ii through 5d.
+  //
+  // Note: the existing `isPro` / `managerBanner` logic above intentionally
+  // stays on the REAL user's profile. Those are admin-posture decisions
+  // (chat widget gating, "you're managing X's account" banner for team
+  // accounts) — impersonating doesn't make the admin a manager of the
+  // target or upgrade their chat tier.
+  const scope = await resolveScopedSupabase();
+  let impersonationState: ImpersonationState = {
+    isImpersonating: false,
+    effectiveUserId: scope.kind === "unauthorized" ? null : scope.userId,
+    realUserId: scope.kind === "unauthorized" ? null : scope.realUserId,
+    targetLabel: null,
+    expiresAt: null,
+  };
+  if (scope.kind === "impersonating") {
+    // Look up the target's display label via the service-role client
+    // already returned with the scope.
+    const [targetProfileRes, targetAuthRes] = await Promise.all([
+      scope.client
+        .from("profiles")
+        .select("business_name")
+        .eq("id", scope.userId)
+        .maybeSingle(),
+      scope.client.auth.admin.getUserById(scope.userId),
+    ]);
+    const targetBusinessName = (
+      targetProfileRes.data as { business_name: string | null } | null
+    )?.business_name;
+    const targetEmail = targetAuthRes.data?.user?.email;
+    impersonationState = {
+      isImpersonating: true,
+      effectiveUserId: scope.userId,
+      realUserId: scope.realUserId,
+      targetLabel: targetBusinessName ?? targetEmail ?? scope.userId,
+      expiresAt: scope.expiresAt,
+    };
+  }
+
   return (
-    <div className="flex h-screen overflow-hidden">
-      <Sidebar />
-      <div className="flex flex-1 flex-col overflow-hidden">
-        <Header />
-        <TrialBanner />
-        {managerBanner && (
-          <div className="shrink-0 bg-violet-600 text-white text-xs text-center py-1.5 px-4 font-medium">
-            You&apos;re managing <span className="font-bold">{managerBanner.ownerName}</span>&apos;s account
-          </div>
-        )}
-        <main className="flex-1 overflow-y-auto bg-muted/30 p-4 lg:p-6">
-          <ErrorBoundary>
-            {children}
-          </ErrorBoundary>
-        </main>
+    <ImpersonationProvider value={impersonationState}>
+      <div className="flex h-screen overflow-hidden">
+        <Sidebar />
+        <div className="flex flex-1 flex-col overflow-hidden">
+          <Header />
+          <TrialBanner />
+          {managerBanner && (
+            <div className="shrink-0 bg-violet-600 text-white text-xs text-center py-1.5 px-4 font-medium">
+              You&apos;re managing <span className="font-bold">{managerBanner.ownerName}</span>&apos;s account
+            </div>
+          )}
+          <main className="flex-1 overflow-y-auto bg-muted/30 p-4 lg:p-6">
+            <ErrorBoundary>
+              {children}
+            </ErrorBoundary>
+          </main>
+        </div>
+        <FeedbackDialog />
+        <WelcomeTour />
+        <ChatWidget isPro={isPro} enabled={chatEnabled} />
+        <InstallPrompt />
       </div>
-      <FeedbackDialog />
-      <WelcomeTour />
-      <ChatWidget isPro={isPro} enabled={chatEnabled} />
-      <InstallPrompt />
-    </div>
+    </ImpersonationProvider>
   );
 }
