@@ -2,6 +2,7 @@ import { createClient } from "@/lib/supabase/server";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import Link from "next/link";
+import { TruckIcon } from "lucide-react";
 import { MobileNav } from "@/components/mobile-nav";
 import { TourButton } from "@/components/tour-button";
 
@@ -37,7 +38,19 @@ export async function Header() {
 
   return (
     <header className="flex h-14 items-center justify-between border-b bg-card px-4 lg:px-6">
-      <MobileNav />
+      <div className="flex items-center gap-2">
+        <MobileNav />
+        {/* Mobile-only brand mark so users know which app they're in.
+            Desktop already has the full VendCast wordmark in the sidebar. */}
+        <Link
+          href="/dashboard"
+          className="lg:hidden inline-flex items-center gap-1.5"
+          aria-label="VendCast home"
+        >
+          <TruckIcon className="h-5 w-5 text-primary" />
+          <span className="font-bold text-base tracking-tight">VendCast</span>
+        </Link>
+      </div>
       <div className="flex items-center gap-2">
         <TourButton />
         <Link

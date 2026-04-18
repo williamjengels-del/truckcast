@@ -331,26 +331,30 @@ export function ContactsClient({
                       )}
                     </div>
                   </div>
-                  {(c.email || c.phone) && (
-                    <div className="flex flex-wrap gap-2 text-xs">
-                      {c.email && (
+                  {/* Email / phone chips — explicit pill-shaped tap targets
+                      so they read as "tap to email / tap to call" not as
+                      metadata. .trim() guards against whitespace-only legacy
+                      rows producing empty chips. */}
+                  {(c.email?.trim() || c.phone?.trim()) && (
+                    <div className="flex flex-wrap gap-2">
+                      {c.email?.trim() && (
                         <a
-                          href={`mailto:${c.email}`}
-                          className="inline-flex items-center gap-1 text-primary hover:underline break-all"
+                          href={`mailto:${c.email.trim()}`}
+                          className="inline-flex items-center gap-1.5 h-11 px-3 rounded-md border bg-muted/40 text-xs text-foreground hover:bg-muted transition-colors max-w-full"
                           onClick={(e) => e.stopPropagation()}
                         >
-                          <Mail className="h-3 w-3 shrink-0" />
-                          {c.email}
+                          <Mail className="h-3.5 w-3.5 shrink-0 text-primary" />
+                          <span className="truncate">{c.email.trim()}</span>
                         </a>
                       )}
-                      {c.phone && (
+                      {c.phone?.trim() && (
                         <a
-                          href={`tel:${c.phone}`}
-                          className="inline-flex items-center gap-1 text-primary hover:underline"
+                          href={`tel:${c.phone.trim()}`}
+                          className="inline-flex items-center gap-1.5 h-11 px-3 rounded-md border bg-muted/40 text-xs text-foreground hover:bg-muted transition-colors"
                           onClick={(e) => e.stopPropagation()}
                         >
-                          <Phone className="h-3 w-3 shrink-0" />
-                          {c.phone}
+                          <Phone className="h-3.5 w-3.5 shrink-0 text-primary" />
+                          <span className="truncate">{c.phone.trim()}</span>
                         </a>
                       )}
                     </div>

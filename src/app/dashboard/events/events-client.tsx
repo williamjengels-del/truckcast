@@ -136,9 +136,13 @@ export function EventsClient({ initialEvents, userId = "", businessName = "", us
     const now = new Date();
     return new Date(now.getFullYear(), now.getMonth(), 1);
   });
-  // "all" shows every event on the calendar; "booked" hides unbooked inquiries
-  // and cancelled events. Persisted in localStorage, default "all".
-  const [calendarFilter, setCalendarFilter] = useState<"all" | "booked">("all");
+  // "booked" hides unbooked inquiries and cancelled events; "all" shows
+  // everything. Default "booked" — the calendar is an operational surface for
+  // scheduled work, not an inquiry triage view. Persisted in localStorage.
+  const [calendarFilter, setCalendarFilter] = useState<"all" | "booked">("booked");
+  // Selected day on the mobile calendar grid; null = nothing expanded.
+  // Reset when the visible month changes.
+  const [calendarExpandedDay, setCalendarExpandedDay] = useState<number | null>(null);
   const [weatherMap, setWeatherMap] = useState<Map<string, WeatherForecast>>(new Map());
   const [showShareModal, setShowShareModal] = useState(false);
   const [copied, setCopied] = useState(false);
@@ -159,10 +163,10 @@ export function EventsClient({ initialEvents, userId = "", businessName = "", us
     // if no saved preference, stay with "split" default
   }, []);
 
-  // Load calendar filter from localStorage (default: "all")
+  // Load calendar filter from localStorage (default: "booked")
   useEffect(() => {
     const saved = localStorage.getItem("events_calendar_filter");
-    if (saved === "booked") setCalendarFilter("booked");
+    if (saved === "all") setCalendarFilter("all");
   }, []);
 
   function handleCalendarFilter(v: "all" | "booked") {
@@ -679,14 +683,17 @@ export function EventsClient({ initialEvents, userId = "", businessName = "", us
 
     function prevMonth() {
       setCalendarMonth(new Date(year, month - 1, 1));
+      setCalendarExpandedDay(null);
     }
     function nextMonth() {
       setCalendarMonth(new Date(year, month + 1, 1));
+      setCalendarExpandedDay(null);
     }
 
-    // Build sorted list of days with events for mobile list view
-    const daysWithEvents = Array.from(eventsByDay.entries())
-      .sort((a, b) => a[0] - b[0]);
+    // Events to show in the expanded-day section at mobile
+    const expandedDayEvents = calendarExpandedDay !== null
+      ? eventsByDay.get(calendarExpandedDay) ?? []
+      : [];
 
     return (
       <div className="space-y-4">
@@ -725,36 +732,122 @@ export function EventsClient({ initialEvents, userId = "", businessName = "", us
           </div>
         </div>
 
-        {/* Mobile list view (< sm) */}
+        {/* Mobile grid view (< sm) — real 7-col month grid, tap a day to
+            expand that day's events below. Keeps the spatial week-layout
+            mental model operators are used to. */}
         <div className="sm:hidden space-y-3">
-          {daysWithEvents.length === 0 ? (
-            <p className="text-muted-foreground text-sm text-center py-6">No events this month.</p>
-          ) : (
-            daysWithEvents.map(([day, dayEvents]) => {
-              const dateObj = new Date(year, month, day);
-              const dateLabel = dateObj.toLocaleDateString("en-US", {
-                weekday: "short",
-                month: "short",
-                day: "numeric",
-              });
-              const isToday = day === todayDay;
-              return (
-                <div key={`mobile-day-${day}`} className="space-y-1">
-                  <p className={`text-xs font-semibold ${isToday ? "text-primary" : "text-muted-foreground"}`}>
-                    {dateLabel}
-                  </p>
-                  {dayEvents.map((event) => (
-                    <button
-                      key={event.id}
-                      onClick={() => setEditingEvent(event)}
-                      className="flex items-center gap-2 w-full text-left rounded-md border bg-card px-3 py-2 hover:bg-muted transition-colors"
+          <div>
+            {/* Day headers */}
+            <div className="grid grid-cols-7 text-center text-[10px] font-medium uppercase tracking-wide text-muted-foreground pb-1.5">
+              {["S", "M", "T", "W", "T", "F", "S"].map((d, i) => (
+                <div key={`m-head-${i}`}>{d}</div>
+              ))}
+            </div>
+            {/* Calendar grid */}
+            <div className="grid grid-cols-7 gap-1">
+              {cells.map((day, idx) => {
+                if (day === null) {
+                  return <div key={`m-empty-${idx}`} className="aspect-square" />;
+                }
+                const dayEvents = eventsByDay.get(day) ?? [];
+                const isToday = day === todayDay;
+                const isExpanded = calendarExpandedDay === day;
+                const hasEvents = dayEvents.length > 0;
+                const hasCatering = dayEvents.some((e) => (e.event_mode ?? "food_truck") === "catering");
+                return (
+                  <button
+                    key={`m-day-${day}`}
+                    type="button"
+                    onClick={() => setCalendarExpandedDay(isExpanded ? null : day)}
+                    className={`aspect-square rounded-md border text-xs font-medium flex flex-col items-center justify-center gap-0.5 transition-colors ${
+                      isExpanded
+                        ? "bg-primary/10 border-primary ring-1 ring-primary"
+                        : hasEvents
+                          ? "bg-card border-border hover:bg-muted"
+                          : "bg-muted/30 border-transparent text-muted-foreground"
+                    }`}
+                    aria-label={`${day}${hasEvents ? `, ${dayEvents.length} event${dayEvents.length === 1 ? "" : "s"}` : ", no events"}`}
+                  >
+                    <span
+                      className={`leading-none ${
+                        isToday
+                          ? "bg-primary text-primary-foreground rounded-full h-5 w-5 inline-flex items-center justify-center text-[11px]"
+                          : ""
+                      }`}
                     >
-                      <span className="text-sm font-medium truncate">{event.event_name}</span>
-                    </button>
-                  ))}
+                      {day}
+                    </span>
+                    {hasEvents && (
+                      <div className="flex items-center gap-0.5">
+                        <span
+                          className={`h-1.5 w-1.5 rounded-full ${hasCatering ? "bg-violet-500" : "bg-primary"}`}
+                        />
+                        {dayEvents.length > 1 && (
+                          <span className="text-[9px] font-semibold text-muted-foreground leading-none">
+                            {dayEvents.length}
+                          </span>
+                        )}
+                      </div>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Expanded day detail */}
+          {calendarExpandedDay !== null && (
+            <div className="rounded-lg border bg-card p-3 space-y-2">
+              <div className="flex items-center justify-between gap-2">
+                <p className="text-xs font-semibold">
+                  {new Date(year, month, calendarExpandedDay).toLocaleDateString("en-US", {
+                    weekday: "long",
+                    month: "short",
+                    day: "numeric",
+                  })}
+                </p>
+                <button
+                  type="button"
+                  onClick={() => setCalendarExpandedDay(null)}
+                  className="text-xs text-muted-foreground hover:text-foreground"
+                >
+                  Close
+                </button>
+              </div>
+              {expandedDayEvents.length === 0 ? (
+                <p className="text-xs text-muted-foreground">No events on this day.</p>
+              ) : (
+                <div className="space-y-1.5">
+                  {expandedDayEvents.map((event) => {
+                    const isCatering = (event.event_mode ?? "food_truck") === "catering";
+                    return (
+                      <button
+                        key={event.id}
+                        onClick={() => setEditingEvent(event)}
+                        className={`flex items-start gap-2 w-full text-left rounded-md border bg-background px-3 py-2 hover:bg-muted transition-colors ${
+                          isCatering ? "border-l-[3px] border-l-violet-500" : ""
+                        }`}
+                      >
+                        <div className="flex-1 min-w-0">
+                          <div className="text-sm font-medium truncate">{event.event_name}</div>
+                          {(event.event_type || event.location || event.city) && (
+                            <div className="text-xs text-muted-foreground truncate">
+                              {[event.event_type, event.location ?? event.city].filter(Boolean).join(" · ")}
+                            </div>
+                          )}
+                        </div>
+                        {!event.booked && !event.cancellation_reason && (
+                          <Badge variant="outline" className="text-[10px] shrink-0">Unbooked</Badge>
+                        )}
+                        {event.cancellation_reason && (
+                          <Badge variant="outline" className="text-[10px] shrink-0 text-red-600 border-red-300">Cancelled</Badge>
+                        )}
+                      </button>
+                    );
+                  })}
                 </div>
-              );
-            })
+              )}
+            </div>
           )}
         </div>
 
@@ -1597,10 +1690,11 @@ export function EventsClient({ initialEvents, userId = "", businessName = "", us
             >
               <LayoutList className="h-4 w-4" />
             </Button>
+            {/* Split view is desktop-only — neither half gets enough space at <sm */}
             <Button
               variant={viewMode === "split" ? "default" : "ghost"}
               size="sm"
-              className="rounded-none border-0 px-3"
+              className="hidden sm:inline-flex rounded-none border-0 px-3"
               onClick={() => handleViewMode("split")}
               title="Split view"
             >
