@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { X, Download, Share } from "lucide-react";
+import { X, Download, Share, Smartphone } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 // Android Chrome BeforeInstallPromptEvent — not in lib.dom, typed locally.
@@ -11,69 +11,101 @@ interface BeforeInstallPromptEvent extends Event {
 }
 
 const SESSION_COUNT_KEY = "pwa_session_count";
-const INSTALL_DISMISSED_KEY = "pwa_install_dismissed";
-const IOS_HINT_DISMISSED_KEY = "pwa_ios_hint_dismissed";
+const DISMISSED_KEY = "pwa_install_dismissed";
 const SHOW_AFTER_SESSIONS = 2;
 
-function isIOS(): boolean {
-  if (typeof window === "undefined") return false;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  return /iPad|iPhone|iPod/.test(navigator.userAgent) && !(window as any).MSStream;
-}
+// ─── Platform detection ────────────────────────────────────────────────────
 
-function isStandalone(): boolean {
-  if (typeof window === "undefined") return false;
-  return (
+type Platform =
+  | "hidden"
+  | "android-native"   // Android + beforeinstallprompt captured → Install button
+  | "ios-safari"       // iOS Safari → 4-step A2HS instructions
+  | "ios-other"        // iOS non-Safari → redirect-to-Safari notice
+  | "android-chrome"   // Android Chrome without the event → ⋮ menu steps
+  | "android-other";   // Any other Android browser → generic menu instruction
+
+function detectPlatform(deferredPromptAvailable: boolean): Platform {
+  if (typeof window === "undefined") return "hidden";
+
+  // Already installed — nothing to prompt.
+  const standalone =
     window.matchMedia("(display-mode: standalone)").matches ||
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    (window.navigator as any).standalone === true
-  );
+    (window.navigator as any).standalone === true;
+  if (standalone) return "hidden";
+
+  const ua = navigator.userAgent;
+  const isMobile = /iPad|iPhone|iPod|Android/.test(ua);
+  // Desktop users have the browser's own install UI (Chrome's address-bar
+  // icon, Edge's install prompt). No banner needed.
+  if (!isMobile) return "hidden";
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const isIOS = /iPad|iPhone|iPod/.test(ua) && !(window as any).MSStream;
+  if (isIOS) {
+    // iOS forces all browsers onto WebKit, but only real Safari can install.
+    // Chrome/Firefox/Edge on iOS carry CriOS/FxiOS/EdgiOS/OPiOS tokens.
+    const isIOSSafari = !/CriOS|FxiOS|EdgiOS|OPiOS/.test(ua);
+    return isIOSSafari ? "ios-safari" : "ios-other";
+  }
+
+  // Android — prefer the native prompt when the browser gave us one.
+  if (deferredPromptAvailable) return "android-native";
+
+  const isAndroidChrome =
+    /Chrome/.test(ua) &&
+    !/SamsungBrowser/.test(ua) &&
+    !/Firefox|FxiOS/.test(ua) &&
+    !/EdgA/.test(ua) &&
+    !/OPR/.test(ua);
+  if (isAndroidChrome) return "android-chrome";
+
+  // Samsung Internet, Firefox Android, etc. all land here.
+  return "android-other";
 }
 
+// ─── Component ─────────────────────────────────────────────────────────────
+
 /**
- * Floating bottom banner that prompts users to install VendCast.
- *  - Android Chrome fires `beforeinstallprompt`; we capture it and call
- *    `prompt()` when the user taps "Install".
- *  - iOS Safari can't trigger install programmatically. We detect iOS
- *    + non-standalone and show a small modal with Share → Add to Home
- *    Screen instructions instead.
- *  - Shows after SHOW_AFTER_SESSIONS visits to /dashboard. Dismissal is
- *    sticky in localStorage — no re-nagging.
- *  - Hidden entirely when already installed (display-mode: standalone).
+ * Floating bottom banner that prompts users to install VendCast, branched
+ * per platform:
+ *
+ *   android-native  → Chrome's own install prompt (beforeinstallprompt)
+ *   ios-safari      → 4-step Share → Add to Home Screen instructions
+ *   ios-other       → text-only notice pointing user to Safari
+ *   android-chrome  → manual ⋮ menu instructions (when native prompt absent)
+ *   android-other   → generic browser-menu instruction
+ *
+ * Hidden entirely on desktop and when already running standalone. Shows
+ * from the 2nd /dashboard visit onward. Dismissal is sticky per-device
+ * via a single localStorage key — dismissed is dismissed.
  */
 export function InstallPrompt() {
   const [deferredPrompt, setDeferredPrompt] =
     useState<BeforeInstallPromptEvent | null>(null);
-  const [showAndroid, setShowAndroid] = useState(false);
-  const [showIOS, setShowIOS] = useState(false);
+  const [platform, setPlatform] = useState<Platform>("hidden");
 
   useEffect(() => {
-    if (isStandalone()) return; // Already installed — nothing to prompt.
+    if (localStorage.getItem(DISMISSED_KEY) === "1") return;
 
     const sessionCount = Number(localStorage.getItem(SESSION_COUNT_KEY) ?? "0") + 1;
     localStorage.setItem(SESSION_COUNT_KEY, String(sessionCount));
     if (sessionCount < SHOW_AFTER_SESSIONS) return;
 
-    // Android path — beforeinstallprompt tells us the browser considers
-    // the site installable. Capture it so we can call prompt() later.
+    // Initial detection (before beforeinstallprompt has fired).
+    setPlatform(detectPlatform(false));
+
+    // Re-classify if the browser later fires beforeinstallprompt.
     const onBeforeInstall = (e: Event) => {
       e.preventDefault();
-      if (localStorage.getItem(INSTALL_DISMISSED_KEY) === "1") return;
       setDeferredPrompt(e as BeforeInstallPromptEvent);
-      setShowAndroid(true);
+      setPlatform(detectPlatform(true));
     };
     window.addEventListener("beforeinstallprompt", onBeforeInstall);
 
-    // iOS path — the event above never fires on Safari. Feature-detect
-    // iOS + non-standalone and show the A2HS hint modal.
-    if (isIOS() && localStorage.getItem(IOS_HINT_DISMISSED_KEY) !== "1") {
-      setShowIOS(true);
-    }
-
-    // Hide both prompts if the user later installs while this page is open.
+    // Hide the banner if the user installs while it's visible.
     const onInstalled = () => {
-      setShowAndroid(false);
-      setShowIOS(false);
+      setPlatform("hidden");
       setDeferredPrompt(null);
     };
     window.addEventListener("appinstalled", onInstalled);
@@ -84,131 +116,198 @@ export function InstallPrompt() {
     };
   }, []);
 
-  async function handleAndroidInstall() {
+  function dismiss() {
+    localStorage.setItem(DISMISSED_KEY, "1");
+    setPlatform("hidden");
+  }
+
+  async function handleAndroidNativeInstall() {
     if (!deferredPrompt) return;
     await deferredPrompt.prompt();
     await deferredPrompt.userChoice;
-    // Dismiss regardless of outcome — browser will fire `appinstalled`
-    // on success; on dismiss, don't keep nagging.
-    localStorage.setItem(INSTALL_DISMISSED_KEY, "1");
-    setShowAndroid(false);
+    // Dismiss regardless of outcome — the appinstalled event fires on
+    // success; on outright dismiss we respect the user's choice.
+    dismiss();
     setDeferredPrompt(null);
   }
 
-  function handleAndroidDismiss() {
-    localStorage.setItem(INSTALL_DISMISSED_KEY, "1");
-    setShowAndroid(false);
-  }
+  if (platform === "hidden") return null;
 
-  function handleIOSDismiss() {
-    localStorage.setItem(IOS_HINT_DISMISSED_KEY, "1");
-    setShowIOS(false);
-  }
-
-  if (showAndroid) {
+  if (platform === "android-native") {
     return (
-      <div
-        role="dialog"
-        aria-label="Install VendCast"
-        className="fixed bottom-4 left-4 right-4 z-50 lg:left-auto lg:right-6 lg:max-w-sm rounded-xl border bg-card shadow-lg p-4"
-      >
-        <div className="flex items-start gap-3">
-          <div className="mt-0.5 h-10 w-10 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
-            <Download className="h-5 w-5 text-primary" />
-          </div>
-          <div className="flex-1 min-w-0">
-            <p className="font-semibold text-sm">Install VendCast</p>
-            <p className="text-xs text-muted-foreground mt-0.5">
-              Add to your home screen for faster access and a full-screen experience.
-            </p>
-            <div className="flex gap-2 mt-3">
-              <Button size="sm" onClick={handleAndroidInstall} className="h-9">
-                Install
-              </Button>
-              <Button
-                size="sm"
-                variant="ghost"
-                onClick={handleAndroidDismiss}
-                className="h-9 text-muted-foreground"
-              >
-                Not now
-              </Button>
-            </div>
-          </div>
-          <button
-            onClick={handleAndroidDismiss}
-            className="shrink-0 p-1 rounded hover:bg-muted text-muted-foreground"
-            aria-label="Dismiss"
-          >
-            <X className="h-4 w-4" />
-          </button>
+      <BannerShell icon={<Download className="h-5 w-5 text-primary" />} onDismiss={dismiss}>
+        <p className="font-semibold text-sm">Install VendCast</p>
+        <p className="text-xs text-muted-foreground mt-0.5">
+          Add to your home screen for faster access and a full-screen experience.
+        </p>
+        <div className="flex gap-2 mt-3">
+          <Button size="sm" onClick={handleAndroidNativeInstall} className="h-9">
+            Install
+          </Button>
+          <Button size="sm" variant="ghost" onClick={dismiss} className="h-9 text-muted-foreground">
+            Not now
+          </Button>
         </div>
-      </div>
+      </BannerShell>
     );
   }
 
-  if (showIOS) {
-    // iOS Safari blocks programmatic install — this card is informational
-    // only, guiding the user to Safari's built-in Share → Add to Home Screen.
-    // Numbered steps + explicit "In Safari" framing so users don't tap the
-    // card expecting an install action to fire.
+  if (platform === "ios-safari") {
     return (
-      <div
-        role="dialog"
-        aria-label="Install VendCast instructions"
-        className="fixed bottom-4 left-4 right-4 z-50 rounded-xl border bg-card shadow-lg"
-      >
-        <div className="flex items-start justify-between gap-2 p-4 pb-2">
-          <div className="flex items-center gap-2">
-            <div className="h-9 w-9 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
-              <Share className="h-4 w-4 text-primary" />
-            </div>
-            <p className="font-semibold text-sm">Install VendCast on iPhone</p>
-          </div>
-          <button
-            onClick={handleIOSDismiss}
-            className="shrink-0 p-1.5 rounded hover:bg-muted text-muted-foreground -mt-0.5 -mr-1"
-            aria-label="Dismiss"
-          >
-            <X className="h-4 w-4" />
-          </button>
-        </div>
-        <ol className="px-4 pb-3 space-y-2 text-sm">
-          <li className="flex gap-3">
-            <span className="shrink-0 h-5 w-5 rounded-full bg-muted text-[11px] font-bold flex items-center justify-center">1</span>
-            <span>
-              In Safari, tap the{" "}
-              <Share className="inline h-3.5 w-3.5 -translate-y-px mx-0.5 text-primary" />
-              <span className="font-medium">Share</span> button
-              <span className="text-muted-foreground"> (bottom of the screen)</span>
-            </span>
-          </li>
-          <li className="flex gap-3">
-            <span className="shrink-0 h-5 w-5 rounded-full bg-muted text-[11px] font-bold flex items-center justify-center">2</span>
-            <span>
-              Scroll down and tap <span className="font-medium">Add to Home Screen</span>
-            </span>
-          </li>
-          <li className="flex gap-3">
-            <span className="shrink-0 h-5 w-5 rounded-full bg-muted text-[11px] font-bold flex items-center justify-center">3</span>
-            <span>
-              Tap <span className="font-medium">Add</span> — VendCast opens full-screen from your home screen
-            </span>
-          </li>
-        </ol>
-        <div className="px-4 pb-3 pt-1 border-t">
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={handleIOSDismiss}
-            className="h-11 w-full text-sm"
-          >
+      <InstructionsShell
+        title="Install VendCast on iPhone"
+        icon={<Share className="h-4 w-4 text-primary" />}
+        onDismiss={dismiss}
+        steps={[
+          <>Tap the <span className="font-medium">⋯</span> menu in Safari&apos;s address bar</>,
+          <>Scroll down and tap <span className="font-medium">Share</span></>,
+          <>Tap <span className="font-medium">Add to Home Screen</span></>,
+          <>Tap <span className="font-medium">Add</span> to confirm</>,
+        ]}
+      />
+    );
+  }
+
+  if (platform === "ios-other") {
+    return (
+      <BannerShell icon={<Share className="h-4 w-4 text-primary" />} onDismiss={dismiss}>
+        <p className="font-semibold text-sm">Install VendCast on iPhone</p>
+        <p className="text-xs text-muted-foreground mt-1 leading-relaxed">
+          iOS only allows installing web apps from Safari. Open{" "}
+          <span className="font-mono">vendcast.co</span> in Safari to install.
+        </p>
+        <div className="mt-3">
+          <Button size="sm" variant="ghost" onClick={dismiss} className="h-9 w-full">
             Got it
           </Button>
         </div>
-      </div>
+      </BannerShell>
     );
   }
 
-  return null;
+  if (platform === "android-chrome") {
+    return (
+      <InstructionsShell
+        title="Install VendCast on Android"
+        icon={<Download className="h-4 w-4 text-primary" />}
+        onDismiss={dismiss}
+        steps={[
+          <>Tap the <span className="font-medium">⋮</span> menu in Chrome&apos;s address bar</>,
+          <>Tap <span className="font-medium">Install app</span> (or &ldquo;Add to Home screen&rdquo;)</>,
+          <>Tap <span className="font-medium">Install</span> to confirm</>,
+        ]}
+      />
+    );
+  }
+
+  // android-other — generic fallback for Samsung Internet, Firefox, etc.
+  return (
+    <BannerShell
+      icon={<Smartphone className="h-4 w-4 text-primary" />}
+      onDismiss={dismiss}
+    >
+      <p className="font-semibold text-sm">Install VendCast on Android</p>
+      <p className="text-xs text-muted-foreground mt-1 leading-relaxed">
+        Open your browser&apos;s menu (<span className="font-medium">⋮</span> or{" "}
+        <span className="font-medium">☰</span>) and look for{" "}
+        <span className="font-medium">Install app</span> or{" "}
+        <span className="font-medium">Add to Home Screen</span>.
+      </p>
+      <div className="mt-3">
+        <Button size="sm" variant="ghost" onClick={dismiss} className="h-9 w-full">
+          Got it
+        </Button>
+      </div>
+    </BannerShell>
+  );
+}
+
+// ─── Layout shells ─────────────────────────────────────────────────────────
+
+function BannerShell({
+  children,
+  icon,
+  onDismiss,
+}: {
+  children: React.ReactNode;
+  icon: React.ReactNode;
+  onDismiss: () => void;
+}) {
+  return (
+    <div
+      role="dialog"
+      aria-label="Install VendCast"
+      className="fixed bottom-4 left-4 right-4 z-50 lg:left-auto lg:right-6 lg:max-w-sm rounded-xl border bg-card shadow-lg p-4"
+    >
+      <div className="flex items-start gap-3">
+        <div className="mt-0.5 h-10 w-10 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
+          {icon}
+        </div>
+        <div className="flex-1 min-w-0">{children}</div>
+        <button
+          onClick={onDismiss}
+          className="shrink-0 p-1 rounded hover:bg-muted text-muted-foreground"
+          aria-label="Dismiss"
+        >
+          <X className="h-4 w-4" />
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function InstructionsShell({
+  title,
+  icon,
+  steps,
+  onDismiss,
+}: {
+  title: string;
+  icon: React.ReactNode;
+  steps: React.ReactNode[];
+  onDismiss: () => void;
+}) {
+  return (
+    <div
+      role="dialog"
+      aria-label={title}
+      className="fixed bottom-4 left-4 right-4 z-50 rounded-xl border bg-card shadow-lg"
+    >
+      <div className="flex items-start justify-between gap-2 p-4 pb-2">
+        <div className="flex items-center gap-2">
+          <div className="h-9 w-9 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
+            {icon}
+          </div>
+          <p className="font-semibold text-sm">{title}</p>
+        </div>
+        <button
+          onClick={onDismiss}
+          className="shrink-0 p-1.5 rounded hover:bg-muted text-muted-foreground -mt-0.5 -mr-1"
+          aria-label="Dismiss"
+        >
+          <X className="h-4 w-4" />
+        </button>
+      </div>
+      <ol className="px-4 pb-3 space-y-2 text-sm">
+        {steps.map((step, i) => (
+          <li key={i} className="flex gap-3">
+            <span className="shrink-0 h-5 w-5 rounded-full bg-muted text-[11px] font-bold flex items-center justify-center">
+              {i + 1}
+            </span>
+            <span>{step}</span>
+          </li>
+        ))}
+      </ol>
+      <div className="px-4 pb-3 pt-1 border-t">
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={onDismiss}
+          className="h-11 w-full text-sm"
+        >
+          Got it
+        </Button>
+      </div>
+    </div>
+  );
 }

@@ -2,6 +2,9 @@ import { ImageResponse } from "next/og";
 
 export const runtime = "edge";
 
+// TODO: Replace with Brad Hatton brand system when ready.
+// Interim lettermark — single bold "V" on orange matches the "Mobile app"
+// vibe of the mobile header without inventing new identity.
 export function GET() {
   return new ImageResponse(
     (
@@ -20,13 +23,13 @@ export function GET() {
         <div
           style={{
             color: "white",
-            fontSize: 192,
+            fontSize: 320,
             fontWeight: 800,
-            letterSpacing: -6,
+            letterSpacing: -12,
             lineHeight: 1,
           }}
         >
-          TC
+          V
         </div>
       </div>
     ),
