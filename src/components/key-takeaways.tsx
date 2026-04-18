@@ -184,7 +184,12 @@ export function KeyTakeaways({
         </CardTitle>
       </CardHeader>
       <CardContent>
-        <div className="flex gap-3 overflow-x-auto pb-1">
+        {/* Horizontal swipe row on mobile; wraps to grid at sm+.
+            The right-edge mask gives a visible "more to scroll" hint when the
+            row overflows, addressing the low scroll affordance on phones. */}
+        <div
+          className="flex gap-3 overflow-x-auto pb-1 [mask-image:linear-gradient(to_right,black_calc(100%-24px),transparent)] sm:[mask-image:none]"
+        >
           {insights.map((insight, i) => (
             <div
               key={i}

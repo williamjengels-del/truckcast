@@ -323,8 +323,8 @@ export function EventForm({
 
           {/* ── Core fields (always visible) ── */}
           <div className="space-y-4">
-            <div className="grid grid-cols-2 gap-4">
-              <div className="col-span-2 space-y-2">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="sm:col-span-2 space-y-2">
                 <Label htmlFor="event_name">Event Name *</Label>
                 <Input
                   id="event_name"
@@ -454,7 +454,7 @@ export function EventForm({
                 <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">
                   Location
                 </h3>
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div className="col-span-2 space-y-2">
                     <Label htmlFor="location">Venue / Location</Label>
                     <Input
@@ -481,7 +481,7 @@ export function EventForm({
                 <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">
                   Event Details
                 </h3>
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div className="col-span-2 flex items-center gap-2 pt-1">
                     <input type="hidden" name="is_private" value={isPrivate ? "true" : "false"} />
                     <Checkbox
@@ -547,7 +547,7 @@ export function EventForm({
                 <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">
                   Crowd & Competition
                 </h3>
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <Label htmlFor="expected_attendance">Expected Attendance</Label>
                     <Input
@@ -577,7 +577,7 @@ export function EventForm({
                 <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">
                   Fees
                 </h3>
-                <div className="grid grid-cols-[2fr_1fr_1fr] gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-[2fr_1fr_1fr] gap-4">
                   <div className="space-y-2">
                     <Label htmlFor="fee_type">Fee Type</Label>
                     <Select
@@ -639,7 +639,7 @@ export function EventForm({
                 <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">
                   Event Costs
                 </h3>
-                <div className="grid grid-cols-3 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                   <div className="space-y-2">
                     <Label htmlFor="food_cost">Food Cost ($)</Label>
                     <Input
@@ -718,7 +718,7 @@ export function EventForm({
                 <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">
                   Sales & Conditions
                 </h3>
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <div className="flex items-center justify-between">
                       <Label htmlFor="event_weather">Weather</Label>

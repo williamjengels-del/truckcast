@@ -136,6 +136,9 @@ export function EventsClient({ initialEvents, userId = "", businessName = "", us
     const now = new Date();
     return new Date(now.getFullYear(), now.getMonth(), 1);
   });
+  // "all" shows every event on the calendar; "booked" hides unbooked inquiries
+  // and cancelled events. Persisted in localStorage, default "all".
+  const [calendarFilter, setCalendarFilter] = useState<"all" | "booked">("all");
   const [weatherMap, setWeatherMap] = useState<Map<string, WeatherForecast>>(new Map());
   const [showShareModal, setShowShareModal] = useState(false);
   const [copied, setCopied] = useState(false);
@@ -155,6 +158,17 @@ export function EventsClient({ initialEvents, userId = "", businessName = "", us
     }
     // if no saved preference, stay with "split" default
   }, []);
+
+  // Load calendar filter from localStorage (default: "all")
+  useEffect(() => {
+    const saved = localStorage.getItem("events_calendar_filter");
+    if (saved === "booked") setCalendarFilter("booked");
+  }, []);
+
+  function handleCalendarFilter(v: "all" | "booked") {
+    setCalendarFilter(v);
+    localStorage.setItem("events_calendar_filter", v);
+  }
 
   // Auto-open new event dialog if ?new=true
   useEffect(() => {
@@ -621,9 +635,14 @@ export function EventsClient({ initialEvents, userId = "", businessName = "", us
       year: "numeric",
     });
 
-    // Events indexed by day
+    // Events indexed by day, filtered by the "All events / Booked only" toggle.
+    // Booked view hides unbooked inquiries and cancelled events so the calendar
+    // becomes an at-a-glance view of confirmed commitments.
     const eventsByDay = new Map<number, Event[]>();
     for (const event of initialEvents) {
+      if (calendarFilter === "booked") {
+        if (!event.booked || event.cancellation_reason) continue;
+      }
       const d = new Date(event.event_date + "T00:00:00");
       if (d.getFullYear() === year && d.getMonth() === month) {
         const day = d.getDate();
@@ -671,8 +690,8 @@ export function EventsClient({ initialEvents, userId = "", businessName = "", us
 
     return (
       <div className="space-y-4">
-        {/* Month navigation */}
-        <div className="flex items-center justify-between">
+        {/* Month navigation + filter toggle */}
+        <div className="flex items-center justify-between gap-3 flex-wrap">
           <Button variant="outline" size="icon" onClick={prevMonth}>
             <ChevronLeft className="h-4 w-4" />
           </Button>
@@ -680,6 +699,30 @@ export function EventsClient({ initialEvents, userId = "", businessName = "", us
           <Button variant="outline" size="icon" onClick={nextMonth}>
             <ChevronRight className="h-4 w-4" />
           </Button>
+          <div className="inline-flex rounded-lg border bg-muted p-0.5 text-xs font-medium ml-auto">
+            <button
+              type="button"
+              onClick={() => handleCalendarFilter("all")}
+              className={`px-3 py-1.5 rounded-md transition-colors ${
+                calendarFilter === "all"
+                  ? "bg-background shadow-sm text-foreground"
+                  : "text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              All events
+            </button>
+            <button
+              type="button"
+              onClick={() => handleCalendarFilter("booked")}
+              className={`px-3 py-1.5 rounded-md transition-colors ${
+                calendarFilter === "booked"
+                  ? "bg-background shadow-sm text-foreground"
+                  : "text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              Booked only
+            </button>
+          </div>
         </div>
 
         {/* Mobile list view (< sm) */}
@@ -1118,7 +1161,106 @@ export function EventsClient({ initialEvents, userId = "", businessName = "", us
                   : "No events match your search."}
               </div>
             ) : (
-              <div className="overflow-x-auto">
+              <>
+              {/* Mobile card list — replaces the horizontally-scrolling table
+                  at <sm. Surfaces the essentials (date, name, location, sales,
+                  forecast) with one tap-to-edit target per card. Flagged-tab
+                  quick actions (Enter sales / Book it) render as pill buttons
+                  below the card body to stay touchable. */}
+              <div className="sm:hidden space-y-2">
+                {sorted.map((event) => {
+                  const isCatering = (event.event_mode ?? "food_truck") === "catering";
+                  const displaySales = isCatering && (event.invoice_revenue ?? 0) > 0
+                    ? (event.net_sales ?? 0) + (event.invoice_revenue ?? 0)
+                    : event.net_sales;
+                  const needsSales = event.event_date <= today && !event.net_sales && !event.cancellation_reason && !(isCatering && (event.invoice_revenue ?? 0) > 0);
+                  const isUnbookedFuture = !event.booked && event.event_date >= today && !event.cancellation_reason;
+                  return (
+                    <button
+                      key={event.id}
+                      type="button"
+                      onClick={() => setEditingEvent(event)}
+                      className={`w-full text-left rounded-lg border bg-card p-3 hover:bg-muted/50 transition-colors ${
+                        isCatering ? "border-l-[3px] border-l-violet-500" :
+                        activeTab === "all" && event.booked ? "border-l-[3px] border-l-green-500" :
+                        activeTab === "all" && !event.booked ? "border-l-[3px] border-l-slate-300 dark:border-l-slate-600" :
+                        ""
+                      }`}
+                    >
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="text-xs font-medium text-muted-foreground whitespace-nowrap">
+                              {formatDate(event.event_date)}
+                            </span>
+                            {event.cancellation_reason && (
+                              <Badge variant="outline" className="text-[10px] text-red-600 border-red-300 dark:text-red-400 dark:border-red-700">
+                                Cancelled
+                              </Badge>
+                            )}
+                            {!event.booked && !event.cancellation_reason && (
+                              <Badge variant="outline" className="text-[10px]">Unbooked</Badge>
+                            )}
+                            {event.event_date >= today && weatherMap.has(event.id) && <WeatherBadge event={event} />}
+                          </div>
+                          <div className="font-medium text-sm mt-1 truncate">{event.event_name}</div>
+                          {(event.event_type || event.location || event.city) && (
+                            <div className="text-xs text-muted-foreground mt-0.5 truncate">
+                              {[event.event_type, event.location ?? event.city].filter(Boolean).join(" · ")}
+                            </div>
+                          )}
+                          <ForecastVsActual event={event} />
+                        </div>
+                        <div className="text-right shrink-0">
+                          <div className="text-sm font-semibold tabular-nums">
+                            {formatCurrency(displaySales)}
+                            {isCatering && (event.invoice_revenue ?? 0) > 0 && (
+                              <span className="text-[10px] text-violet-600 ml-1">inv</span>
+                            )}
+                          </div>
+                          {event.event_date >= today && event.forecast_sales && (
+                            <div className="mt-1">
+                              <ForecastInline event={event} />
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                      {(needsSales || isUnbookedFuture) && (
+                        <div
+                          className="mt-2 pt-2 border-t flex items-center gap-2 flex-wrap"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          {isUnbookedFuture && (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="h-11 text-xs text-emerald-700 border-emerald-300 hover:bg-emerald-50 dark:text-emerald-400 dark:border-emerald-800"
+                              disabled={bookingId === event.id}
+                              onClick={() => handleQuickBook(event)}
+                            >
+                              <BookCheck className="h-3.5 w-3.5 mr-1.5" />
+                              {bookingId === event.id ? "Booking..." : "Book it"}
+                            </Button>
+                          )}
+                          {needsSales && (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="h-11 text-xs text-green-700 border-green-300 hover:bg-green-50 dark:text-green-400 dark:border-green-800"
+                              onClick={() => setSalesEvent(event)}
+                            >
+                              <DollarSign className="h-3.5 w-3.5 mr-1.5" />
+                              {isCatering ? "Log invoice" : "Log sales"}
+                            </Button>
+                          )}
+                        </div>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+
+              <div className="hidden sm:block overflow-x-auto">
               <Table>
                 <TableHeader>
                   <TableRow>
@@ -1381,6 +1523,7 @@ export function EventsClient({ initialEvents, userId = "", businessName = "", us
                 </TableBody>
               </Table>
               </div>
+              </>
             )}
           </CardContent>
         </Card>

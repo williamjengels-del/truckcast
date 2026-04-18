@@ -77,7 +77,7 @@ export function MobileNav() {
   return (
     <Sheet open={open} onOpenChange={setOpen}>
       <SheetTrigger
-        className="lg:hidden inline-flex items-center justify-center rounded-lg h-8 w-8 hover:bg-muted transition-colors"
+        className="lg:hidden inline-flex items-center justify-center rounded-lg h-11 w-11 hover:bg-muted transition-colors"
         aria-label="Open navigation menu"
       >
         <Menu className="h-5 w-5" />

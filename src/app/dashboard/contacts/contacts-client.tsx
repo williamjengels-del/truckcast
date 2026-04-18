@@ -308,6 +308,86 @@ export function ContactsClient({
                 : "No contacts match your search."}
             </div>
           ) : (
+            <>
+            {/* Mobile card list — the 7-column table forces horizontal
+                overflow at <sm. Cards surface the essentials with tap-to-copy
+                email/phone and tap-card-to-edit. */}
+            <div className="sm:hidden space-y-2">
+              {filtered.map((c) => (
+                <div
+                  key={c.id}
+                  className="rounded-lg border bg-card p-3 space-y-2"
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="flex-1 min-w-0">
+                      <div className="font-medium text-sm truncate">{c.name}</div>
+                      {c.organization && (
+                        <div className="text-xs text-muted-foreground truncate">{c.organization}</div>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-1 shrink-0" onClick={(e) => e.stopPropagation()}>
+                      {isPremium && (
+                        <QualityScoreBadge score={c.quality_score} linkedCount={c.linked_event_names?.length ?? 0} />
+                      )}
+                    </div>
+                  </div>
+                  {(c.email || c.phone) && (
+                    <div className="flex flex-wrap gap-2 text-xs">
+                      {c.email && (
+                        <a
+                          href={`mailto:${c.email}`}
+                          className="inline-flex items-center gap-1 text-primary hover:underline break-all"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          <Mail className="h-3 w-3 shrink-0" />
+                          {c.email}
+                        </a>
+                      )}
+                      {c.phone && (
+                        <a
+                          href={`tel:${c.phone}`}
+                          className="inline-flex items-center gap-1 text-primary hover:underline"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          <Phone className="h-3 w-3 shrink-0" />
+                          {c.phone}
+                        </a>
+                      )}
+                    </div>
+                  )}
+                  {(c.linked_event_names?.length ?? 0) > 0 && (
+                    <div className="text-xs text-muted-foreground">
+                      <span className="font-medium text-foreground">{c.linked_event_names!.length}</span>
+                      {" "}linked event{c.linked_event_names!.length !== 1 ? "s" : ""}
+                    </div>
+                  )}
+                  {c.notes && (
+                    <p className="text-xs text-muted-foreground line-clamp-2">{c.notes}</p>
+                  )}
+                  <div className="flex items-center gap-2 pt-1 border-t">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="h-11 flex-1"
+                      onClick={() => setEditing(c)}
+                    >
+                      <Pencil className="h-3.5 w-3.5 mr-1.5" />
+                      Edit
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-11 text-destructive hover:text-destructive hover:bg-destructive/10"
+                      onClick={() => handleDelete(c.id)}
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </Button>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <div className="hidden sm:block overflow-x-auto">
             <Table>
               <TableHeader>
                 <TableRow>
@@ -396,6 +476,8 @@ export function ContactsClient({
                 ))}
               </TableBody>
             </Table>
+            </div>
+            </>
           )}
         </CardContent>
       </Card>
