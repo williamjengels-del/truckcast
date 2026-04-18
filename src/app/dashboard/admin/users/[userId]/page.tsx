@@ -3,7 +3,10 @@ import Link from "next/link";
 import { createClient as createServiceClient } from "@supabase/supabase-js";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { buttonVariants } from "@/components/ui/button";
+// buttonVariants imported from the non-client module: this page is a
+// server component and cannot import from button.tsx (which is
+// "use client"). See src/components/ui/button-variants.ts for detail.
+import { buttonVariants } from "@/components/ui/button-variants";
 import { ChevronLeft, Upload } from "lucide-react";
 
 // Auth handled by /dashboard/admin/layout.tsx.
