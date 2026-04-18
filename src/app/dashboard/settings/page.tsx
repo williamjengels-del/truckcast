@@ -10,6 +10,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { EmbedWidgetSection } from "@/components/embed-widget-section";
 import { InstallSettingsCard } from "@/components/install-settings-card";
+import { PushNotificationsCard } from "@/components/push-notifications-card";
 import type { Profile } from "@/lib/database.types";
 
 const US_TIMEZONES = [
@@ -300,6 +301,8 @@ function SettingsContent() {
       )}
 
       <InstallSettingsCard />
+
+      <PushNotificationsCard />
 
       <NotificationsCard
         profile={profile}

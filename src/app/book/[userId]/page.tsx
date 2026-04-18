@@ -50,24 +50,34 @@ export default function BookingPage({ params }: { params: Promise<{ userId: stri
     setSubmitting(true);
     setError(null);
 
-    const supabase = createClient();
-    const { error: insertError } = await supabase.from("booking_requests").insert({
-      truck_user_id: userId,
-      requester_name: name.trim(),
-      requester_email: email.trim(),
-      requester_phone: phone.trim() || null,
-      event_date: eventDate || null,
-      event_type: eventType || null,
-      estimated_attendance: attendance ? parseInt(attendance) : null,
-      message: message.trim() || null,
-    });
+    // Server route handles the insert (service-role bypass for RLS) and
+    // fires a push notification to the operator. Client no longer inserts
+    // directly via anon key.
+    try {
+      const res = await fetch("/api/book/submit", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          truck_user_id: userId,
+          requester_name: name.trim(),
+          requester_email: email.trim(),
+          requester_phone: phone.trim() || null,
+          event_date: eventDate || null,
+          event_type: eventType || null,
+          estimated_attendance: attendance ? parseInt(attendance) : null,
+          message: message.trim() || null,
+        }),
+      });
 
-    setSubmitting(false);
-
-    if (insertError) {
-      setError("Something went wrong. Please try again.");
-    } else {
+      setSubmitting(false);
+      if (!res.ok) {
+        setError("Something went wrong. Please try again.");
+        return;
+      }
       setSubmitted(true);
+    } catch {
+      setSubmitting(false);
+      setError("Network error. Please try again.");
     }
   }
 

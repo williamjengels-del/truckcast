@@ -13,6 +13,13 @@ import { sendSalesReminderEmail } from "@/lib/email";
  * - Excludes pre-settled fee types (organizer pays flat fee, no sales to log)
  * - Groups by user, sends one email per user listing all unlogged events
  * - Capped at 5 events per email to keep it scannable
+ *
+ * TODO(Phase 8.2+): fire push notification in parallel with the email so
+ * operators who have push enabled get the reminder on their phone too.
+ * Call POST /api/push/send with { user_id, payload: { title: "N events
+ * need sales logged", body: "...", url: "/dashboard/events?tab=flagged" } }
+ * after the sendSalesReminderEmail call. Fire-and-forget; don't fail the
+ * email send on push errors.
  */
 
 export async function GET(req: NextRequest) {
