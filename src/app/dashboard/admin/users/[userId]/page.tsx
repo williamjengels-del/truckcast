@@ -3,7 +3,8 @@ import Link from "next/link";
 import { createClient as createServiceClient } from "@supabase/supabase-js";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { ChevronLeft } from "lucide-react";
+import { buttonVariants } from "@/components/ui/button";
+import { ChevronLeft, Upload } from "lucide-react";
 
 // Auth handled by /dashboard/admin/layout.tsx.
 
@@ -293,16 +294,33 @@ export default async function UserDetailPage({ params }: PageProps) {
         </Card>
       </div>
 
-      {/* Actions scaffolding — real buttons land in Commits 4–6 */}
+      {/* Actions — import now lives here. Impersonate + trial-reset
+          buttons land in Commits 5–6 and slot into this same card. */}
       <Card>
         <CardHeader>
           <CardTitle className="text-base">Actions</CardTitle>
         </CardHeader>
-        <CardContent>
-          <p className="text-sm text-muted-foreground">
-            Per-user import events, impersonate (read-only), and trial reset
-            actions are shipping in subsequent admin workstream commits. For
-            tier changes and trial extensions, use the inline controls on{" "}
+        <CardContent className="space-y-3">
+          <div className="flex items-center justify-between gap-3 flex-wrap">
+            <div>
+              <div className="font-medium text-sm">Import events</div>
+              <div className="text-xs text-muted-foreground">
+                Upload a CSV on this user&rsquo;s behalf. Same format as self-serve;
+                duplicates are skipped by default.
+              </div>
+            </div>
+            <Link
+              href={`/dashboard/admin/users/${userId}/import`}
+              className={buttonVariants({ variant: "outline", size: "sm" })}
+            >
+              <Upload className="h-4 w-4 mr-2" />
+              Import events
+            </Link>
+          </div>
+          <p className="text-xs text-muted-foreground pt-1 border-t">
+            Impersonate (read-only) and trial reset are shipping in subsequent
+            admin workstream commits. For tier changes and trial extensions, use
+            the inline controls on{" "}
             <Link href="/dashboard/admin/users" className="underline">
               the users index
             </Link>
