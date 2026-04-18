@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { createClient } from "@/lib/supabase/server";
+import { resolveScopedSupabase } from "@/lib/dashboard-scope";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { FileText, Upload, Plus } from "lucide-react";
@@ -8,25 +8,22 @@ import { ReportsInteractive } from "./reports-interactive";
 import { computeReportsAggregates } from "@/lib/reports-aggregates";
 
 export async function ReportsTab() {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const scope = await resolveScopedSupabase();
 
   let events: Event[] = [];
   let performances: EventPerformance[] = [];
 
-  if (user) {
+  if (scope.kind !== "unauthorized") {
     const [eventsRes, perfRes] = await Promise.all([
-      supabase
+      scope.client
         .from("events")
         .select("*")
-        .eq("user_id", user.id)
+        .eq("user_id", scope.userId)
         .order("event_date", { ascending: false }),
-      supabase
+      scope.client
         .from("event_performance")
         .select("*")
-        .eq("user_id", user.id)
+        .eq("user_id", scope.userId)
         .order("avg_sales", { ascending: false }),
     ]);
     events = (eventsRes.data ?? []) as Event[];

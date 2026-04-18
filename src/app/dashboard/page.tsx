@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 export const metadata: Metadata = { title: "Dashboard" };
 
 import Link from "next/link";
-import { createClient } from "@/lib/supabase/server";
+import { resolveScopedSupabase } from "@/lib/dashboard-scope";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import {
@@ -47,33 +47,30 @@ function hasRevenue(e: Event): boolean {
 }
 
 export default async function DashboardPage() {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const scope = await resolveScopedSupabase();
 
   let profile = null;
   let events: Event[] = [];
   let performances: EventPerformance[] = [];
   let posConnected = false;
 
-  if (user) {
+  if (scope.kind !== "unauthorized") {
     const [profileRes, eventsRes, perfRes, posRes] = await Promise.all([
-      supabase.from("profiles").select("*").eq("id", user.id).single(),
-      supabase
+      scope.client.from("profiles").select("*").eq("id", scope.userId).single(),
+      scope.client
         .from("events")
         .select("*")
-        .eq("user_id", user.id)
+        .eq("user_id", scope.userId)
         .order("event_date", { ascending: false }),
-      supabase
+      scope.client
         .from("event_performance")
         .select("*")
-        .eq("user_id", user.id)
+        .eq("user_id", scope.userId)
         .order("avg_sales", { ascending: false }),
-      supabase
+      scope.client
         .from("pos_connections")
         .select("id")
-        .eq("user_id", user.id)
+        .eq("user_id", scope.userId)
         .limit(1),
     ]);
     profile = profileRes.data;

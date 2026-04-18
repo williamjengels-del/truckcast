@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { createClient } from "@/lib/supabase/server";
+import { resolveScopedSupabase } from "@/lib/dashboard-scope";
 import { ContactsClient } from "./contacts-client";
 import { ContactsTabBar } from "./contacts-tab-bar";
 import { FollowersTab } from "./followers-tab";
@@ -28,28 +28,25 @@ export default async function ContactsPage({ searchParams }: ContactsPageProps) 
   const params = await searchParams;
   const tab = normalizeTab(params.tab);
 
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const scope = await resolveScopedSupabase();
 
   let contacts: Contact[] = [];
   let isPremium = false;
   let eventNames: string[] = [];
 
-  if (user) {
+  if (scope.kind !== "unauthorized") {
     const [{ data: contactsData }, { data: profile }, { data: eventsData }] =
       await Promise.all([
-        supabase
+        scope.client
           .from("contacts")
           .select("*")
-          .eq("user_id", user.id)
+          .eq("user_id", scope.userId)
           .order("name", { ascending: true }),
-        supabase.from("profiles").select("subscription_tier").eq("id", user.id).single(),
-        supabase
+        scope.client.from("profiles").select("subscription_tier").eq("id", scope.userId).single(),
+        scope.client
           .from("event_performance")
           .select("event_name")
-          .eq("user_id", user.id)
+          .eq("user_id", scope.userId)
           .order("event_name"),
       ]);
 

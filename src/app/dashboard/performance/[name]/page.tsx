@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { createClient } from "@/lib/supabase/server";
+import { resolveScopedSupabase } from "@/lib/dashboard-scope";
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -69,24 +69,20 @@ export default async function EventDrilldownPage({ params }: PageProps) {
   const { name } = await params;
   const eventName = decodeURIComponent(name);
 
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  if (!user) redirect("/login");
+  const scope = await resolveScopedSupabase();
+  if (scope.kind === "unauthorized") redirect("/login");
 
   const [{ data: perfData }, { data: eventsData }] = await Promise.all([
-    supabase
+    scope.client
       .from("event_performance")
       .select("*")
-      .eq("user_id", user.id)
+      .eq("user_id", scope.userId)
       .eq("event_name", eventName)
       .single(),
-    supabase
+    scope.client
       .from("events")
       .select("*")
-      .eq("user_id", user.id)
+      .eq("user_id", scope.userId)
       .ilike("event_name", eventName)
       .order("event_date", { ascending: false }),
   ]);

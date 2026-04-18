@@ -2,38 +2,30 @@ import type { Metadata } from "next";
 export const metadata: Metadata = { title: "Events" };
 
 import { Suspense } from "react";
-import { createClient } from "@/lib/supabase/server";
+import { resolveScopedSupabase } from "@/lib/dashboard-scope";
 import { EventsClient } from "./events-client";
 import type { Event, Profile } from "@/lib/database.types";
 
 async function EventsContent() {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  // resolveScopedSupabase handles the manager/owner redirect (and
+  // impersonation — 5c-i). scope.userId is always the id whose data
+  // this page should render; scope.client is the right client for
+  // reads (RLS-authed for self/manager, service-role for impersonation).
+  const scope = await resolveScopedSupabase();
 
   let events: Event[] = [];
   let profile: Profile | null = null;
-  if (user) {
-    // If the logged-in user is a manager, load the owner's profile + events instead
-    const { data: myProfile } = await supabase
-      .from("profiles")
-      .select("*")
-      .eq("id", user.id)
-      .single();
+  let realUserId = "";
 
-    const effectiveUserId = (myProfile as Profile | null)?.owner_user_id ?? user.id;
-
+  if (scope.kind !== "unauthorized") {
+    realUserId = scope.realUserId;
     const [eventsResult, profileResult] = await Promise.all([
-      supabase
+      scope.client
         .from("events")
         .select("*")
-        .eq("user_id", effectiveUserId)
+        .eq("user_id", scope.userId)
         .order("event_date", { ascending: false }),
-      // Load owner's profile for business name / city / tier
-      effectiveUserId !== user.id
-        ? supabase.from("profiles").select("*").eq("id", effectiveUserId).single()
-        : Promise.resolve({ data: myProfile }),
+      scope.client.from("profiles").select("*").eq("id", scope.userId).single(),
     ]);
     events = (eventsResult.data ?? []) as Event[];
     profile = (profileResult.data ?? null) as Profile | null;
@@ -42,7 +34,7 @@ async function EventsContent() {
   return (
     <EventsClient
       initialEvents={events}
-      userId={user?.id ?? ""}
+      userId={realUserId}
       businessName={profile?.business_name ?? ""}
       userCity={profile?.city ?? ""}
     />

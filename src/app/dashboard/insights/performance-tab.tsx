@@ -1,19 +1,16 @@
-import { createClient } from "@/lib/supabase/server";
+import { resolveScopedSupabase } from "@/lib/dashboard-scope";
 import { PerformanceClient } from "./performance-client";
 import type { EventPerformance } from "@/lib/database.types";
 
 export async function PerformanceTab() {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const scope = await resolveScopedSupabase();
 
   let performances: EventPerformance[] = [];
-  if (user) {
-    const { data } = await supabase
+  if (scope.kind !== "unauthorized") {
+    const { data } = await scope.client
       .from("event_performance")
       .select("*")
-      .eq("user_id", user.id)
+      .eq("user_id", scope.userId)
       .order("avg_sales", { ascending: false });
     performances = (data ?? []) as EventPerformance[];
   }

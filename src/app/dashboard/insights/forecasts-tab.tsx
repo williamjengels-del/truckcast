@@ -1,4 +1,4 @@
-import { createClient } from "@/lib/supabase/server";
+import { resolveScopedSupabase } from "@/lib/dashboard-scope";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -38,17 +38,14 @@ function formatDate(dateStr: string) {
 }
 
 export async function ForecastsTab() {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const scope = await resolveScopedSupabase();
 
   let events: Event[] = [];
-  if (user) {
-    const { data } = await supabase
+  if (scope.kind !== "unauthorized") {
+    const { data } = await scope.client
       .from("events")
       .select("*")
-      .eq("user_id", user.id)
+      .eq("user_id", scope.userId)
       .order("event_date", { ascending: true });
     events = (data ?? []) as Event[];
   }

@@ -1,4 +1,4 @@
-import { createClient } from "@/lib/supabase/server";
+import { resolveScopedSupabase } from "@/lib/dashboard-scope";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   DollarSign,
@@ -284,18 +284,15 @@ interface AnalyticsTabProps {
 
 export async function AnalyticsTab({ searchParams }: AnalyticsTabProps) {
   const params = await searchParams;
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const scope = await resolveScopedSupabase();
 
   let events: Event[] = [];
 
-  if (user) {
-    const { data } = await supabase
+  if (scope.kind !== "unauthorized") {
+    const { data } = await scope.client
       .from("events")
       .select("*")
-      .eq("user_id", user.id)
+      .eq("user_id", scope.userId)
       .order("event_date", { ascending: false });
     events = (data ?? []) as Event[];
   }
