@@ -80,9 +80,9 @@ export default function BookingsPage() {
     <div className="space-y-6">
       <div className="flex items-start justify-between flex-wrap gap-4">
         <div>
-          <h1 className="text-2xl font-bold">Booking Requests</h1>
+          <h1 className="text-2xl font-bold">Inbox</h1>
           <p className="text-muted-foreground text-sm">
-            Manage incoming booking inquiries from your public booking page
+            Booking inquiries from your public booking page.
           </p>
         </div>
         <Button variant="ghost" size="icon" onClick={load} disabled={loading}>

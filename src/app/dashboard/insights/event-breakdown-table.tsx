@@ -28,7 +28,7 @@ export interface EventBreakdownRow {
   net_sales: number;
   forecast_sales: number | null;
   accuracy: number | null;
-  fee_type: string;
+  fee_type: string | null;
   fee_amount: number;
   event_weather: string | null;
 }
@@ -277,7 +277,7 @@ export function EventBreakdownTable({ rows }: { rows: EventBreakdownRow[] }) {
                 </TableCell>
                 <TableCell>
                   <Badge variant="outline" className="whitespace-nowrap">
-                    {row.fee_type.replace("_", " ")}
+                    {(row.fee_type ?? "—").replace("_", " ")}
                   </Badge>
                 </TableCell>
                 <TableCell className="text-right">

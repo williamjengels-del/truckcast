@@ -133,9 +133,9 @@ function Illustration({ type }: { type: string }) {
 // ─── Checklist for the final slide ──────────────────────────────────────────
 
 const CHECKLIST = [
-  { label: "Import or add 5+ past events", href: "/dashboard/events/import", action: "Import CSV" },
+  { label: "Import or add 5+ past events", href: "/dashboard/integrations?tab=csv-import", action: "Import CSV" },
   { label: "Add an upcoming booking", href: "/dashboard/events?new=true", action: "Add Event" },
-  { label: "Check your first forecast", href: "/dashboard/forecasts", action: "View Forecasts" },
+  { label: "Check your first forecast", href: "/dashboard/insights?tab=forecasts", action: "View Forecasts" },
 ];
 
 // ─── Main component ──────────────────────────────────────────────────────────

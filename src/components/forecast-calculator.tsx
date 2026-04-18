@@ -196,7 +196,7 @@ export function ForecastCalculator({
           </p>
         </div>
         {!isPublic && (
-          <Link href="/dashboard/forecasts">
+          <Link href="/dashboard/insights?tab=forecasts">
             <Button variant="outline" size="sm">← Forecasts</Button>
           </Link>
         )}

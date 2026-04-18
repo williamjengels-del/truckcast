@@ -120,7 +120,7 @@ export function JourneyCallout({ journeyContext }: JourneyCalloutProps) {
           <span className="text-muted-foreground">
             💡 Connect Square or Toast to log sales automatically
           </span>
-          <Link href="/dashboard/settings/pos" className="font-medium text-primary hover:underline shrink-0">
+          <Link href="/dashboard/integrations?tab=pos" className="font-medium text-primary hover:underline shrink-0">
             Set up POS →
           </Link>
         </div>

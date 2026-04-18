@@ -1,6 +1,3 @@
-import type { Metadata } from "next";
-export const metadata: Metadata = { title: "Forecasts" };
-
 import { createClient } from "@/lib/supabase/server";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -40,7 +37,7 @@ function formatDate(dateStr: string) {
   });
 }
 
-export default async function ForecastsPage() {
+export async function ForecastsTab() {
   const supabase = await createClient();
   const {
     data: { user },

@@ -68,13 +68,13 @@ export function SetupProgress({
       label: "Connect your POS (optional)",
       done: hasPOS,
       actionLabel: "Connect POS",
-      actionHref: "/dashboard/settings/pos",
+      actionHref: "/dashboard/integrations?tab=pos",
     },
     {
       label: "Add 10+ events for better forecasts",
       done: has10Events,
       actionLabel: "Import CSV",
-      actionHref: "/dashboard/events/import",
+      actionHref: "/dashboard/integrations?tab=csv-import",
     },
     ...(journeyContext !== undefined
       ? [

@@ -16,7 +16,7 @@ interface LocationSelection {
   selected: boolean;
 }
 
-export default function PosSettingsPage() {
+export function PosTab() {
   return (
     <Suspense
       fallback={

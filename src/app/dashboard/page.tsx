@@ -23,8 +23,10 @@ import { DashboardCharts } from "./dashboard-charts";
 import { DashboardHeroChart } from "./hero-chart";
 import { SetupProgress } from "@/components/setup-progress";
 import { JourneyCallout } from "@/components/journey-callout";
+import { KeyTakeaways } from "@/components/key-takeaways";
 import { computeJourneyState } from "@/lib/user-journey";
-import type { Event } from "@/lib/database.types";
+import { computeReportsAggregates } from "@/lib/reports-aggregates";
+import type { Event, EventPerformance } from "@/lib/database.types";
 
 function formatCurrency(val: number): string {
   return `$${val.toLocaleString("en-US", {
@@ -52,16 +54,22 @@ export default async function DashboardPage() {
 
   let profile = null;
   let events: Event[] = [];
+  let performances: EventPerformance[] = [];
   let posConnected = false;
 
   if (user) {
-    const [profileRes, eventsRes, posRes] = await Promise.all([
+    const [profileRes, eventsRes, perfRes, posRes] = await Promise.all([
       supabase.from("profiles").select("*").eq("id", user.id).single(),
       supabase
         .from("events")
         .select("*")
         .eq("user_id", user.id)
         .order("event_date", { ascending: false }),
+      supabase
+        .from("event_performance")
+        .select("*")
+        .eq("user_id", user.id)
+        .order("avg_sales", { ascending: false }),
       supabase
         .from("pos_connections")
         .select("id")
@@ -70,8 +78,13 @@ export default async function DashboardPage() {
     ]);
     profile = profileRes.data;
     events = (eventsRes.data ?? []) as Event[];
+    performances = (perfRes.data ?? []) as EventPerformance[];
     posConnected = (posRes.data ?? []).length > 0;
   }
+
+  // Key Takeaways aggregates — shared library, single source of truth with
+  // the Reports tab inside /dashboard/insights.
+  const reportsAggregates = computeReportsAggregates(events, performances);
 
   const today = new Date().toISOString().split("T")[0];
   const currentYear = new Date().getFullYear();
@@ -338,46 +351,6 @@ export default async function DashboardPage() {
 
       <JourneyCallout journeyContext={journeyContext} />
 
-      {unloggedEvents.length > 0 && (
-        <div className="rounded-lg border border-amber-200 bg-amber-50 dark:border-amber-900/50 dark:bg-amber-950/20 p-4 space-y-3">
-          <div className="flex items-center justify-between gap-3">
-            <div className="flex items-center gap-2">
-              <ClipboardList className="h-4 w-4 text-amber-600 dark:text-amber-500 shrink-0" />
-              <p className="text-sm font-medium text-amber-900 dark:text-amber-300">
-                {unloggedEvents.length} event{unloggedEvents.length !== 1 ? "s" : ""} need{unloggedEvents.length === 1 ? "s" : ""} revenue logged
-              </p>
-            </div>
-            <Link href="/dashboard/events?tab=flagged">
-              <Button variant="outline" size="sm" className="text-xs border-amber-300 hover:bg-amber-100 dark:border-amber-800 dark:hover:bg-amber-900/30">
-                View all
-              </Button>
-            </Link>
-          </div>
-          <div className="space-y-1">
-            {unloggedEvents.slice(0, 4).map((e) => (
-              <div key={e.id} className="flex items-center justify-between text-sm">
-                <span className="text-amber-800 dark:text-amber-400 truncate mr-3">
-                  {new Date(e.event_date + "T00:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric" })}
-                  {" · "}
-                  {e.event_name}
-                  {e.event_mode === "catering" && (
-                    <span className="ml-1.5 text-xs font-medium opacity-70">(catering)</span>
-                  )}
-                </span>
-                <Link href="/dashboard/events?tab=flagged" className="text-xs text-amber-700 dark:text-amber-500 hover:underline shrink-0 font-medium">
-                  {e.event_mode === "catering" ? "Log invoice →" : "Log sales →"}
-                </Link>
-              </div>
-            ))}
-            {unloggedEvents.length > 4 && (
-              <p className="text-xs text-amber-700 dark:text-amber-500 pt-1">
-                +{unloggedEvents.length - 4} more
-              </p>
-            )}
-          </div>
-        </div>
-      )}
-
       {showDataQuality && (
         <div className="rounded-lg border border-indigo-200 bg-indigo-50 dark:border-indigo-800/40 dark:bg-indigo-950/20 p-4 space-y-3">
           <div className="flex items-center justify-between gap-3">
@@ -411,7 +384,7 @@ export default async function DashboardPage() {
               : "Dashboard"}
           </h1>
           <p className="text-muted-foreground">
-            Your event forecasting overview
+            Your operations at a glance
           </p>
         </div>
         <Link href="/dashboard/events?new=true">
@@ -432,7 +405,7 @@ export default async function DashboardPage() {
             </p>
             <div className="grid gap-4 sm:grid-cols-3">
               {/* Option 1 — Import (recommended) */}
-              <Link href="/dashboard/events/import" className="group">
+              <Link href="/dashboard/integrations?tab=csv-import" className="group">
                 <div className="h-full rounded-xl border-2 border-primary/30 bg-card p-5 hover:border-primary hover:shadow-md transition-all">
                   <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center mb-3">
                     <Upload className="h-5 w-5 text-primary" />
@@ -467,7 +440,7 @@ export default async function DashboardPage() {
               </Link>
 
               {/* Option 3 — Forecasts preview */}
-              <Link href="/dashboard/forecasts" className="group">
+              <Link href="/dashboard/insights?tab=forecasts" className="group">
                 <div className="h-full rounded-xl border bg-card p-5 hover:border-primary/50 hover:shadow-md transition-all">
                   <div className="w-10 h-10 rounded-lg bg-indigo-100 dark:bg-indigo-950/30 flex items-center justify-center mb-3">
                     <TrendingUp className="h-5 w-5 text-indigo-600" />
@@ -503,10 +476,7 @@ export default async function DashboardPage() {
         </div>
       ) : (
         <>
-          {/* ── Rolling 12-Week Hero Chart ── */}
-          <DashboardHeroChart rollingWeekData={rollingWeekData} />
-
-          {/* ── Season Progress Hero ── */}
+          {/* ── Season Progress Hero — first thing users see ── */}
           <div className="rounded-xl border bg-gradient-to-br from-orange-50 to-amber-50 dark:from-orange-950/20 dark:to-amber-950/10 p-5 md:p-6">
             <div className="flex items-center justify-between mb-4">
               <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">
@@ -549,6 +519,67 @@ export default async function DashboardPage() {
               </div>
             )}
           </div>
+
+          {/* ── Key Takeaways — promoted from Reports ── */}
+          <KeyTakeaways
+            dayOfWeekSummaries={reportsAggregates.dayOfWeekSummaries}
+            eventTypeBreakdown={reportsAggregates.eventTypeBreakdown}
+            monthlySummaries={reportsAggregates.monthlySummaries}
+            yoyData={reportsAggregates.yoyData}
+            bestEventName={reportsAggregates.bestEventName}
+            bestEventRevenue={reportsAggregates.bestEventRevenue}
+            overallAvg={reportsAggregates.overallAvg}
+          />
+
+          {/* ── Rolling 12-Week Hero Chart ── */}
+          <DashboardHeroChart rollingWeekData={rollingWeekData} />
+
+          {/* ── Needs Attention — demoted from top-of-page banner to a
+               mid-dashboard card. Three-slot structure: revenue logging,
+               unmatched payments (Phase 3), weather-not-set (Phase 3). ── */}
+          {unloggedEvents.length > 0 && (
+            <div className="rounded-lg border border-amber-200 bg-amber-50 dark:border-amber-900/50 dark:bg-amber-950/20 p-4 space-y-3">
+              <div className="flex items-center justify-between gap-3">
+                <div className="flex items-center gap-2">
+                  <ClipboardList className="h-4 w-4 text-amber-600 dark:text-amber-500 shrink-0" />
+                  <p className="text-sm font-medium text-amber-900 dark:text-amber-300">
+                    Needs attention: {unloggedEvents.length} event{unloggedEvents.length !== 1 ? "s" : ""} need{unloggedEvents.length === 1 ? "s" : ""} revenue logged
+                  </p>
+                </div>
+                <Link href="/dashboard/events?tab=flagged">
+                  <Button variant="outline" size="sm" className="text-xs border-amber-300 hover:bg-amber-100 dark:border-amber-800 dark:hover:bg-amber-900/30">
+                    View all
+                  </Button>
+                </Link>
+              </div>
+              <div className="space-y-1">
+                {unloggedEvents.slice(0, 4).map((e) => (
+                  <div key={e.id} className="flex items-center justify-between text-sm">
+                    <span className="text-amber-800 dark:text-amber-400 truncate mr-3">
+                      {new Date(e.event_date + "T00:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+                      {" · "}
+                      {e.event_name}
+                      {e.event_mode === "catering" && (
+                        <span className="ml-1.5 text-xs font-medium opacity-70">(catering)</span>
+                      )}
+                    </span>
+                    <Link href="/dashboard/events?tab=flagged" className="text-xs text-amber-700 dark:text-amber-500 hover:underline shrink-0 font-medium">
+                      {e.event_mode === "catering" ? "Log invoice →" : "Log sales →"}
+                    </Link>
+                  </div>
+                ))}
+                {unloggedEvents.length > 4 && (
+                  <p className="text-xs text-amber-700 dark:text-amber-500 pt-1">
+                    +{unloggedEvents.length - 4} more
+                  </p>
+                )}
+              </div>
+              {/* TODO(Phase 3): unmatched-payment flags slot — renders when
+                  POS sync finds sales periods without a matching event. */}
+              {/* TODO(Phase 3): weather-not-set slot — renders when upcoming
+                  events within 7 days have city but no event_weather. */}
+            </div>
+          )}
 
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {kpis.map((kpi) => (

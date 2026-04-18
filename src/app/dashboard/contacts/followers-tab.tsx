@@ -7,7 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Users, Bell } from "lucide-react";
 import type { FollowSubscriber, Profile } from "@/lib/database.types";
 
-export default function FollowersPage() {
+export function FollowersTab() {
   const [subscribers, setSubscribers] = useState<FollowSubscriber[]>([]);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [loading, setLoading] = useState(true);
@@ -60,12 +60,6 @@ export default function FollowersPage() {
   if (profile?.subscription_tier !== "premium") {
     return (
       <div className="space-y-6">
-        <div>
-          <h1 className="text-2xl font-bold">Followers</h1>
-          <p className="text-muted-foreground">
-            Follow My Truck notifications
-          </p>
-        </div>
         <Card className="max-w-2xl">
           <CardContent className="py-8 text-center">
             <Bell className="h-12 w-12 text-muted-foreground/30 mx-auto mb-4" />
@@ -87,13 +81,6 @@ export default function FollowersPage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold">Followers</h1>
-        <p className="text-muted-foreground">
-          Customers subscribed to your event notifications
-        </p>
-      </div>
-
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 max-w-2xl">
         <Card>
           <CardContent className="pt-6">

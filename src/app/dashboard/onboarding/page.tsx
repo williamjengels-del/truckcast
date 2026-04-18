@@ -335,7 +335,7 @@ export default function OnboardingPage() {
                         Add event
                       </Button>
                     </Link>
-                    <Link href="/dashboard/events/import">
+                    <Link href="/dashboard/integrations?tab=csv-import">
                       <Button size="sm" variant="outline" className="h-7 text-xs">
                         <FileSpreadsheet className="mr-1.5 h-3.5 w-3.5" />
                         Import CSV
@@ -366,7 +366,7 @@ export default function OnboardingPage() {
                     See revenue predictions for upcoming events
                   </div>
                   <div className="mt-2">
-                    <Link href="/dashboard/forecasts">
+                    <Link href="/dashboard/insights?tab=forecasts">
                       <Button size="sm" variant="outline" className="h-7 text-xs">
                         <BarChart3 className="mr-1.5 h-3.5 w-3.5" />
                         View forecasts

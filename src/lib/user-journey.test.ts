@@ -78,7 +78,7 @@ describe("computeJourneyState", () => {
   it("returns calibrated at exactly 30 events with sales", () => {
     const ctx = computeJourneyState(makeEvents(35, 30), false);
     expect(ctx.state).toBe("calibrated");
-    expect(ctx.nextStep.href).toBe("/dashboard/forecasts");
+    expect(ctx.nextStep.href).toBe("/dashboard/insights?tab=forecasts");
   });
 
   it("returns calibrated at 50 events with sales", () => {

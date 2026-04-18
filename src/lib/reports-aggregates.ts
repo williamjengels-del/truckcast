@@ -1,23 +1,108 @@
-import type { Metadata } from "next";
-export const metadata: Metadata = { title: "Reports" };
+import type { Event, EventPerformance } from "./database.types";
 
-import Link from "next/link";
-import { createClient } from "@/lib/supabase/server";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
-import { FileText, Upload, Plus } from "lucide-react";
-import type { Event, EventPerformance } from "@/lib/database.types";
-import { type EventBreakdownRow } from "./event-breakdown-table";
-import { ReportsInteractive } from "./reports-interactive";
-import type {
-  MonthlySummary,
-  EventTypeBreakdown,
-  DayOfWeekSummary,
-  YoYData,
-  Top10Row,
-  LocationSummary,
-  CompareEventRow,
-} from "./reports-interactive";
+// Type definitions — used by both the Reports tab and any consumer
+// (Dashboard, marketing copy generation) that needs aggregate shapes.
+
+export interface MonthlySummary {
+  month: string;
+  monthLabel: string;
+  eventCount: number;
+  totalRevenue: number;
+  avgRevenue: number;
+  bestEvent: string;
+  bestRevenue: number;
+  worstEvent: string;
+  worstRevenue: number;
+}
+
+export interface EventTypeBreakdown {
+  eventType: string;
+  count: number;
+  totalRevenue: number;
+  avgRevenue: number;
+}
+
+export interface DayOfWeekSummary {
+  day: string;
+  dayIndex: number;
+  count: number;
+  totalRevenue: number;
+  avgRevenue: number;
+}
+
+export interface YoYData {
+  year: number;
+  eventCount: number;
+  totalRevenue: number;
+  avgRevenue: number;
+}
+
+export interface Top10Row {
+  id: string;
+  event_name: string;
+  times_booked: number;
+  avg_sales: number;
+  total_sales: number;
+  trend: string | null;
+  confidence: string | null;
+}
+
+export interface LocationSummary {
+  city: string;
+  totalRevenue: number;
+  eventCount: number;
+  avgRevenue: number;
+}
+
+export interface CompareEventRow {
+  event_name: string;
+  times_booked: number;
+  avg_sales: number;
+  max_sales: number;
+  min_sales: number;
+  total_sales: number;
+  confidence: string | null;
+  trend: string | null;
+  consistency_score: number | null;
+  forecast_next: number | null;
+  occurrences: { net_sales: number; anomaly_flag: string | null }[];
+}
+
+export interface EventBreakdownRow {
+  id: string;
+  event_name: string;
+  event_date: string;
+  event_type: string | null;
+  city: string | null;
+  net_sales: number;
+  forecast_sales: number | null;
+  accuracy: number | null;
+  fee_type: string | null;
+  fee_amount: number;
+  event_weather: string | null;
+}
+
+export interface ReportsAggregates {
+  monthlySummaries: MonthlySummary[];
+  eventTypeBreakdown: EventTypeBreakdown[];
+  dayOfWeekSummaries: DayOfWeekSummary[];
+  yoyData: YoYData[];
+  top10: Top10Row[];
+  eventBreakdownRows: EventBreakdownRow[];
+  locationSummaries: LocationSummary[];
+  compareEventRows: CompareEventRow[];
+  totalRevenue: number;
+  eventsCompleted: number;
+  avgPerEvent: number;
+  bestEventName: string;
+  bestEventRevenue: number;
+  forecastAccuracy: string | null;
+  overallAvg: number;
+}
+
+function eventRevenue(e: Event): number {
+  return (e.net_sales ?? 0) + (e.event_mode === "catering" ? e.invoice_revenue : 0);
+}
 
 function getMonthKey(dateStr: string): string {
   const d = new Date(dateStr + "T00:00:00");
@@ -30,38 +115,16 @@ function getMonthLabel(key: string): string {
   return d.toLocaleDateString("en-US", { year: "numeric", month: "long" });
 }
 
-export default async function ReportsPage() {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  let events: Event[] = [];
-  let performances: EventPerformance[] = [];
-
-  if (user) {
-    const [eventsRes, perfRes] = await Promise.all([
-      supabase
-        .from("events")
-        .select("*")
-        .eq("user_id", user.id)
-        .order("event_date", { ascending: false }),
-      supabase
-        .from("event_performance")
-        .select("*")
-        .eq("user_id", user.id)
-        .order("avg_sales", { ascending: false }),
-    ]);
-    events = (eventsRes.data ?? []) as Event[];
-    performances = (perfRes.data ?? []) as EventPerformance[];
-  }
-
-  /** Total recognised revenue for an event: on-site sales + catering invoice */
-  function eventRevenue(e: Event): number {
-    return (e.net_sales ?? 0) + (e.event_mode === "catering" ? e.invoice_revenue : 0);
-  }
-
-  // Filter to completed events with any revenue (net_sales OR catering invoice)
+/**
+ * Compute all reports-page aggregates from raw events + performance rows.
+ * Single source of truth — consumed by /dashboard/insights?tab=reports,
+ * by the Dashboard's Key Takeaways card, and by any downstream summary
+ * view that needs the same numbers.
+ */
+export function computeReportsAggregates(
+  events: Event[],
+  performances: EventPerformance[]
+): ReportsAggregates {
   const completedEvents = events.filter(
     (e) =>
       e.booked !== false &&
@@ -69,22 +132,13 @@ export default async function ReportsPage() {
         (e.event_mode === "catering" && e.invoice_revenue > 0))
   );
 
-  // --- Monthly Summary ---
-  const monthlyMap = new Map<
-    string,
-    { events: { name: string; revenue: number }[] }
-  >();
+  // Monthly
+  const monthlyMap = new Map<string, { events: { name: string; revenue: number }[] }>();
   for (const e of completedEvents) {
     const key = getMonthKey(e.event_date);
-    if (!monthlyMap.has(key)) {
-      monthlyMap.set(key, { events: [] });
-    }
-    monthlyMap.get(key)!.events.push({
-      name: e.event_name,
-      revenue: eventRevenue(e),
-    });
+    if (!monthlyMap.has(key)) monthlyMap.set(key, { events: [] });
+    monthlyMap.get(key)!.events.push({ name: e.event_name, revenue: eventRevenue(e) });
   }
-
   const monthlySummaries: MonthlySummary[] = Array.from(monthlyMap.entries())
     .sort(([a], [b]) => b.localeCompare(a))
     .map(([month, data]) => {
@@ -103,21 +157,16 @@ export default async function ReportsPage() {
       };
     });
 
-  // --- Event Type Breakdown ---
+  // Event Type Breakdown
   const typeMap = new Map<string, { count: number; totalRevenue: number }>();
   for (const e of completedEvents) {
     const type = e.event_type ?? "Unknown";
-    if (!typeMap.has(type)) {
-      typeMap.set(type, { count: 0, totalRevenue: 0 });
-    }
+    if (!typeMap.has(type)) typeMap.set(type, { count: 0, totalRevenue: 0 });
     const entry = typeMap.get(type)!;
     entry.count += 1;
     entry.totalRevenue += eventRevenue(e);
   }
-
-  const eventTypeBreakdown: EventTypeBreakdown[] = Array.from(
-    typeMap.entries()
-  )
+  const eventTypeBreakdown: EventTypeBreakdown[] = Array.from(typeMap.entries())
     .map(([eventType, data]) => ({
       eventType,
       count: data.count,
@@ -126,22 +175,16 @@ export default async function ReportsPage() {
     }))
     .sort((a, b) => b.totalRevenue - a.totalRevenue);
 
-  // --- Day of Week Analysis ---
-  const dayNames = [
-    "Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday",
-  ];
+  // Day of Week
+  const dayNames = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
   const dayMap = new Map<number, { count: number; totalRevenue: number }>();
   for (const e of completedEvents) {
-    const d = new Date(e.event_date + "T00:00:00");
-    const dayIndex = d.getDay();
-    if (!dayMap.has(dayIndex)) {
-      dayMap.set(dayIndex, { count: 0, totalRevenue: 0 });
-    }
+    const dayIndex = new Date(e.event_date + "T00:00:00").getDay();
+    if (!dayMap.has(dayIndex)) dayMap.set(dayIndex, { count: 0, totalRevenue: 0 });
     const entry = dayMap.get(dayIndex)!;
     entry.count += 1;
     entry.totalRevenue += eventRevenue(e);
   }
-
   const dayOfWeekSummaries: DayOfWeekSummary[] = Array.from(dayMap.entries())
     .map(([dayIndex, data]) => ({
       day: dayNames[dayIndex],
@@ -152,33 +195,25 @@ export default async function ReportsPage() {
     }))
     .sort((a, b) => b.avgRevenue - a.avgRevenue);
 
-  // --- Year over Year (YTD-normalized) ---
-  // Cap every year at today's month+day so we compare apples-to-apples.
-  // e.g. on Apr 13: 2026 = Jan 1–Apr 13 vs 2025 = Jan 1–Apr 13, not all of 2025.
+  // YoY (YTD-normalized)
   const now = new Date();
-  const currentMonth = now.getMonth(); // 0-indexed
+  const currentMonth = now.getMonth();
   const currentDay = now.getDate();
-
   const yearMap = new Map<number, { count: number; totalRevenue: number }>();
   for (const e of completedEvents) {
     const d = new Date(e.event_date + "T00:00:00");
     const year = d.getFullYear();
-    // Only include if it falls within the YTD window for that year
     const eventMonth = d.getMonth();
     const eventDay = d.getDate();
     const withinYTD =
       eventMonth < currentMonth ||
       (eventMonth === currentMonth && eventDay <= currentDay);
     if (!withinYTD) continue;
-
-    if (!yearMap.has(year)) {
-      yearMap.set(year, { count: 0, totalRevenue: 0 });
-    }
+    if (!yearMap.has(year)) yearMap.set(year, { count: 0, totalRevenue: 0 });
     const entry = yearMap.get(year)!;
     entry.count += 1;
     entry.totalRevenue += eventRevenue(e);
   }
-
   const yoyData: YoYData[] = Array.from(yearMap.entries())
     .map(([year, data]) => ({
       year,
@@ -188,7 +223,7 @@ export default async function ReportsPage() {
     }))
     .sort((a, b) => b.year - a.year);
 
-  // --- Top 10 Events (from event_performance) ---
+  // Top 10 from event_performance
   const top10: Top10Row[] = performances.slice(0, 10).map((p) => ({
     id: p.id,
     event_name: p.event_name,
@@ -199,11 +234,9 @@ export default async function ReportsPage() {
     confidence: p.confidence as string | null,
   }));
 
-  // --- Event Performance Breakdown ---
+  // Event breakdown
   const eventBreakdownRows: EventBreakdownRow[] = completedEvents.map((e) => {
     const rev = eventRevenue(e);
-    // Fee amount: difference between gross sales (net_sales) and after-fee amount
-    // For invoice-only catering events, fees are tracked separately so we skip
     const feeAmount =
       e.net_sales !== null && e.net_after_fees !== null
         ? e.net_sales - e.net_after_fees
@@ -230,16 +263,11 @@ export default async function ReportsPage() {
     };
   });
 
-  // --- Venue / Location Analysis ---
-  const locationMap = new Map<
-    string,
-    { totalRevenue: number; eventCount: number }
-  >();
+  // Locations
+  const locationMap = new Map<string, { totalRevenue: number; eventCount: number }>();
   for (const e of completedEvents) {
     const city = e.city ?? "Unknown";
-    if (!locationMap.has(city)) {
-      locationMap.set(city, { totalRevenue: 0, eventCount: 0 });
-    }
+    if (!locationMap.has(city)) locationMap.set(city, { totalRevenue: 0, eventCount: 0 });
     const entry = locationMap.get(city)!;
     entry.totalRevenue += eventRevenue(e);
     entry.eventCount += 1;
@@ -253,8 +281,7 @@ export default async function ReportsPage() {
     }))
     .sort((a, b) => b.totalRevenue - a.totalRevenue);
 
-  // --- Compare Events Data ---
-  // Build per-event name aggregates for comparison tool
+  // Compare events
   const compareMap = new Map<
     string,
     {
@@ -269,8 +296,6 @@ export default async function ReportsPage() {
       occurrences: { net_sales: number; anomaly_flag: string | null }[];
     }
   >();
-
-  // First use event_performance data as authoritative source
   for (const p of performances) {
     compareMap.set(p.event_name, {
       times_booked: p.times_booked,
@@ -284,8 +309,6 @@ export default async function ReportsPage() {
       occurrences: [],
     });
   }
-
-  // Populate occurrences from completed events
   for (const e of completedEvents) {
     if (compareMap.has(e.event_name)) {
       compareMap.get(e.event_name)!.occurrences.push({
@@ -294,7 +317,6 @@ export default async function ReportsPage() {
       });
     }
   }
-
   const compareEventRows: CompareEventRow[] = Array.from(compareMap.entries())
     .map(([event_name, data]) => ({
       event_name,
@@ -311,15 +333,11 @@ export default async function ReportsPage() {
     }))
     .sort((a, b) => b.avg_sales - a.avg_sales);
 
-  // --- Summary Stats ---
-  const totalRevenue = completedEvents.reduce(
-    (s, e) => s + eventRevenue(e),
-    0
-  );
+  // Summary stats
+  const totalRevenue = completedEvents.reduce((s, e) => s + eventRevenue(e), 0);
   const eventsCompleted = completedEvents.length;
   const avgPerEvent = eventsCompleted > 0 ? totalRevenue / eventsCompleted : 0;
 
-  // Best single event (one occurrence)
   let bestEventName = "";
   let bestEventRevenue = 0;
   for (const e of completedEvents) {
@@ -330,7 +348,6 @@ export default async function ReportsPage() {
     }
   }
 
-  // Forecast accuracy — weighted MAPE (revenue-weighted so small events don't skew the metric)
   const eventsWithBoth = completedEvents.filter(
     (e) => e.forecast_sales !== null && e.forecast_sales > 0 && eventRevenue(e) > 0
   );
@@ -346,70 +363,21 @@ export default async function ReportsPage() {
     forecastAccuracy = `${Math.round((1 - weightedError) * 100)}%`;
   }
 
-  const overallAvg = avgPerEvent;
-
-  if (completedEvents.length === 0) {
-    return (
-      <div className="space-y-4">
-        <div>
-          <h1 className="text-2xl font-bold">Reports</h1>
-          <p className="text-muted-foreground">Performance reports and insights from your event history</p>
-        </div>
-        <Card>
-          <CardContent className="py-14 text-center space-y-4">
-            <FileText className="h-12 w-12 mx-auto text-muted-foreground/30" />
-            <div>
-              <p className="font-medium">No sales data yet</p>
-              <p className="text-muted-foreground text-sm mt-1 max-w-sm mx-auto">
-                Reports show monthly summaries, top events, revenue by type, and year-over-year comparisons — once you have events with sales logged.
-              </p>
-            </div>
-            <div className="flex gap-2 justify-center">
-              <Link href="/dashboard/events/import">
-                <Button size="sm" className="gap-1.5">
-                  <Upload className="h-3.5 w-3.5" />
-                  Import events
-                </Button>
-              </Link>
-              <Link href="/dashboard/events?new=true">
-                <Button size="sm" variant="outline" className="gap-1.5">
-                  <Plus className="h-3.5 w-3.5" />
-                  Add manually
-                </Button>
-              </Link>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-    );
-  }
-
-  return (
-    <div className="space-y-4">
-      <div>
-        <h1 className="text-2xl font-bold">Reports</h1>
-        <p className="text-muted-foreground">
-          Performance reports and insights from your event history
-        </p>
-      </div>
-
-      <ReportsInteractive
-        monthlySummaries={monthlySummaries}
-        eventTypeBreakdown={eventTypeBreakdown}
-        dayOfWeekSummaries={dayOfWeekSummaries}
-        yoyData={yoyData}
-        top10={top10}
-        eventBreakdownRows={eventBreakdownRows}
-        locationSummaries={locationSummaries}
-        compareEventRows={compareEventRows}
-        totalRevenue={totalRevenue}
-        eventsCompleted={eventsCompleted}
-        avgPerEvent={avgPerEvent}
-        bestEventName={bestEventName}
-        bestEventRevenue={bestEventRevenue}
-        forecastAccuracy={forecastAccuracy}
-        overallAvg={overallAvg}
-      />
-    </div>
-  );
+  return {
+    monthlySummaries,
+    eventTypeBreakdown,
+    dayOfWeekSummaries,
+    yoyData,
+    top10,
+    eventBreakdownRows,
+    locationSummaries,
+    compareEventRows,
+    totalRevenue,
+    eventsCompleted,
+    avgPerEvent,
+    bestEventName,
+    bestEventRevenue,
+    forecastAccuracy,
+    overallAvg: avgPerEvent,
+  };
 }

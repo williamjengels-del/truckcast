@@ -99,7 +99,7 @@ function getSteps(source: SourceId): Step[] {
             'On the Import page, choose "Google Sheets", paste the link, and click Import. We\'ll pull your data and walk you through matching the columns.',
           action: {
             label: "Go to Import →",
-            href: "/dashboard/events/import",
+            href: "/dashboard/integrations?tab=csv-import",
           },
           isLast: true,
         },
@@ -118,7 +118,7 @@ function getSteps(source: SourceId): Step[] {
             "Go to Import, choose \"Upload CSV\", and drag your file in. We'll auto-detect your columns and let you review before anything is saved.",
           action: {
             label: "Go to Import →",
-            href: "/dashboard/events/import",
+            href: "/dashboard/integrations?tab=csv-import",
           },
           isLast: true,
         },
@@ -137,7 +137,7 @@ function getSteps(source: SourceId): Step[] {
             "Go to Import, upload the file, and match your Airtable columns to VendCast fields. Airtable exports clean CSVs — it usually auto-maps perfectly.",
           action: {
             label: "Go to Import →",
-            href: "/dashboard/events/import",
+            href: "/dashboard/integrations?tab=csv-import",
           },
           isLast: true,
         },
@@ -151,7 +151,7 @@ function getSteps(source: SourceId): Step[] {
             "VendCast pulls sales directly from Square — no export needed. Connect Square from the POS settings page, then use the sync feature to pull your history.",
           action: {
             label: "Go to POS Settings →",
-            href: "/dashboard/settings/pos",
+            href: "/dashboard/integrations?tab=pos",
           },
         },
         {

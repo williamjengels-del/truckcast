@@ -1,11 +1,8 @@
-import type { Metadata } from "next";
-export const metadata: Metadata = { title: "Performance" };
-
 import { createClient } from "@/lib/supabase/server";
 import { PerformanceClient } from "./performance-client";
 import type { EventPerformance } from "@/lib/database.types";
 
-export default async function PerformancePage() {
+export async function PerformanceTab() {
   const supabase = await createClient();
   const {
     data: { user },

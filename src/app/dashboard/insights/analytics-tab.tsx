@@ -1,6 +1,3 @@
-import type { Metadata } from "next";
-export const metadata: Metadata = { title: "Analytics" };
-
 import { createClient } from "@/lib/supabase/server";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
@@ -281,11 +278,11 @@ function buildTypeData(
   return data;
 }
 
-interface PageProps {
+interface AnalyticsTabProps {
   searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
 }
 
-export default async function AnalyticsPage({ searchParams }: PageProps) {
+export async function AnalyticsTab({ searchParams }: AnalyticsTabProps) {
   const params = await searchParams;
   const supabase = await createClient();
   const {

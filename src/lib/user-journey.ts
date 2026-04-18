@@ -28,7 +28,7 @@ const NEXT_STEPS: Record<JourneyState, { label: string; href: string; descriptio
   },
   building: {
     label: "Import past events to build history",
-    href: "/dashboard/events/import",
+    href: "/dashboard/integrations?tab=csv-import",
     description: "Import events from a CSV to build your history faster.",
   },
   logging: {
@@ -43,7 +43,7 @@ const NEXT_STEPS: Record<JourneyState, { label: string; href: string; descriptio
   },
   calibrated: {
     label: "View your calibrated forecasts",
-    href: "/dashboard/forecasts",
+    href: "/dashboard/insights?tab=forecasts",
     description: "Your forecast model has high confidence — explore your upcoming projections.",
   },
 };

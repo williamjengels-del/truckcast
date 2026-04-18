@@ -129,7 +129,7 @@ function getSteps(provider: ProviderOption["id"], toastEmail?: string): Step[] {
           detail: "Google sends a confirmation to your Toast sync address. Come back to the POS settings page — you'll see a yellow banner with the link to click.",
           action: {
             label: "Check POS settings for the link →",
-            href: "/dashboard/settings/pos",
+            href: "/dashboard/integrations?tab=pos",
           },
         },
         {
@@ -168,7 +168,7 @@ function getSteps(provider: ProviderOption["id"], toastEmail?: string): Step[] {
           detail: "Come back to VendCast and upload the CSV. We'll auto-detect SkyTab's columns and match sales to your events.",
           action: {
             label: "Go to Import →",
-            href: "/dashboard/events/import",
+            href: "/dashboard/integrations?tab=csv-import",
           },
         },
         {
@@ -189,7 +189,7 @@ function getSteps(provider: ProviderOption["id"], toastEmail?: string): Step[] {
           detail: "Go to Import Events, upload the CSV, and map the columns. We'll match sales to the right events automatically.",
           action: {
             label: "Go to Import →",
-            href: "/dashboard/events/import",
+            href: "/dashboard/integrations?tab=csv-import",
           },
         },
         {

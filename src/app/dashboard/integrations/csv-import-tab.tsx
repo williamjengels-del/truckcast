@@ -708,7 +708,7 @@ function parseWithMapping(
 // Component
 // ═══════════════════════════════════════════════════════════════════════
 
-export default function ImportPage() {
+export function CsvImportTab() {
   const [step, setStep] = useState<Step>("upload");
   const [importSource, setImportSource] = useState<"csv" | "sheets">("csv");
   const [sheetsUrl, setSheetsUrl] = useState("");
