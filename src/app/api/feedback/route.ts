@@ -1,8 +1,15 @@
 import { createClient } from "@/lib/supabase/server";
-import { createClient as createServiceClient } from "@supabase/supabase-js";
-import { getAdminUser } from "@/lib/admin";
-import { logAdminAction } from "@/lib/admin-audit";
 
+/**
+ * POST /api/feedback
+ * User-facing: any authenticated user can submit feedback on their own
+ * behalf. The row is inserted with their user_id and email attached.
+ *
+ * Admin-only handlers (GET all feedback, DELETE feedback row) live at
+ * /api/admin/feedback to keep the /api/admin/* path convention honest
+ * and to let the proxy mutation block (Commit 5b) exempt them from the
+ * read-only-impersonation check along with all other admin routes.
+ */
 export async function POST(request: Request) {
   try {
     const supabase = await createClient();
@@ -44,68 +51,5 @@ export async function POST(request: Request) {
       { error: "Internal server error" },
       { status: 500 }
     );
-  }
-}
-
-export async function GET() {
-  try {
-    // Restrict to admin only — feedback contains other users' personal data
-    if (!(await getAdminUser())) {
-      return Response.json({ error: "Forbidden" }, { status: 403 });
-    }
-
-    const serviceClient = createServiceClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.SUPABASE_SERVICE_ROLE_KEY!
-    );
-
-    const { data, error } = await serviceClient
-      .from("feedback")
-      .select("*")
-      .order("created_at", { ascending: false });
-
-    if (error) {
-      console.error("Feedback fetch error:", error);
-      return Response.json({ error: "Failed to fetch feedback" }, { status: 500 });
-    }
-
-    return Response.json({ feedback: data });
-  } catch {
-    return Response.json({ error: "Internal server error" }, { status: 500 });
-  }
-}
-
-export async function DELETE(request: Request) {
-  try {
-    const admin = await getAdminUser();
-    if (!admin) {
-      return Response.json({ error: "Forbidden" }, { status: 403 });
-    }
-
-    const { id } = await request.json();
-    if (!id) return Response.json({ error: "id required" }, { status: 400 });
-
-    const serviceClient = createServiceClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.SUPABASE_SERVICE_ROLE_KEY!
-    );
-
-    const { error } = await serviceClient.from("feedback").delete().eq("id", id);
-    if (error) return Response.json({ error: error.message }, { status: 500 });
-
-    await logAdminAction(
-      {
-        adminUserId: admin.id,
-        action: "feedback.delete",
-        targetType: "feedback",
-        targetId: id,
-        metadata: null,
-      },
-      serviceClient
-    );
-
-    return Response.json({ success: true });
-  } catch {
-    return Response.json({ error: "Internal server error" }, { status: 500 });
   }
 }

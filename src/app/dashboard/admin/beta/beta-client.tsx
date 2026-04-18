@@ -33,7 +33,7 @@ export function BetaClient() {
 
   const loadInvites = useCallback(async () => {
     setLoading(true);
-    const res = await fetch("/api/beta/generate");
+    const res = await fetch("/api/admin/beta/generate");
     if (res.ok) {
       const data = await res.json();
       setInvites(data.invites ?? []);
@@ -51,7 +51,7 @@ export function BetaClient() {
   async function handleGenerate() {
     setGenerating(true);
     setError(null);
-    const res = await fetch("/api/beta/generate", {
+    const res = await fetch("/api/admin/beta/generate", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({

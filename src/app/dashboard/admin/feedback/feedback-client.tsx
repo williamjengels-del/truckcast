@@ -20,7 +20,7 @@ export function FeedbackTable({ initialRows }: { initialRows: FeedbackRow[] }) {
   async function handleDelete(id: string) {
     if (!confirm("Delete this feedback entry?")) return;
     setDeleting(id);
-    const res = await fetch("/api/feedback", {
+    const res = await fetch("/api/admin/feedback", {
       method: "DELETE",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ id }),

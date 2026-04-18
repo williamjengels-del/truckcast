@@ -20,7 +20,7 @@ function generateCode(): string {
 }
 
 /**
- * POST /api/beta/generate
+ * POST /api/admin/beta/generate
  * Generates one or more invite codes. Admin only.
  *
  * Body: {
@@ -89,7 +89,7 @@ export async function POST(request: Request) {
 }
 
 /**
- * GET /api/beta/generate
+ * GET /api/admin/beta/generate
  * Lists all invite codes. Admin only.
  */
 export async function GET() {
