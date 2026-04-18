@@ -1,5 +1,9 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
+import {
+  IMPERSONATION_COOKIE,
+  verifyImpersonationCookie,
+} from "@/lib/admin-impersonation";
 
 const TRIAL_DAYS = 14;
 
@@ -20,7 +24,89 @@ const TRIAL_GATE_EXEMPT = [
   "/dashboard/admin",
 ];
 
+/**
+ * Returns a 403 response when the request is a mutation under an active
+ * impersonation session, null otherwise. Runs as the very first gate in
+ * updateSession — cheap cookie-presence check, no DB/auth work needed
+ * to make the decision.
+ *
+ * Block rules:
+ *   * Mutating method (POST / PATCH / PUT / DELETE)
+ *   * A signed + non-expired vc_impersonate cookie is present
+ *   * Path is either:
+ *       - /api/* EXCEPT /api/admin/* (admin routes must keep working so
+ *         the admin can stop impersonation and use admin tools), OR
+ *       - A server action (any POST carrying the `Next-Action` header —
+ *         canonical signal per Next.js 16's server action dispatch)
+ *
+ * Intentional non-blocks:
+ *   * POS webhooks (Toast via Cloudflare Worker, Square direct) send
+ *     their own auth, not our cookies. They never carry vc_impersonate,
+ *     so the cookie-presence check returns null for them and they pass
+ *     straight through. Verified: see /api/pos/toast/inbound and
+ *     /api/pos/square/callback — both are webhook-style POSTs without
+ *     user cookies.
+ *   * Forged or expired cookies. If verifyImpersonationCookie returns
+ *     null the request is NOT considered "under impersonation" and the
+ *     block does not activate. That's correct — a mutation with a
+ *     stale cookie should behave exactly like a mutation without one.
+ */
+function maybeBlockMutationUnderImpersonation(
+  request: NextRequest
+): NextResponse | null {
+  const method = request.method;
+  if (
+    method !== "POST" &&
+    method !== "PATCH" &&
+    method !== "PUT" &&
+    method !== "DELETE"
+  ) {
+    return null;
+  }
+
+  const cookieValue = request.cookies.get(IMPERSONATION_COOKIE)?.value;
+  if (!cookieValue) return null;
+
+  const ctx = verifyImpersonationCookie(cookieValue);
+  if (!ctx) return null;
+
+  const pathname = request.nextUrl.pathname;
+
+  const isApi = pathname.startsWith("/api/");
+  const isAdminApi = pathname.startsWith("/api/admin/");
+  const isServerAction = request.headers.get("next-action") !== null;
+
+  if (isApi && !isAdminApi) {
+    return blockedResponse();
+  }
+  if (isServerAction) {
+    return blockedResponse();
+  }
+  return null;
+}
+
+function blockedResponse(): NextResponse {
+  return NextResponse.json(
+    {
+      error: "Read-only impersonation active",
+      detail:
+        "This browser session is viewing another user's dashboard in read-only mode. Mutations are blocked. Exit impersonation to resume normal operation.",
+    },
+    {
+      status: 403,
+      headers: { "x-impersonation-blocked": "1" },
+    }
+  );
+}
+
 export async function updateSession(request: NextRequest) {
+  // ── Read-only impersonation mutation block (Commit 5b) ────────────
+  // Runs before auth gates because the decision is a pure
+  // cookie-presence + method + path check. No Supabase round-trip
+  // needed to reject these.
+  const impersonationBlock = maybeBlockMutationUnderImpersonation(request);
+  if (impersonationBlock) return impersonationBlock;
+
   let supabaseResponse = NextResponse.next({
     request,
   });
