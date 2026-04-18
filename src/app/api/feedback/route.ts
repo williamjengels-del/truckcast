@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import { createClient as createServiceClient } from "@supabase/supabase-js";
+import { getAdminUser } from "@/lib/admin";
 
 export async function POST(request: Request) {
   try {
@@ -47,17 +48,8 @@ export async function POST(request: Request) {
 
 export async function GET() {
   try {
-    const supabase = await createClient();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-
-    if (!user) {
-      return Response.json({ error: "Unauthorized" }, { status: 401 });
-    }
-
     // Restrict to admin only — feedback contains other users' personal data
-    if (user.email !== "williamjengels@gmail.com") {
+    if (!(await getAdminUser())) {
       return Response.json({ error: "Forbidden" }, { status: 403 });
     }
 
@@ -84,10 +76,7 @@ export async function GET() {
 
 export async function DELETE(request: Request) {
   try {
-    const supabase = await createClient();
-    const { data: { user } } = await supabase.auth.getUser();
-
-    if (!user || user.email !== "williamjengels@gmail.com") {
+    if (!(await getAdminUser())) {
       return Response.json({ error: "Forbidden" }, { status: 403 });
     }
 

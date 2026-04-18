@@ -1,9 +1,8 @@
 import { createClient as createServiceClient } from "@supabase/supabase-js";
-import { createClient } from "@/lib/supabase/server";
-import { redirect } from "next/navigation";
 import Link from "next/link";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { FeedbackTable } from "./feedback-client";
+import { requireAdmin } from "@/lib/admin";
 
 const adminNavItems = [
   { href: "/dashboard/admin", label: "Overview" },
@@ -24,15 +23,7 @@ interface FeedbackRow {
 }
 
 export default async function AdminFeedbackPage() {
-  // Ensure user is authenticated
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  if (!user || user.email !== "williamjengels@gmail.com") {
-    redirect("/dashboard");
-  }
+  await requireAdmin();
 
   // Use service role client to bypass RLS
   const serviceClient = createServiceClient(

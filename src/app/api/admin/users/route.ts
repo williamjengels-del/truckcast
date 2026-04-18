@@ -1,13 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
 import { createClient as createServiceClient } from "@supabase/supabase-js";
-
-const ADMIN_EMAIL = "williamjengels@gmail.com";
+import { getAdminUser } from "@/lib/admin";
 
 async function getServiceClient() {
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user || user.email !== ADMIN_EMAIL) return null;
+  if (!(await getAdminUser())) return null;
   return createServiceClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.SUPABASE_SERVICE_ROLE_KEY!
@@ -72,8 +68,7 @@ export async function DELETE(request: NextRequest) {
   if (!userId) return NextResponse.json({ error: "userId required" }, { status: 400 });
 
   // Prevent self-deletion
-  const supabase = await createClient();
-  const { data: { user: me } } = await supabase.auth.getUser();
+  const me = await getAdminUser();
   if (me?.id === userId) {
     return NextResponse.json({ error: "Cannot delete your own account" }, { status: 400 });
   }

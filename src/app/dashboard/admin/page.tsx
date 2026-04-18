@@ -1,12 +1,9 @@
 import { createClient as createServiceClient } from "@supabase/supabase-js";
-import { createClient } from "@/lib/supabase/server";
-import { redirect } from "next/navigation";
 import Link from "next/link";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { ResetAccountButton } from "./reset-button";
-
-const ADMIN_EMAIL = "williamjengels@gmail.com";
+import { requireAdmin } from "@/lib/admin";
 
 interface RecentProfile {
   id: string;
@@ -17,14 +14,7 @@ interface RecentProfile {
 }
 
 export default async function AdminOverviewPage() {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  if (!user || user.email !== ADMIN_EMAIL) {
-    redirect("/dashboard");
-  }
+  const user = await requireAdmin();
 
   const serviceClient = createServiceClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -116,7 +106,7 @@ export default async function AdminOverviewPage() {
         <div>
           <h1 className="text-2xl font-bold">VendCast Admin</h1>
           <p className="text-sm text-muted-foreground">
-            {today} &middot; {ADMIN_EMAIL}
+            {today} &middot; {user.email}
           </p>
         </div>
       </div>

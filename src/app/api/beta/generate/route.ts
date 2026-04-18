@@ -1,9 +1,6 @@
 import { NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
 import { createClient as createServiceClient } from "@supabase/supabase-js";
-
-// Julian's email — only he can generate invite codes
-const ADMIN_EMAIL = "williamjengels@gmail.com";
+import { getAdminUser } from "@/lib/admin";
 
 function getServiceClient() {
   return createServiceClient(
@@ -35,12 +32,7 @@ function generateCode(): string {
  */
 export async function POST(request: Request) {
   try {
-    const supabase = await createClient();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-
-    if (!user || user.email !== ADMIN_EMAIL) {
+    if (!(await getAdminUser())) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
@@ -84,12 +76,7 @@ export async function POST(request: Request) {
  */
 export async function GET() {
   try {
-    const supabase = await createClient();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-
-    if (!user || user.email !== ADMIN_EMAIL) {
+    if (!(await getAdminUser())) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 

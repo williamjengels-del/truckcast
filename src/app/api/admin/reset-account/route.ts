@@ -1,8 +1,6 @@
 import { NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
 import { createClient as createServiceClient } from "@supabase/supabase-js";
-
-const ADMIN_EMAIL = "williamjengels@gmail.com";
+import { getAdminUser } from "@/lib/admin";
 
 function getServiceClient() {
   return createServiceClient(
@@ -18,10 +16,8 @@ function getServiceClient() {
  * Admin only.
  */
 export async function POST() {
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-
-  if (!user || user.email !== ADMIN_EMAIL) {
+  const user = await getAdminUser();
+  if (!user) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
