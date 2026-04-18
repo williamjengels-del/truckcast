@@ -186,6 +186,117 @@ export async function sendSalesReminderEmail(
   });
 }
 
+// ─── Booking Inquiry Email ─────────────────────────────────────────────────
+
+/**
+ * Fired from /api/book/submit alongside the push notification when a
+ * booking inquiry lands. Sent to the operator, not the requester.
+ *
+ * booking_requests doesn't carry a location field (neither the form nor
+ * the schema collect one), so we omit it — callers pass what's actually
+ * in the table.
+ */
+export interface BookingInquiryEmailPayload {
+  businessName: string;
+  requesterName: string;
+  requesterEmail: string;
+  requesterPhone: string | null;
+  eventDate: string | null;
+  eventType: string | null;
+  estimatedAttendance: number | null;
+  message: string | null;
+}
+
+export async function sendBookingInquiryEmail(
+  to: string,
+  payload: BookingInquiryEmailPayload
+) {
+  if (!process.env.RESEND_API_KEY) return;
+  const resend = getResend();
+
+  const displayName = payload.businessName || "there";
+  const formatDate = (iso: string) =>
+    new Date(iso + "T00:00:00").toLocaleDateString("en-US", {
+      weekday: "short",
+      month: "short",
+      day: "numeric",
+      year: "numeric",
+    });
+
+  const detailRows: { label: string; value: string }[] = [];
+  if (payload.eventDate) detailRows.push({ label: "Event date", value: formatDate(payload.eventDate) });
+  if (payload.eventType) detailRows.push({ label: "Event type", value: payload.eventType });
+  if (payload.estimatedAttendance != null)
+    detailRows.push({ label: "Expected attendance", value: payload.estimatedAttendance.toLocaleString("en-US") });
+  detailRows.push({ label: "Contact email", value: payload.requesterEmail });
+  if (payload.requesterPhone) detailRows.push({ label: "Contact phone", value: payload.requesterPhone });
+
+  const detailsHtml = detailRows
+    .map(
+      (r) => `
+    <tr>
+      <td style="padding:8px 0;border-bottom:1px solid #f3f4f6;font-size:13px;color:#6b7280;text-transform:uppercase;letter-spacing:0.5px;font-weight:600;width:40%;vertical-align:top;">${r.label}</td>
+      <td style="padding:8px 0;border-bottom:1px solid #f3f4f6;font-size:14px;color:#111827;">${escapeHtml(r.value)}</td>
+    </tr>`
+    )
+    .join("");
+
+  const messageBlock = payload.message
+    ? `
+      <div style="background:#f9fafb;border-radius:8px;padding:16px 20px;margin:20px 0;">
+        <div style="font-size:12px;font-weight:600;color:#9ca3af;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px;">Message</div>
+        <div style="font-size:14px;color:#374151;line-height:1.6;white-space:pre-wrap;">${escapeHtml(payload.message)}</div>
+      </div>`
+    : "";
+
+  await resend.emails.send({
+    from: FROM,
+    to,
+    subject: `New booking inquiry from ${payload.requesterName}`,
+    html: `
+<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
+<body style="margin:0;padding:0;background:#f9fafb;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;">
+  <div style="max-width:560px;margin:40px auto;background:#fff;border-radius:12px;overflow:hidden;border:1px solid #e5e7eb;">
+    <div style="background:#f97316;padding:32px 40px;">
+      <div style="color:white;font-size:28px;font-weight:800;letter-spacing:-1px;">VendCast</div>
+    </div>
+    <div style="padding:40px;">
+      <h1 style="margin:0 0 8px;font-size:22px;font-weight:700;color:#111827;">New booking inquiry, ${displayName} 📬</h1>
+      <p style="margin:0 0 24px;font-size:15px;line-height:1.6;color:#374151;">
+        <strong>${escapeHtml(payload.requesterName)}</strong> wants to book you. Reply fast — inquiries that sit go cold.
+      </p>
+      <table style="width:100%;border-collapse:collapse;margin-bottom:8px;">
+        <tbody>${detailsHtml}</tbody>
+      </table>
+      ${messageBlock}
+      <a href="${APP_URL}/dashboard/bookings" style="display:inline-block;background:#f97316;color:white;font-weight:600;font-size:15px;padding:12px 28px;border-radius:8px;text-decoration:none;margin-top:16px;">
+        Open Inbox →
+      </a>
+      <p style="margin:24px 0 0;font-size:13px;color:#9ca3af;">
+        You can reply directly to <a href="mailto:${payload.requesterEmail}" style="color:#9ca3af;">${payload.requesterEmail}</a> or manage the inquiry in your VendCast Inbox.
+      </p>
+    </div>
+    <div style="padding:20px 40px;border-top:1px solid #f3f4f6;">
+      <p style="margin:0;font-size:12px;color:#9ca3af;">VendCast · <a href="${APP_URL}/dashboard/settings" style="color:#9ca3af;">Manage preferences</a></p>
+    </div>
+  </div>
+</body>
+</html>
+    `.trim(),
+  });
+}
+
+function escapeHtml(s: string): string {
+  return s
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
 // ─── Onboarding Nudge Email ────────────────────────────────────────────────
 
 /**

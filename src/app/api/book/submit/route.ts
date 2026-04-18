@@ -1,6 +1,7 @@
 import { after } from "next/server";
 import { createClient as createServiceClient } from "@supabase/supabase-js";
 import { sendPushToSubscriptions, type PushSubscriptionRow } from "@/lib/push";
+import { sendBookingInquiryEmail } from "@/lib/email";
 
 // POST /api/book/submit
 //
@@ -70,9 +71,11 @@ export async function POST(req: Request) {
     );
   }
 
-  // Post-response push. `after()` keeps the Lambda alive until the
-  // callback resolves — same response latency for the booker, but the
-  // web-push HTTPS call actually completes.
+  // Post-response notifications (push + email). `after()` keeps the Lambda
+  // alive until the callbacks resolve — same response latency for the
+  // booker, but the web-push HTTPS call and the Resend send actually
+  // complete. Both run in parallel; neither is awaited by the other so
+  // one failing doesn't block the other.
   after(() =>
     notifyOperatorOfBooking(service, truck_user_id, {
       bookingId: inserted.id as string,
@@ -80,6 +83,20 @@ export async function POST(req: Request) {
       eventDate: (inserted.event_date as string | null) ?? null,
     }).catch((err) => {
       console.error("[push] book/submit notification failed:", err);
+    })
+  );
+
+  after(() =>
+    emailOperatorOfBooking(service, truck_user_id, {
+      requesterName: requester_name.trim(),
+      requesterEmail: requester_email.trim(),
+      requesterPhone: body.requester_phone?.trim() || null,
+      eventDate: (inserted.event_date as string | null) ?? null,
+      eventType: body.event_type ?? null,
+      estimatedAttendance: body.estimated_attendance ?? null,
+      message: body.message?.trim() || null,
+    }).catch((err) => {
+      console.error("[email] book/submit notification failed:", err);
     })
   );
 
@@ -143,4 +160,49 @@ async function notifyOperatorOfBooking(
       .update({ last_used_at: new Date().toISOString() })
       .in("endpoint", survivingEndpoints);
   }
+}
+
+async function emailOperatorOfBooking(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  service: any,
+  operatorUserId: string,
+  payload: {
+    requesterName: string;
+    requesterEmail: string;
+    requesterPhone: string | null;
+    eventDate: string | null;
+    eventType: string | null;
+    estimatedAttendance: number | null;
+    message: string | null;
+  }
+) {
+  // Operator email lives in auth.users (not profiles). Resolve via the
+  // admin API with the service role. business_name is in profiles for
+  // the greeting.
+  const { data: userRow, error: userError } =
+    await service.auth.admin.getUserById(operatorUserId);
+  if (userError || !userRow?.user?.email) {
+    console.error(
+      `[email] book/submit operator lookup failed for ${operatorUserId}:`,
+      userError?.message ?? "no email on user"
+    );
+    return;
+  }
+  const operatorEmail = userRow.user.email as string;
+
+  const { data: profile } = await service
+    .from("profiles")
+    .select("business_name")
+    .eq("id", operatorUserId)
+    .single();
+  const businessName = (profile?.business_name as string) ?? "";
+
+  await sendBookingInquiryEmail(operatorEmail, {
+    businessName,
+    ...payload,
+  });
+
+  console.log(
+    `[email] book/submit sent inquiry notification to operator=${operatorUserId} (business="${businessName}")`
+  );
 }
