@@ -194,6 +194,8 @@ export default function TermsPage() {
           {" · "}
           <Link href="/help" className="hover:underline">Help Center</Link>
           {" · "}
+          <Link href="/contact" className="hover:underline">Contact</Link>
+          {" · "}
           <Link href="/" className="hover:underline">Home</Link>
         </div>
       </footer>

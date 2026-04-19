@@ -315,6 +315,17 @@ function SettingsContent() {
       <TeamAccessCard profile={profile} />
       <ManagerInviteCard profile={profile} />
 
+      {/* Support link — small muted block above Danger Zone so
+          operators always have a visible path to contact us without
+          hunting through footer nav. Intentionally understated to
+          keep Settings readable. */}
+      <div className="text-center text-sm text-muted-foreground py-2">
+        Need help?{" "}
+        <a href="/contact" className="text-primary hover:underline">
+          Contact support
+        </a>
+      </div>
+
       {/* Destructive actions — keep at the end of the page. */}
       <DangerZoneCard />
     </div>

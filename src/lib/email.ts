@@ -495,3 +495,95 @@ export async function sendTrialExpiredEmail(
     `.trim(),
   });
 }
+
+// ─── Contact Form ──────────────────────────────────────────────────────────
+
+export interface ContactFormPayload {
+  name: string;
+  email: string;
+  subject: string;
+  message: string;
+  userId?: string | null;
+  ip?: string | null;
+  userAgent?: string | null;
+  /** ISO UTC timestamp of the submission. */
+  submittedAt: string;
+  /** Human-readable Central-time version of submittedAt for Julian's inbox. */
+  submittedAtCentral: string;
+}
+
+/**
+ * Send a contact-form submission to the VendCast support inbox.
+ *
+ * TO: support@vendcast.co (configured in Cloudflare Email Routing,
+ *     forwards to Julian's personal inbox)
+ * FROM: the default sending identity (EMAIL_FROM env / hello@vendcast.co)
+ * Reply-To: the submitter's email, so Julian can hit Reply in his
+ *           inbox and the thread lands back with the user.
+ *
+ * Intentionally unbranded compared to the operator-facing templates
+ * above — this is Julian's inbox, not a customer touchpoint. Includes
+ * metadata (user_id, IP, user-agent, UTC + Central timestamps) so
+ * Julian has what he needs to respond or investigate abuse.
+ */
+export async function sendContactFormEmail(payload: ContactFormPayload) {
+  if (!process.env.RESEND_API_KEY) return;
+  const resend = getResend();
+
+  const subjectLine = `[VendCast Contact] ${payload.subject}: ${payload.name}`;
+
+  const html = `
+<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
+<body style="margin:0;padding:0;background:#f9fafb;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;">
+  <div style="max-width:560px;margin:24px auto;background:#fff;border-radius:8px;overflow:hidden;border:1px solid #e5e7eb;">
+    <div style="padding:20px 28px;border-bottom:1px solid #f3f4f6;">
+      <div style="font-size:12px;font-weight:600;color:#9ca3af;text-transform:uppercase;letter-spacing:0.5px;">Contact form submission</div>
+      <div style="font-size:20px;font-weight:700;color:#111827;margin-top:4px;">${escapeHtml(payload.subject)}</div>
+    </div>
+    <div style="padding:24px 28px;">
+      <table style="width:100%;border-collapse:collapse;">
+        <tbody>
+          <tr>
+            <td style="padding:6px 0;font-size:12px;color:#6b7280;width:110px;vertical-align:top;">From</td>
+            <td style="padding:6px 0;font-size:14px;color:#111827;">
+              <strong>${escapeHtml(payload.name)}</strong>
+              <div style="color:#6b7280;font-size:13px;margin-top:1px;">
+                <a href="mailto:${escapeHtml(payload.email)}" style="color:#f97316;text-decoration:none;">${escapeHtml(payload.email)}</a>
+              </div>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:6px 0;font-size:12px;color:#6b7280;vertical-align:top;">Subject</td>
+            <td style="padding:6px 0;font-size:14px;color:#111827;">${escapeHtml(payload.subject)}</td>
+          </tr>
+          <tr>
+            <td style="padding:6px 0;font-size:12px;color:#6b7280;vertical-align:top;">Submitted</td>
+            <td style="padding:6px 0;font-size:14px;color:#111827;">${escapeHtml(payload.submittedAtCentral)}<br><span style="color:#9ca3af;font-size:12px;">${escapeHtml(payload.submittedAt)}</span></td>
+          </tr>
+        </tbody>
+      </table>
+      <div style="background:#f9fafb;border-radius:8px;padding:16px 20px;margin-top:16px;">
+        <div style="font-size:12px;font-weight:600;color:#9ca3af;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px;">Message</div>
+        <div style="font-size:14px;color:#374151;line-height:1.6;white-space:pre-wrap;">${escapeHtml(payload.message)}</div>
+      </div>
+      <div style="margin-top:20px;padding-top:16px;border-top:1px solid #f3f4f6;font-size:11px;color:#9ca3af;line-height:1.6;">
+        <div><strong style="color:#6b7280;">user_id:</strong> ${escapeHtml(payload.userId ?? "(not authenticated)")}</div>
+        <div><strong style="color:#6b7280;">ip:</strong> ${escapeHtml(payload.ip ?? "(unknown)")}</div>
+        <div style="word-break:break-all;"><strong style="color:#6b7280;">user-agent:</strong> ${escapeHtml(payload.userAgent ?? "(unknown)")}</div>
+      </div>
+    </div>
+  </div>
+</body>
+</html>
+  `.trim();
+
+  await resend.emails.send({
+    from: FROM,
+    to: "support@vendcast.co",
+    replyTo: payload.email,
+    subject: subjectLine,
+    html,
+  });
+}

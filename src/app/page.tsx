@@ -410,7 +410,7 @@ export default async function LandingPage() {
             <Link href="/roadmap" className="hover:text-foreground transition-colors">Roadmap</Link>
             <Link href="/help" className="hover:text-foreground transition-colors">Help Center</Link>
             <Link href="/signup" className="hover:text-foreground transition-colors">Get Started</Link>
-            <a href="mailto:support@vendcast.co" className="hover:text-foreground transition-colors">Contact</a>
+            <Link href="/contact" className="hover:text-foreground transition-colors">Contact</Link>
           </div>
           <p>&copy; {new Date().getFullYear()} VendCast — built for food truck operators, by a food truck operator.</p>
         </div>

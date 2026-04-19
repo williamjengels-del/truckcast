@@ -70,6 +70,7 @@ export default function PublicCalculatorPage() {
           <div className="flex gap-4">
             <a href="/privacy" className="hover:text-foreground transition-colors">Privacy</a>
             <a href="/terms" className="hover:text-foreground transition-colors">Terms</a>
+            <a href="/contact" className="hover:text-foreground transition-colors">Contact</a>
             <a href="/signup" className="hover:text-foreground transition-colors">Sign up free</a>
           </div>
         </div>
