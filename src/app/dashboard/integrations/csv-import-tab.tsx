@@ -84,6 +84,11 @@ export function CsvImportTab() {
   // Batch default state — applied to imported rows that don't bring
   // their own state from the CSV. Null/empty = don't backfill.
   const [batchDefaultState, setBatchDefaultState] = useState<string>("");
+  // Batch default event_mode — same pattern. Used for mixed
+  // food-truck + catering historical imports where most rows share a
+  // mode. Per-row event_mode from the CSV always wins. Empty = use the
+  // hard-coded "food_truck" default (matches pre-existing behavior).
+  const [batchDefaultMode, setBatchDefaultMode] = useState<string>("");
   const [columnMappings, setColumnMappings] = useState<ColumnMapping[]>([]);
   const [dataLines, setDataLines] = useState<string[][]>([]);
 
@@ -397,7 +402,10 @@ export function CsvImportTab() {
       anomaly_flag: r.anomaly_flag ?? "normal",
       event_weather: r.weather_type ?? null,
       expected_attendance: r.expected_attendance ?? null,
-      event_mode: (r.event_mode === "catering" ? "catering" : "food_truck") as "food_truck" | "catering",
+      // Per-row event_mode wins; batch default fills rows that didn't
+      // bring one. Hard-coded "food_truck" is the final fallback
+      // (matches the DB default + pre-batchDefaultMode behavior).
+      event_mode: ((r.event_mode ?? batchDefaultMode) === "catering" ? "catering" : "food_truck") as "food_truck" | "catering",
       pos_source: "manual" as const,
       // Cost fields — only included when non-null to avoid errors if migration hasn't been applied yet
       ...(r.food_cost !== undefined ? { food_cost: r.food_cost } : {}),
@@ -719,6 +727,34 @@ export function CsvImportTab() {
                       </SelectItem>
                     ))}
                     <SelectItem value={OTHER_STATE}>Other / International</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+
+            {/* Batch default event mode — applied to rows without their
+                own event_mode from the CSV mapping. Primary use: mixed
+                food-truck + catering historical imports where most rows
+                share a mode (e.g. operator whose CSV lacks an
+                event_mode column and whose history is predominantly
+                catering). Per-row event_mode from a mapped column
+                overrides this default. */}
+            {!columnMappings.some((c) => c.assignedField === "event_mode") && (
+              <div className="flex items-center justify-between gap-3 flex-wrap rounded-md border bg-muted/30 px-3 py-2">
+                <div className="text-xs text-muted-foreground max-w-md">
+                  No <code className="font-mono">event_mode</code> column in this CSV.
+                  Pick a default mode to apply to every imported row.
+                </div>
+                <Select
+                  value={batchDefaultMode || "food_truck"}
+                  onValueChange={(v) => setBatchDefaultMode(v ?? "")}
+                >
+                  <SelectTrigger className="w-56">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="food_truck">Food truck (default)</SelectItem>
+                    <SelectItem value="catering">Catering</SelectItem>
                   </SelectContent>
                 </Select>
               </div>

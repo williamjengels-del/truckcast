@@ -78,6 +78,9 @@ export function ImportEventsClient({ userId, targetLabel }: Props) {
   // wins. Primary use: Nick's reactivation import where 200+ events
   // are all in MO.
   const [batchDefaultState, setBatchDefaultState] = useState<string>("");
+  // Batch default event_mode — same pattern. Empty = hard-coded
+  // "food_truck" fallback (matches pre-existing behavior).
+  const [batchDefaultMode, setBatchDefaultMode] = useState<string>("");
   const dragCounter = useRef(0);
 
   // ── Upload step ──────────────────────────────────────────────────
@@ -275,6 +278,7 @@ export function ImportEventsClient({ userId, targetLabel }: Props) {
           csvText: rawText,
           columnMappings,
           defaultState: batchDefaultState || undefined,
+          defaultMode: batchDefaultMode || undefined,
           dupActions: resolvedDuplicates.map((d) => ({
             event_name: d.event_name,
             event_date: d.event_date,
@@ -416,6 +420,30 @@ export function ImportEventsClient({ userId, targetLabel }: Props) {
                       </SelectItem>
                     ))}
                     <SelectItem value={OTHER_STATE}>Other / International</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+
+            {/* Batch default event mode — applies when the CSV has no
+                event_mode column mapped. Per-row event_mode from a
+                mapped column always wins. */}
+            {!columnMappings.some((c) => c.assignedField === "event_mode") && (
+              <div className="flex items-center justify-between gap-3 flex-wrap rounded-md border bg-muted/30 px-3 py-2 mb-2">
+                <div className="text-xs text-muted-foreground max-w-md">
+                  No <code className="font-mono">event_mode</code> column in this CSV.
+                  Pick a default mode to apply to every imported row.
+                </div>
+                <Select
+                  value={batchDefaultMode || "food_truck"}
+                  onValueChange={(v) => setBatchDefaultMode(v ?? "")}
+                >
+                  <SelectTrigger className="w-56">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="food_truck">Food truck (default)</SelectItem>
+                    <SelectItem value="catering">Catering</SelectItem>
                   </SelectContent>
                 </Select>
               </div>

@@ -53,6 +53,14 @@ interface ImportBody {
    * reactivation import, where 200+ events share a single state).
    */
   defaultState?: string;
+  /**
+   * Batch default event_mode — "food_truck" or "catering". Applied to
+   * rows that don't have an event_mode from the CSV mapping. Per-row
+   * value from the parser always wins; this is strictly a fallback.
+   * Omitted = use the hard-coded "food_truck" default (matches the DB
+   * default + pre-batchDefaultMode behavior).
+   */
+  defaultMode?: string;
 }
 
 interface InsertError {
@@ -180,6 +188,11 @@ export async function POST(req: NextRequest) {
   // null if neither present — matches "leave NULL for historical"
   // policy for rows missing location context.
   const batchDefaultState = body.defaultState ?? null;
+  // Batch default event_mode — fills rows whose CSV didn't provide one.
+  // Per-row event_mode from the parser wins. Pre-existing behavior was
+  // a hard-coded "food_truck" fallback; this lets an admin flip it to
+  // "catering" for predominantly-catering historical imports.
+  const batchDefaultMode = body.defaultMode ?? null;
   const insertData = rowsToInsert.map((r) => ({
     user_id: userId,
     event_name: r.event_name,
@@ -202,9 +215,9 @@ export async function POST(req: NextRequest) {
     anomaly_flag: r.anomaly_flag ?? "normal",
     event_weather: r.weather_type ?? null,
     expected_attendance: r.expected_attendance ?? null,
-    event_mode: (r.event_mode === "catering" ? "catering" : "food_truck") as
-      | "food_truck"
-      | "catering",
+    event_mode: ((r.event_mode ?? batchDefaultMode) === "catering"
+      ? "catering"
+      : "food_truck") as "food_truck" | "catering",
     pos_source: "manual" as const,
     // Cost fields skipped when undefined so environments without the
     // cost-columns migration don't 400. Matches self-serve behavior.
