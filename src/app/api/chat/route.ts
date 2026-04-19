@@ -69,9 +69,9 @@ export async function POST(req: NextRequest) {
       .limit(10);
 
     const today = new Date().toISOString().split("T")[0];
-    const businessName = profile?.business_name ?? "this food truck";
+    const businessName = profile?.business_name ?? "this vendor";
 
-    const systemPrompt = `You are a data analyst assistant for ${businessName}, a food truck operator using VendCast. You have access to their event history and performance data. Answer questions about their business concisely and helpfully. Always ground your answers in their actual data. Be direct — this operator moves fast.
+    const systemPrompt = `You are a data analyst assistant for ${businessName}, a mobile vendor using VendCast. You have access to their event history and performance data. Answer questions about their business concisely and helpfully. Always ground your answers in their actual data. Be direct — this operator moves fast.
 
 Here is their event data (last 100 events):
 ${JSON.stringify(events ?? [], null, 2)}

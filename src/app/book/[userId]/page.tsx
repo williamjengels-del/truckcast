@@ -114,7 +114,7 @@ export default function BookingPage({ params }: { params: Promise<{ userId: stri
         <div className="max-w-2xl mx-auto px-4 h-16 flex items-center gap-3">
           <TruckIcon className="h-6 w-6 text-primary" />
           <div>
-            <span className="font-bold">{businessName ?? "Food Truck"}</span>
+            <span className="font-bold">{businessName ?? "Vendor"}</span>
             <span className="text-muted-foreground ml-2 text-sm">Request a Booking</span>
           </div>
         </div>

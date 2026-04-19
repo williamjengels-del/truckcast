@@ -140,7 +140,7 @@ export default function SignupPage() {
               <Input
                 id="businessName"
                 type="text"
-                placeholder="Your Food Truck Name"
+                placeholder="Your Business Name"
                 value={businessName}
                 onChange={(e) => setBusinessName(e.target.value)}
                 required

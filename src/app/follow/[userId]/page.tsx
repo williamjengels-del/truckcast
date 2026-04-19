@@ -116,7 +116,7 @@ export default function FollowTruckPage() {
     );
   }
 
-  const truckName = profile?.business_name || "This Food Truck";
+  const truckName = profile?.business_name || "This Vendor";
   const location = [profile?.city, profile?.state].filter(Boolean).join(", ");
 
   return (
@@ -199,7 +199,7 @@ export default function FollowTruckPage() {
                 disabled={submitting}
                 className="w-full bg-orange-600 hover:bg-orange-700 disabled:bg-orange-400 text-white font-medium py-2.5 px-4 rounded-lg transition-colors text-sm"
               >
-                {submitting ? "Subscribing..." : "Follow This Truck"}
+                {submitting ? "Subscribing..." : "Follow This Schedule"}
               </button>
             </form>
             <p className="text-xs text-gray-400 mt-3 text-center">

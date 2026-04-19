@@ -468,7 +468,7 @@ export function ImportEventsClient({ userId, targetLabel }: Props) {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="food_truck">Food truck (default)</SelectItem>
+                    <SelectItem value="food_truck">Vending (default)</SelectItem>
                     <SelectItem value="catering">Catering</SelectItem>
                   </SelectContent>
                 </Select>
@@ -550,7 +550,7 @@ export function ImportEventsClient({ userId, targetLabel }: Props) {
                     pure food-truck imports don't benefit. See Commit E. */}
                 {validCount > 0 && modeBreakdown.catering > 0 && (
                   <p className="text-xs text-blue-700 dark:text-blue-400 mt-1">
-                    {modeBreakdown.foodTruck} food truck · {modeBreakdown.catering} catering
+                    {modeBreakdown.foodTruck} vending · {modeBreakdown.catering} catering
                     {showInferenceSuffix && " (auto-classified from event_type)"}
                   </p>
                 )}

@@ -794,7 +794,7 @@ export function CsvImportTab() {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="food_truck">Food truck (default)</SelectItem>
+                    <SelectItem value="food_truck">Vending (default)</SelectItem>
                     <SelectItem value="catering">Catering</SelectItem>
                   </SelectContent>
                 </Select>
@@ -1136,7 +1136,7 @@ export function CsvImportTab() {
                   and the suffix would be empty. */}
               {validCount > 0 && modeBreakdown.catering > 0 && (
                 <Badge variant="secondary" className="bg-blue-100 text-blue-800">
-                  {modeBreakdown.foodTruck} food truck · {modeBreakdown.catering} catering
+                  {modeBreakdown.foodTruck} vending · {modeBreakdown.catering} catering
                   {showInferenceSuffix && " (auto-classified from event_type)"}
                 </Badge>
               )}

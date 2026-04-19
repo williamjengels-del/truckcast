@@ -294,7 +294,7 @@ export function WhatIfPanel({
               {/* Number of trucks */}
               <div className="space-y-1.5">
                 <Label className="text-xs">
-                  Number of Food Trucks at Event
+                  Number of Vendors at Event
                 </Label>
                 <Input
                   type="number"

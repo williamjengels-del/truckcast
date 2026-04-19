@@ -298,7 +298,7 @@ export default async function AdminOverviewPage() {
                 >
                   <div>
                     <span className="font-medium">
-                      {profile.business_name ?? "Unnamed Truck"}
+                      {profile.business_name ?? "Unnamed Vendor"}
                     </span>
                     {profile.city && (
                       <span className="text-muted-foreground ml-2 text-xs">{profile.city}</span>

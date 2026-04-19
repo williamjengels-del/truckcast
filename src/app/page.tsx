@@ -353,7 +353,7 @@ export default async function LandingPage() {
                   "Advanced Analytics",
                   "Monthly Reports",
                   "Organizer Scoring",
-                  "Follow My Truck",
+                  "Follow My Schedule",
                   "Booking Widget",
                 ],
               },

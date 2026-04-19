@@ -606,7 +606,7 @@ export function EventsClient({ initialEvents, userId = "", businessName = "", us
       return [
         e.event_name,
         e.event_date,
-        e.event_mode === "catering" ? "Catering" : "Food Truck",
+        e.event_mode === "catering" ? "Catering" : "Vending",
         e.event_type ?? "",
         e.event_tier ?? "",
         e.location ?? "",
@@ -663,7 +663,7 @@ export function EventsClient({ initialEvents, userId = "", businessName = "", us
 
   // Build social share text
   function buildShareText(): string {
-    const name = businessName || "Our food truck";
+    const name = businessName || "Our business";
     const city = userCity || "";
     const cityTag = city ? `#${city.replace(/\s+/g, "")}FoodTruck` : "#FoodTruck";
     const scheduleUrl = userId ? `vendcast.co/schedule/${userId}` : "vendcast.co";
@@ -1290,7 +1290,7 @@ export function EventsClient({ initialEvents, userId = "", businessName = "", us
             <button
               className={`px-3 py-1.5 font-medium transition-colors border-x ${modeFilter === "food_truck" ? "bg-primary text-primary-foreground" : "bg-background text-muted-foreground hover:text-foreground"}`}
               onClick={() => setModeFilter("food_truck")}
-            >🚚 Truck</button>
+            >🚚 Vending</button>
             <button
               className={`px-3 py-1.5 font-medium transition-colors ${modeFilter === "catering" ? "bg-violet-600 text-white" : "bg-background text-muted-foreground hover:text-foreground"}`}
               onClick={() => setModeFilter("catering")}

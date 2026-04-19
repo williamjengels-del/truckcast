@@ -397,7 +397,7 @@ export function EventForm({
                   : "text-muted-foreground hover:text-foreground"
               }`}
             >
-              🚚 Food Truck Event
+              🚚 Vending
             </button>
             <button
               type="button"

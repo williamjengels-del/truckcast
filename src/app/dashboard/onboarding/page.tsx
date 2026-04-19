@@ -167,7 +167,7 @@ export default function OnboardingPage() {
           <CardContent className="space-y-4">
             <div className="space-y-2">
               <Label htmlFor="business_name">
-                What&apos;s your food truck called?
+                What&apos;s your business called?
               </Label>
               <Input
                 id="business_name"

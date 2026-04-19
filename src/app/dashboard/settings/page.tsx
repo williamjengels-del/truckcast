@@ -149,7 +149,7 @@ function SettingsContent() {
                     p ? { ...p, business_name: e.target.value } : p
                   )
                 }
-                placeholder="Enter your food truck name"
+                placeholder="Enter your business name"
               />
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -371,7 +371,7 @@ function PlanCards({ profile }: { profile: Profile | null }) {
       monthly: "$69/mo",
       annual: "$662/yr",
       annualSave: "save $166",
-      features: ["Everything in Pro", "Advanced Analytics", "Monthly Reports", "Organizer Scoring", "Follow My Truck", "Booking Widget"],
+      features: ["Everything in Pro", "Advanced Analytics", "Monthly Reports", "Organizer Scoring", "Follow My Schedule", "Booking Widget"],
     },
   ];
 

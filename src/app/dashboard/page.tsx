@@ -607,7 +607,7 @@ export default async function DashboardPage() {
                 <div className="rounded-lg border border-border bg-muted/30 p-4 space-y-2">
                   <div className="flex items-center gap-2">
                     <span className="text-lg">🚚</span>
-                    <span className="text-sm font-semibold">Food Truck</span>
+                    <span className="text-sm font-semibold">Vending</span>
                   </div>
                   <div className="text-2xl font-bold">
                     {formatCurrency(modeBreakdown.truck.revenue)}

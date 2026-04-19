@@ -264,7 +264,7 @@ export function ForecastCalculator({
                         types in the event form, which uses different
                         per-mode dropdowns. */}
                     <SelectGroup>
-                      <SelectLabel>Food truck events</SelectLabel>
+                      <SelectLabel>Vending events</SelectLabel>
                       {EVENT_TYPES_FOOD_TRUCK.map((t) => (
                         <SelectItem key={t} value={t}>
                           <div className="flex items-center justify-between w-full gap-6 whitespace-nowrap">
@@ -325,7 +325,7 @@ export function ForecastCalculator({
 
               {/* Trucks */}
               <div className="space-y-1.5">
-                <Label>Number of Food Trucks at Event</Label>
+                <Label>Number of Vendors at Event</Label>
                 <Input
                   type="number"
                   onWheel={(e) => e.currentTarget.blur()}
