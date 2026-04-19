@@ -578,8 +578,14 @@ export function parseWithMapping(
     const eventType = rawType ? matchEventType(rawType) : undefined;
 
     // ── Fee type ──
+    // Pass undefined when the CSV didn't provide a fee_type so the
+    // insert layer can distinguish "CSV said nothing" (→ apply mode-
+    // aware default, e.g. pre_settled for catering) from "CSV
+    // explicitly said none" (→ store "none"). Previously feeType was
+    // always a string because matchFeeType("") returned "none", which
+    // clobbered the insert-layer catering default.
     const rawFee = getValue("fee_type", values).trim();
-    const feeType = matchFeeType(rawFee);
+    const feeType = rawFee ? matchFeeType(rawFee) : undefined;
 
     // ── Fee rate ──
     const rawFeeRate = getValue("fee_rate", values).trim();
