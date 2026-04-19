@@ -30,15 +30,22 @@ import type { CalibratedCoefficients } from "@/lib/forecast-engine";
 import { calcEventFee } from "@/lib/fee-calculator";
 
 // ─── Attendance conversion rates (same as forecast-calculator.tsx) ──────────
+// Private / Wedding / Private Party / Reception rates are INITIAL
+// ESTIMATES seeded for Commit D. Will be calibrated against real
+// operator data in the coefficients workstream.
 const CONVERSION_RATES: Record<string, number> = {
   Festival: 0.4,
   Concert: 0.25,
   "Community/Neighborhood": 0.3,
   Corporate: 0.72,
   "Weekly Series": 0.35,
-  "Private/Catering": 0.85,
+  Private: 0.7, // truck at private venue, captive walk-up
+  "Private/Catering": 0.85, // LEGACY — retained for historical rows
   "Sports Event": 0.2,
   "Fundraiser/Charity": 0.35,
+  Wedding: 0.85,
+  "Private Party": 0.85,
+  Reception: 0.85,
 };
 
 const FEE_TYPE_LABELS: Record<string, string> = {

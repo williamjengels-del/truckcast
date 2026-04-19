@@ -21,7 +21,8 @@ import {
 import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
 import {
-  EVENT_TYPES,
+  EVENT_TYPES_FOOD_TRUCK,
+  EVENT_TYPES_CATERING,
   FEE_TYPES,
   ANOMALY_FLAGS,
   CANCELLATION_REASONS,
@@ -654,6 +655,18 @@ export function EventForm({
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="event_type">Event Type</Label>
+                    {/* Mode-aware dropdown: food_truck mode offers the
+                        walk-up-service types (Festival, Concert, Private,
+                        etc.); catering mode offers Wedding, Reception,
+                        Private Party, plus the cross-mode types
+                        Corporate and Fundraiser/Charity. When the
+                        current event_type isn't in the list for the
+                        selected mode (e.g. a legacy "Private/Catering"
+                        row opened for edit, or an operator who flipped
+                        modes mid-edit), render it as a single "current"
+                        option at the top so the Select shows the right
+                        label instead of going blank. Operator can pick
+                        a replacement from the mode-appropriate list. */}
                     <Select
                       name="event_type"
                       defaultValue={initialData?.event_type ?? ""}
@@ -662,11 +675,29 @@ export function EventForm({
                         <SelectValue placeholder="Select type" />
                       </SelectTrigger>
                       <SelectContent>
-                        {EVENT_TYPES.map((t) => (
-                          <SelectItem key={t} value={t}>
-                            {t}
-                          </SelectItem>
-                        ))}
+                        {(() => {
+                          const modeList =
+                            eventMode === "catering"
+                              ? EVENT_TYPES_CATERING
+                              : EVENT_TYPES_FOOD_TRUCK;
+                          const current = initialData?.event_type ?? "";
+                          const needsLegacy =
+                            current && !(modeList as readonly string[]).includes(current);
+                          return (
+                            <>
+                              {needsLegacy && (
+                                <SelectItem key={current} value={current}>
+                                  {current} <span className="text-xs text-muted-foreground">(legacy)</span>
+                                </SelectItem>
+                              )}
+                              {modeList.map((t) => (
+                                <SelectItem key={t} value={t}>
+                                  {t}
+                                </SelectItem>
+                              ))}
+                            </>
+                          );
+                        })()}
                       </SelectContent>
                     </Select>
                     <p className="text-xs text-muted-foreground">Helps find similar past events for comparison</p>

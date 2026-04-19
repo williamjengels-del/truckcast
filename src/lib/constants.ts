@@ -1,13 +1,56 @@
 // Event Types
+//
+// Split by mode so EventForm can offer the semantically-correct subset
+// based on the operator's food_truck ↔ catering toggle. See migration
+// 20260421000001 for the enum additions (Private, Wedding, Private
+// Party, Reception) that underpin these lists.
+//
+// Corporate and Fundraiser/Charity legitimately appear in both modes
+// — a corporate lunch can be a truck parked at an office picnic OR
+// a catered drop-off, and a fundraiser can be either a public gate
+// event or a catered gala. Both modes can target the same event_type.
+//
+// The legacy "Private/Catering" value is deliberately absent from BOTH
+// lists. Existing rows carrying that value still render (enum value
+// retained for backward compat); new events land on one of the new
+// mode-specific types as operators select them.
+
+export const EVENT_TYPES_FOOD_TRUCK = [
+  "Festival",
+  "Concert",
+  "Community/Neighborhood",
+  "Corporate",
+  "Weekly Series",
+  "Private",
+  "Sports Event",
+  "Fundraiser/Charity",
+] as const;
+
+export const EVENT_TYPES_CATERING = [
+  "Wedding",
+  "Corporate",
+  "Private Party",
+  "Reception",
+  "Fundraiser/Charity",
+] as const;
+
+// Union of both lists, deduped — used where the UI doesn't know which
+// mode applies yet (admin cross-tenant filter, public booking form
+// where inquirers can tag any event type, CSV parser validation).
+// Order preserves food-truck-first then catering-only additions so
+// the most common shapes for existing operators surface first.
 export const EVENT_TYPES = [
   "Festival",
   "Concert",
   "Community/Neighborhood",
   "Corporate",
   "Weekly Series",
-  "Private/Catering",
+  "Private",
   "Sports Event",
   "Fundraiser/Charity",
+  "Wedding",
+  "Private Party",
+  "Reception",
 ] as const;
 
 // Event Tiers with descriptions

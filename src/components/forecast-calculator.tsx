@@ -34,15 +34,26 @@ import type { CalibratedCoefficients } from "@/lib/forecast-engine";
 // How many attendees typically buy from a food truck at this event type.
 // Food-centric events convert high; sports/concerts compete with other vendors.
 
+// NOTE: Private, Wedding, Private Party, Reception rates below are
+// INITIAL ESTIMATES seeded for Commit D. They need calibration against
+// real operator data once the scoring/coefficients workstream lands.
+// Private is lower than the pure-catering types because it's still
+// truck walk-up service (variable, depends on crowd intent); Wedding
+// and the catered types inherit the 0.85 from the legacy Private/
+// Catering rate they replace.
 const CONVERSION_RATES: Record<string, number> = {
   "Festival":              0.40, // food-centric, high intent
   "Concert":               0.25, // captive but distracted, bar competes
   "Community/Neighborhood": 0.30, // browse and buy mentality
   "Corporate":             0.72, // hungry, it's the food option
   "Weekly Series":         0.35, // regulars, habitual buyers
-  "Private/Catering":      0.85, // you're there for them specifically
+  "Private":               0.70, // truck at private venue, captive walk-up
+  "Private/Catering":      0.85, // LEGACY — retained for historical rows
   "Sports Event":          0.20, // stadium food competes heavily
   "Fundraiser/Charity":    0.35, // motivated to support, buy to contribute
+  "Wedding":               0.85, // you're there for them specifically
+  "Private Party":         0.85, // same dynamic as wedding / catered event
+  "Reception":             0.85, // same dynamic as wedding / catered event
 };
 
 const FEE_TYPE_LABELS: Record<string, string> = {

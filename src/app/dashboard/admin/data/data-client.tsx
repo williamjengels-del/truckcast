@@ -221,15 +221,22 @@ export function DataClient() {
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
+              {/* Cross-tenant admin filter — lists all current types
+                  plus the legacy Private/Catering value so historical
+                  rows across the platform stay filter-addressable. */}
               <SelectItem value="all">All types</SelectItem>
               <SelectItem value="Festival">Festival</SelectItem>
               <SelectItem value="Concert">Concert</SelectItem>
+              <SelectItem value="Community/Neighborhood">Community</SelectItem>
               <SelectItem value="Corporate">Corporate</SelectItem>
               <SelectItem value="Weekly Series">Weekly Series</SelectItem>
-              <SelectItem value="Private/Catering">Private/Catering</SelectItem>
-              <SelectItem value="Community/Neighborhood">Community</SelectItem>
+              <SelectItem value="Private">Private</SelectItem>
               <SelectItem value="Sports Event">Sports Event</SelectItem>
               <SelectItem value="Fundraiser/Charity">Fundraiser</SelectItem>
+              <SelectItem value="Wedding">Wedding</SelectItem>
+              <SelectItem value="Private Party">Private Party</SelectItem>
+              <SelectItem value="Reception">Reception</SelectItem>
+              <SelectItem value="Private/Catering">Private/Catering (legacy)</SelectItem>
             </SelectContent>
           </Select>
         </div>

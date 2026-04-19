@@ -5,9 +5,13 @@ export type EventType =
   | "Community/Neighborhood"
   | "Corporate"
   | "Weekly Series"
-  | "Private/Catering"
+  | "Private"
+  | "Private/Catering" // legacy — retained for historical rows, hidden from new-event selects
   | "Sports Event"
-  | "Fundraiser/Charity";
+  | "Fundraiser/Charity"
+  | "Wedding"
+  | "Private Party"
+  | "Reception";
 export type EventTier = "A" | "B" | "C" | "D";
 export type WeatherType =
   | "Clear"
