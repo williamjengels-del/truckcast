@@ -79,10 +79,28 @@ export async function POST(request: Request) {
       );
     }
 
-    // Upgrade the user's subscription tier
+    // Upgrade the user's subscription tier AND extend their trial
+    // window to match the invite's trial_days.
+    //
+    // The second write matters because the middleware's trial gate
+    // (src/lib/supabase/middleware.ts) only bypasses for users with
+    // a stripe_subscription_id — beta users don't have one. Without
+    // setting trial_extended_until here, beta Pro/Premium users
+    // would hit the hard gate on 2026-05-01 despite having been
+    // granted the tier. Setting the column to now + trial_days (30,
+    // 60, 90, or whatever the invite specified) gives them a real,
+    // visible expiry and lets the admin extend further via the
+    // existing trial-extension tools if needed.
+    const trialExtendedUntil = new Date(
+      Date.now() + invite.trial_days * 24 * 60 * 60 * 1000
+    ).toISOString();
+
     const { error: profileError } = await supabase
       .from("profiles")
-      .update({ subscription_tier: invite.granted_tier })
+      .update({
+        subscription_tier: invite.granted_tier,
+        trial_extended_until: trialExtendedUntil,
+      })
       .eq("id", user.id);
 
     if (profileError) {
