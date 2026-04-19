@@ -9,6 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { buttonVariants } from "@/components/ui/button-variants";
 import { ChevronLeft, Upload } from "lucide-react";
 import { ImpersonateButton } from "./impersonate-button";
+import { ResetTrialButton } from "./reset-trial-button";
 
 // Auth handled by /dashboard/admin/layout.tsx.
 
@@ -324,9 +325,15 @@ export default async function UserDetailPage({ params }: PageProps) {
             userId={profile.id}
             targetLabel={profile.business_name ?? email ?? "this user"}
           />
+          <ResetTrialButton
+            userId={profile.id}
+            targetLabel={profile.business_name ?? email ?? "this user"}
+            hasSubscription={!!profile.stripe_subscription_id}
+            currentExtendedUntil={profile.trial_extended_until}
+          />
           <p className="text-xs text-muted-foreground">
-            Trial reset is shipping in a subsequent admin workstream commit.
-            For tier changes and trial extensions, use the inline controls on{" "}
+            For tier changes and trial extensions by custom day counts, use the
+            inline controls on{" "}
             <Link href="/dashboard/admin/users" className="underline">
               the users index
             </Link>
