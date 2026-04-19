@@ -47,10 +47,12 @@ export async function POST(request: NextRequest) {
     process.env.SUPABASE_SERVICE_ROLE_KEY!
   );
 
-  // Pre-check: user exists, doesn't have an active subscription.
+  // Pre-check: user exists and is actually on a trial (starter tier,
+  // no active subscription). Mirrors the button's client-side gate —
+  // defense in depth so a direct POST can't bypass the UI guard.
   const { data: profile, error: profileError } = await service
     .from("profiles")
-    .select("id, stripe_subscription_id, trial_extended_until")
+    .select("id, subscription_tier, stripe_subscription_id, trial_extended_until")
     .eq("id", userId)
     .maybeSingle();
   if (profileError) {
@@ -62,7 +64,12 @@ export async function POST(request: NextRequest) {
       { status: 404 }
     );
   }
-  if ((profile as { stripe_subscription_id: string | null }).stripe_subscription_id) {
+  const typedProfile = profile as {
+    subscription_tier: string;
+    stripe_subscription_id: string | null;
+    trial_extended_until: string | null;
+  };
+  if (typedProfile.stripe_subscription_id) {
     return NextResponse.json(
       {
         error:
@@ -71,10 +78,16 @@ export async function POST(request: NextRequest) {
       { status: 400 }
     );
   }
+  if (typedProfile.subscription_tier !== "starter") {
+    return NextResponse.json(
+      {
+        error: `Cannot reset trial — user is on ${typedProfile.subscription_tier} tier. Trial gate doesn't apply; reset is a no-op.`,
+      },
+      { status: 400 }
+    );
+  }
 
-  const previousExtendedUntil = (profile as {
-    trial_extended_until: string | null;
-  }).trial_extended_until;
+  const previousExtendedUntil = typedProfile.trial_extended_until;
 
   const newExtendedUntil = new Date(
     Date.now() + FRESH_TRIAL_DAYS * 24 * 60 * 60 * 1000

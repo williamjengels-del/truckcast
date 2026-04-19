@@ -329,6 +329,7 @@ export default async function UserDetailPage({ params }: PageProps) {
             userId={profile.id}
             targetLabel={profile.business_name ?? email ?? "this user"}
             hasSubscription={!!profile.stripe_subscription_id}
+            tier={profile.subscription_tier}
             currentExtendedUntil={profile.trial_extended_until}
           />
           <p className="text-xs text-muted-foreground">

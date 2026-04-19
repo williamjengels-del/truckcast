@@ -17,6 +17,7 @@ interface Props {
   userId: string;
   targetLabel: string;
   hasSubscription: boolean;
+  tier: string;
   currentExtendedUntil: string | null;
 }
 
@@ -33,16 +34,26 @@ export function ResetTrialButton({
   userId,
   targetLabel,
   hasSubscription,
+  tier,
   currentExtendedUntil,
 }: Props) {
   const router = useRouter();
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  if (hasSubscription) {
+  // Trial state is only meaningful for starter-tier users without an
+  // active Stripe subscription. Non-starter tiers (beta-granted Pro /
+  // Premium, or eventually Stripe-paying users) have access via tier;
+  // resetting their trial is a no-op from their perspective.
+  const isPaying = hasSubscription;
+  const isNonStarterTier = tier !== "starter";
+  if (isPaying || isNonStarterTier) {
+    const reason = isPaying
+      ? "user has an active Stripe subscription"
+      : `user is on ${tier} tier (trial gate doesn't apply)`;
     return (
       <div className="text-xs text-muted-foreground">
-        Trial reset is unavailable — this user has an active Stripe subscription.
+        Trial reset is unavailable — {reason}.
       </div>
     );
   }
