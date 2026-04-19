@@ -198,10 +198,15 @@ export default function RoadmapPage() {
           </ul>
         </section>
 
-        {/* Phases */}
+        {/* Phases — each block wraps in the same card treatment as the
+            "Your data stays yours" callout above so the page reads as
+            one visual system. */}
         <div className="space-y-10">
           {PHASES.map((phase) => (
-            <section key={phase.label}>
+            <section
+              key={phase.label}
+              className="rounded-xl border-2 border-primary/20 bg-primary/5 p-6"
+            >
               <div className="flex items-center gap-3 flex-wrap mb-2">
                 <StatusPill status={phase.status} />
                 <h3 className="text-lg sm:text-xl font-semibold">
