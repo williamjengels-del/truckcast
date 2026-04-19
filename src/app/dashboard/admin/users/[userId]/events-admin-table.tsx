@@ -27,9 +27,11 @@ import type { EventFormData } from "@/app/dashboard/events/actions";
 //   * Server pre-filters to past events only (event_date <= today).
 //   * Server sorts by event_date desc and caps at 20 rows.
 //   * Client adds click-to-sort on Date / Event / Type / Flag columns.
-//   * "View all events" link at the top jumps to /admin/data with the
-//     business filter pre-populated for deeper work (100+ rows, Nick
-//     reactivation use case).
+//   * "View all events" link at the top jumps to the scoped per-user
+//     events page at /admin/users/[userId]/events (Commit C). Prior
+//     target was /admin/data?business=…; the cross-tenant filter
+//     worked but was awkward for per-user operator work (Nick
+//     reactivation ~100 rows).
 //
 // Interactions:
 //   Edit — opens EventForm modal with the event; onSubmit PATCHes the
@@ -43,9 +45,10 @@ type SortDir = "asc" | "desc";
 
 interface Props {
   initialEvents: Event[];
-  businessName: string;
   /** Target user's profile state, for EventForm's state dropdown sort. */
   profileState?: string;
+  /** Target user's id — used for the "View all events" link target. */
+  userId: string;
 }
 
 function formatDate(iso: string | null): string {
@@ -118,7 +121,8 @@ function compareEvents(a: Event, b: Event, field: SortField, dir: SortDir): numb
   return (order(a.anomaly_flag) - order(b.anomaly_flag)) * mult;
 }
 
-export function EventsAdminTable({ initialEvents, businessName, profileState }: Props) {
+export function EventsAdminTable({ initialEvents, profileState, userId }: Props) {
+
   // Distinct states this user's events have used — float to top of
   // EventForm's dropdown below the target's profile state.
   const recentStates = useMemo(() => {
@@ -194,9 +198,7 @@ export function EventsAdminTable({ initialEvents, businessName, profileState }: 
     }
   }
 
-  const viewAllHref = businessName
-    ? `/dashboard/admin/data?business=${encodeURIComponent(businessName)}`
-    : "/dashboard/admin/data";
+  const viewAllHref = `/dashboard/admin/users/${userId}/events`;
 
   return (
     <>

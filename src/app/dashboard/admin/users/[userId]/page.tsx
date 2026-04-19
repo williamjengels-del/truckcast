@@ -104,8 +104,8 @@ export default async function UserDetailPage({ params }: PageProps) {
     // ordered newest-first. Admin editing is typically after-the-fact
     // corrections + anomaly flagging of historical data, not the
     // upcoming calendar. For "show everything including upcoming," the
-    // table's "View all events" link goes to /admin/data filtered to
-    // this user's business.
+    // table's "View all events" link goes to the scoped per-user events
+    // page at /admin/users/[userId]/events (Commit C).
     //
     // select("*") — EventForm (reused in the admin edit modal) needs
     // the full ~25-column Event shape as initialData.
@@ -359,14 +359,14 @@ export default async function UserDetailPage({ params }: PageProps) {
       </Card>
 
       {/* Recent events (past, newest first) — Edit + Flag inline per
-          row, column-header sort, "View all events" link scoped to
-          /admin/data filtered to this user's business. */}
+          row, column-header sort, "View all events" link to the scoped
+          per-user events page at /admin/users/[userId]/events. */}
       <Card>
         <CardContent className="p-0">
           <EventsAdminTable
             initialEvents={recentEvents as Event[]}
-            businessName={profile.business_name ?? email ?? ""}
             profileState={profile.state ?? undefined}
+            userId={profile.id}
           />
         </CardContent>
       </Card>
