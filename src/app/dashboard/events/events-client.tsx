@@ -284,10 +284,20 @@ export function EventsClient({ initialEvents, userId = "", businessName = "", us
     ),
   ].sort((a, b) => b - a);
 
-  // Split into all / upcoming (booked) / unbooked (future) / past / past_unbooked / flagged / cancelled
+  // Split into all / upcoming (booked) / unbooked (future) / past / past_unbooked / flagged / cancelled.
+  //
+  // initialEvents arrives sorted desc by event_date from the server.
+  // That's right for past-focused views (most recent first) but wrong
+  // for upcoming-focused views, where the operator wants soonest at
+  // the top (what's this week, next week, next month) rather than
+  // the furthest-future date first. Re-sort upcoming + unbooked asc.
   const cancelledEvents = initialEvents.filter((e) => !!e.cancellation_reason);
-  const upcomingEvents = initialEvents.filter((e) => e.event_date >= today && e.booked && !e.cancellation_reason);
-  const unbookedEvents = initialEvents.filter((e) => e.event_date >= today && !e.booked && !e.cancellation_reason);
+  const upcomingEvents = initialEvents
+    .filter((e) => e.event_date >= today && e.booked && !e.cancellation_reason)
+    .sort((a, b) => a.event_date.localeCompare(b.event_date));
+  const unbookedEvents = initialEvents
+    .filter((e) => e.event_date >= today && !e.booked && !e.cancellation_reason)
+    .sort((a, b) => a.event_date.localeCompare(b.event_date));
   const pastEvents = initialEvents.filter((e) => e.event_date < today && e.booked && !e.cancellation_reason);
   const pastUnbookedEvents = initialEvents.filter((e) => e.event_date < today && !e.booked && !e.cancellation_reason);
   const flaggedEvents = initialEvents.filter(

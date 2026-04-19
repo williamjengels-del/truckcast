@@ -125,25 +125,41 @@ export function EventForm({
       );
       if (!geoRes.ok) return;
       const geoData = await geoRes.json();
-      const allResults: Array<{ latitude: number; longitude: number; name: string; admin1?: string; population?: number }> = geoData.results ?? [];
+      const allResults: Array<{
+        latitude: number;
+        longitude: number;
+        name: string;
+        admin1?: string;
+        population?: number;
+        feature_code?: string;
+      }> = geoData.results ?? [];
       if (allResults.length === 0) return;
 
-      // State filter — narrow to the chosen state's admin1 before the
-      // population-weighted pick. Mirrors the server-side geocodeCity
-      // logic; disambiguates "Saint Louis, MO" vs "Saint Louis Park, MN".
+      // State filter — HARD CONSTRAINT. Mirrors src/lib/weather.ts
+      // geocodeCity: if the filter eliminates everything, return
+      // silently (no weather suggestion) rather than falling back to
+      // a cross-state match. Typos and ambiguous city names must not
+      // silently produce weather data for the wrong state.
       let candidates = allResults;
       if (state && state !== OTHER_STATE) {
         const fullName = US_STATE_NAMES[state];
         if (fullName) {
-          const byState = allResults.filter(
+          candidates = allResults.filter(
             (r) => r.admin1?.toLowerCase() === fullName.toLowerCase()
           );
-          if (byState.length > 0) candidates = byState;
+          if (candidates.length === 0) return;
         }
       }
 
+      // Prefer populated-place feature codes (PPL, PPLA*, PPLC, etc.)
+      // over airports / landmarks. See weather.ts for the full rationale.
+      const pplMatches = candidates.filter((r) =>
+        r.feature_code?.startsWith("PPL")
+      );
+      const ranked = pplMatches.length > 0 ? pplMatches : candidates;
+
       // Pick highest-population match to prefer major cities over small towns
-      const result = candidates.reduce((a, b) => ((b.population ?? 0) > (a.population ?? 0) ? b : a));
+      const result = ranked.reduce((a, b) => ((b.population ?? 0) > (a.population ?? 0) ? b : a));
 
       const lat: number = result.latitude;
       const lon: number = result.longitude;

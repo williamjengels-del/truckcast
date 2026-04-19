@@ -51,29 +51,49 @@ export async function geocodeCity(
           longitude: number;
           population?: number;
           admin1?: string;
+          feature_code?: string;
         }>
       | undefined;
     if (!allResults || allResults.length === 0) return null;
 
-    // State filter — only applied when state is a known US code.
-    // admin1 in Open-Meteo's response is the full state name.
-    let filtered = allResults;
+    // State filter — HARD CONSTRAINT when a known US code is provided.
+    // Open-Meteo doesn't support server-side admin1 filtering, so we
+    // filter client-side. If the filter eliminates all candidates we
+    // return null — silent cross-state fallback (the prior behavior)
+    // produced incorrect coordinates when the operator's city input
+    // was a typo or didn't exist in the target state. Better to show
+    // "no weather" than to silently mis-populate with another state's
+    // data. See Issue 1 from Commit A smoke test for the bug this
+    // fixes: city="Bellville" + state=IL → Open-Meteo returns
+    // Bellville, Texas → old code silently picked Texas → weather
+    // for the wrong event.
+    let candidates = allResults;
     if (state && state !== "OTHER") {
       const fullName = US_STATE_NAMES[state.toUpperCase()];
       if (fullName) {
-        const byState = allResults.filter(
+        candidates = allResults.filter(
           (r) => r.admin1?.toLowerCase() === fullName.toLowerCase()
         );
-        // Only narrow if we found at least one match — a state filter
-        // that eliminates everything likely means the admin1 label
-        // didn't match (e.g. stale/unusual data). Falling back to the
-        // population-weighted country-wide pick is safer than null.
-        if (byState.length > 0) filtered = byState;
+        if (candidates.length === 0) return null;
       }
     }
 
+    // Prefer populated-place (PPL*) feature codes over airports,
+    // landmarks, etc. Open-Meteo's feature_code field uses GeoNames
+    // codes: PPL, PPLA, PPLA2..PPLA4, PPLC, PPLL, PPLS, PPLF all
+    // denote populated places; AIRP, PRK, HTL, etc. do not. A city
+    // with a small airport nearby sometimes returns the airport first
+    // on population. See Issue 1 smoke test: city="Saint Charles" +
+    // state=MO → returned "St Charles County Smartt Airport" instead
+    // of the city. Falling back to all state-matched candidates if no
+    // PPL match (airport is still state-correct — better than null).
+    const pplMatches = candidates.filter((r) =>
+      r.feature_code?.startsWith("PPL")
+    );
+    const ranked = pplMatches.length > 0 ? pplMatches : candidates;
+
     // Pick highest-population match — avoids small towns over major cities
-    const best = filtered.reduce((a, b) =>
+    const best = ranked.reduce((a, b) =>
       (b.population ?? 0) > (a.population ?? 0) ? b : a
     );
     return { latitude: best.latitude, longitude: best.longitude };
