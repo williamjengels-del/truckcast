@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest, NextResponse, after } from "next/server";
 import { createClient as createServiceClient } from "@supabase/supabase-js";
 import { getAdminUser } from "@/lib/admin";
 import { logAdminAction } from "@/lib/admin-audit";
@@ -116,16 +116,20 @@ export async function PATCH(
   );
 
   // Recalc — disrupted/boosted flag changes alter which events count
-  // toward performance aggregates and forecast coefficients.
-  try {
-    await recalculateForUserWithClient(typedCurrent.user_id, service);
-  } catch (err) {
-    console.error("admin_event_anomaly_recalc_failed", {
-      eventId,
-      userId: typedCurrent.user_id,
-      error: err instanceof Error ? err.message : String(err),
-    });
-  }
+  // toward performance aggregates and forecast coefficients. Deferred
+  // via after() so the toggle returns immediately; see the edit route
+  // for the full rationale.
+  after(async () => {
+    try {
+      await recalculateForUserWithClient(typedCurrent.user_id, service);
+    } catch (err) {
+      console.error("admin_event_anomaly_recalc_failed", {
+        eventId,
+        userId: typedCurrent.user_id,
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
+  });
 
   return NextResponse.json({
     success: true,
@@ -133,5 +137,6 @@ export async function PATCH(
     anomaly_flag: newFlag,
     previous: previousFlag,
     changed: true,
+    recalc: "queued",
   });
 }

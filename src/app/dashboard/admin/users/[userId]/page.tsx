@@ -100,14 +100,25 @@ export default async function UserDetailPage({ params }: PageProps) {
   const [profileResult, authResult, recentEventsResult, allEventsResult, auditResult] = await Promise.all([
     service.from("profiles").select("*").eq("id", userId).maybeSingle(),
     service.auth.admin.getUserById(userId),
-    // select("*") — EventForm (reused in the admin edit modal per
-    // Commit 9) needs the full ~25-column Event shape as initialData.
+    // Recent events — scoped to PAST events only (event_date <= today),
+    // ordered newest-first. Admin editing is typically after-the-fact
+    // corrections + anomaly flagging of historical data, not the
+    // upcoming calendar. For "show everything including upcoming," the
+    // table's "View all events" link goes to /admin/data filtered to
+    // this user's business.
+    //
+    // select("*") — EventForm (reused in the admin edit modal) needs
+    // the full ~25-column Event shape as initialData.
+    //
+    // limit(20) — up from 10. Ops use ("find a specific event to edit")
+    // benefits from more rows in the initial view.
     service
       .from("events")
       .select("*")
       .eq("user_id", userId)
+      .lte("event_date", new Date().toISOString().slice(0, 10))
       .order("event_date", { ascending: false })
-      .limit(10),
+      .limit(20),
     service
       .from("events")
       .select("net_sales, booked")
@@ -347,13 +358,15 @@ export default async function UserDetailPage({ params }: PageProps) {
         </CardContent>
       </Card>
 
-      {/* Recent events — Edit + Flag inline per row (Commit 9) */}
+      {/* Recent events (past, newest first) — Edit + Flag inline per
+          row, column-header sort, "View all events" link scoped to
+          /admin/data filtered to this user's business. */}
       <Card>
-        <CardHeader>
-          <CardTitle className="text-base">Recent events</CardTitle>
-        </CardHeader>
         <CardContent className="p-0">
-          <EventsAdminTable initialEvents={recentEvents as Event[]} />
+          <EventsAdminTable
+            initialEvents={recentEvents as Event[]}
+            businessName={profile.business_name ?? email ?? ""}
+          />
         </CardContent>
       </Card>
 

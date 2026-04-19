@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest, NextResponse, after } from "next/server";
 import { createClient as createServiceClient } from "@supabase/supabase-js";
 import { getAdminUser } from "@/lib/admin";
 import { logAdminAction } from "@/lib/admin-audit";
@@ -155,19 +155,30 @@ export async function PATCH(
 
   // Recalculate for the target user — forecast coefficients and
   // performance aggregates depend on event data changing.
-  try {
-    await recalculateForUserWithClient(targetUserId, service);
-  } catch (err) {
-    console.error("admin_event_edit_recalc_failed", {
-      eventId,
-      targetUserId,
-      error: err instanceof Error ? err.message : String(err),
-    });
-  }
+  //
+  // Wrapped in after() so it runs after the response is sent. On an
+  // account with years of event history (e.g. Wok-O's hundreds of
+  // events across many unique event names) recalc takes 10+ seconds —
+  // synchronous would block the save UI on every edit. Same pattern
+  // used by the push notification trigger. If recalc fails in the
+  // background, console.error lands in Vercel logs; the edit itself
+  // has already been persisted and audited.
+  after(async () => {
+    try {
+      await recalculateForUserWithClient(targetUserId, service);
+    } catch (err) {
+      console.error("admin_event_edit_recalc_failed", {
+        eventId,
+        targetUserId,
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
+  });
 
   return NextResponse.json({
     success: true,
     event: updated,
     changed_fields: changedFields,
+    recalc: "queued",
   });
 }

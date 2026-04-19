@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import { useSearchParams } from "next/navigation";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -49,6 +50,12 @@ function SortIcon({ field, sortField, sortDir }: { field: string; sortField: str
 }
 
 export function DataClient() {
+  // Read ?business=<name> from the URL so links from /admin/users/[userId]
+  // (e.g. the "View all events" link on the user detail page's events
+  // table) land pre-filtered. Other filters stay at their defaults.
+  const searchParams = useSearchParams();
+  const initialBusiness = searchParams.get("business") ?? "";
+
   const [events, setEvents] = useState<AdminEvent[]>([]);
   const [profiles, setProfiles] = useState<AdminProfile[]>([]);
   const [total, setTotal] = useState(0);
@@ -56,8 +63,8 @@ export function DataClient() {
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState("");
   const [searchInput, setSearchInput] = useState("");
-  const [businessSearch, setBusinessSearch] = useState("");
-  const [businessSearchInput, setBusinessSearchInput] = useState("");
+  const [businessSearch, setBusinessSearch] = useState(initialBusiness);
+  const [businessSearchInput, setBusinessSearchInput] = useState(initialBusiness);
   const [filterSharing, setFilterSharing] = useState<string>("all");
   const [filterEventType, setFilterEventType] = useState<string>("all");
   const [filterBooked, setFilterBooked] = useState<string>("all");
