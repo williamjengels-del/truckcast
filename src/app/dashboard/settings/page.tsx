@@ -3,6 +3,7 @@
 import { Suspense, useState, useEffect } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
+import { useImpersonation } from "@/components/impersonation-context";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -45,6 +46,8 @@ function SettingsContent() {
   const supabase = createClient();
   const searchParams = useSearchParams();
   const router = useRouter();
+  // effectiveUserId reruns the profile load on impersonation start/stop.
+  const { effectiveUserId } = useImpersonation();
 
   // Sync subscription tier from Stripe (called after checkout redirect)
   async function syncTier() {
@@ -83,7 +86,7 @@ function SettingsContent() {
       }
     }
     loadProfile();
-  }, []);
+  }, [effectiveUserId]);
 
   // Auto-sync when returning from Stripe checkout
   useEffect(() => {

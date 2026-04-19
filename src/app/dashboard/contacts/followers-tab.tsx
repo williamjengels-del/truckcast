@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { useImpersonation } from "@/components/impersonation-context";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Users, Bell } from "lucide-react";
@@ -12,6 +13,9 @@ import type { FollowSubscriber, Profile } from "@/lib/database.types";
 // the list.
 
 export function FollowersTab() {
+  // effectiveUserId flips on impersonation start/stop — used as the
+  // fetch effect's dep so the tab reloads without a page refresh.
+  const { effectiveUserId } = useImpersonation();
   const [subscribers, setSubscribers] = useState<FollowSubscriber[]>([]);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [loading, setLoading] = useState(true);
@@ -33,7 +37,7 @@ export function FollowersTab() {
       }
     }
     load();
-  }, []);
+  }, [effectiveUserId]);
 
   if (loading) {
     return (

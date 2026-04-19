@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
+import { useImpersonation } from "@/components/impersonation-context";
 import { cn } from "@/lib/utils";
 import { LogOut, TruckIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -21,6 +22,10 @@ export function Sidebar() {
   const pathname = usePathname();
   const router = useRouter();
   const supabase = createClient();
+  // Subscribe to impersonation context so we re-fetch sidebar state
+  // when the admin starts/stops a session. effectiveUserId flips on
+  // any scope change and is the precise signal to re-run the load.
+  const { effectiveUserId } = useImpersonation();
   const [tier, setTier] = useState<SubscriptionTier | null>(null);
   const [unloggedCount, setUnloggedCount] = useState(0);
   const [isManager, setIsManager] = useState(false);
@@ -44,7 +49,7 @@ export function Sidebar() {
       }
     }
     load();
-  }, []);
+  }, [effectiveUserId]);
 
   async function handleSignOut() {
     await supabase.auth.signOut();

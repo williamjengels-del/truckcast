@@ -56,10 +56,13 @@ export default function BookingsPage() {
     }
   }, []);
 
+  // Re-fetch when the impersonation scope changes (start or stop).
+  // effectiveUserId is the precise signal for scope flips; load itself
+  // is useCallback-stable but kept in the deps for lint correctness.
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     load();
-  }, [load]);
+  }, [load, effectiveUserId]);
 
   async function updateStatus(id: string, status: BookingRequest["status"]) {
     setUpdatingId(id);

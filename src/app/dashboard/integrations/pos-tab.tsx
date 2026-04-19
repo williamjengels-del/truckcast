@@ -87,10 +87,13 @@ function PosSettingsContent() {
     }
   }, []);
 
+  // Re-run loadData when the impersonation scope flips — otherwise
+  // switching from self to target leaves pos connections + profile
+  // showing the admin's data until a manual page refresh.
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     loadData();
-  }, [loadData]);
+  }, [loadData, effectiveUserId]);
 
   function getConnection(provider: PosProvider): PosConnection | undefined {
     return connections.find((c) => c.provider === provider);

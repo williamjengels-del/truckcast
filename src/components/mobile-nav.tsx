@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
+import { useImpersonation } from "@/components/impersonation-context";
 import { cn } from "@/lib/utils";
 import { LogOut, TruckIcon, Menu } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -22,6 +23,9 @@ export function MobileNav() {
   const pathname = usePathname();
   const router = useRouter();
   const supabase = createClient();
+  // See sidebar.tsx — effectiveUserId is the re-fetch trigger on
+  // impersonation state flips.
+  const { effectiveUserId } = useImpersonation();
   const [tier, setTier] = useState<SubscriptionTier | null>(null);
   const [unloggedCount, setUnloggedCount] = useState(0);
   const [isManager, setIsManager] = useState(false);
@@ -46,7 +50,7 @@ export function MobileNav() {
       }
     }
     load();
-  }, []);
+  }, [effectiveUserId]);
 
   // Close sheet when route changes
   useEffect(() => {
