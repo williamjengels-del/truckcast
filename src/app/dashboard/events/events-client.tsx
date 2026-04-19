@@ -60,7 +60,7 @@ import {
   deleteAllEvents,
   dismissFlaggedEvent,
 } from "@/app/dashboard/events/actions";
-import { WEATHER_COEFFICIENTS } from "@/lib/constants";
+import { WEATHER_COEFFICIENTS, US_STATE_NAMES } from "@/lib/constants";
 import { normalizeCityForGeocoding } from "@/lib/weather";
 import type { Event } from "@/lib/database.types";
 import type { EventFormData } from "@/app/dashboard/events/actions";
@@ -138,7 +138,11 @@ export function EventsClient({ initialEvents, userId = "", businessName = "", us
   const [yearFilter, setYearFilter] = useState<string>("all");
   const [modeFilter, setModeFilter] = useState<"all" | "food_truck" | "catering">("all");
   const [sortField, setSortField] = useState<SortField>("event_date");
-  const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
+  // Initial activeTab below defaults to "upcoming" — soonest-first (asc) is
+  // the right default for upcoming/unbooked views. handleTabChange keeps
+  // this in sync on click; the ?tab= useEffect below handles URL-driven
+  // tab changes so both paths land on the right default.
+  const [sortDirection, setSortDirection] = useState<SortDirection>("asc");
   const [deleting, setDeleting] = useState(false);
   const [bookingId, setBookingId] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<ViewMode>("split");
@@ -193,10 +197,26 @@ export function EventsClient({ initialEvents, userId = "", businessName = "", us
     }
   }, [searchParams]);
 
-  // Auto-switch tab if ?tab= is set in URL
+  // Auto-switch tab if ?tab= is set in URL. Reset sort alongside so
+  // URL-driven tab changes land on the same default as click-driven ones
+  // (handleTabChange). Without this, direction stays stale when deep-
+  // linking to past/flagged etc. — e.g. ?tab=past on fresh mount keeps
+  // "asc" from the initial useState default and shows oldest first.
   useEffect(() => {
     const tab = searchParams.get("tab") as TabMode | null;
-    if (tab) setActiveTab(tab);
+    if (tab) {
+      setActiveTab(tab);
+      setSortField("event_date");
+      setSortDirection(
+        tab === "past" ||
+          tab === "past_unbooked" ||
+          tab === "flagged" ||
+          tab === "all" ||
+          tab === "cancelled"
+          ? "desc"
+          : "asc"
+      );
+    }
   }, [searchParams]);
 
   function handleViewMode(mode: ViewMode) {
@@ -226,17 +246,54 @@ export function EventsClient({ initialEvents, userId = "", businessName = "", us
       if (!cityName) continue;
 
       try {
-        // Geocode the city — fetch top 10 results with US filter, pick highest population
+        // Geocode the city — fetch top 10 results with US filter, apply
+        // state hard-constraint + PPL preference, pick highest population.
+        // Mirrors the logic in lib/weather.ts:geocodeCity and
+        // components/event-form.tsx:fetchWeatherSuggestion — three sites
+        // share this rule: state wins always, PPL preferred, no silent
+        // cross-state fallback. See B-1 smoke test (Bellville IL → Texas
+        // weather) for the bug this fixes on the render path.
         const geoRes = await fetch(
-          `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(normalizeCityForGeocoding(cityName))}&country_code=us&count=10`
+          `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(normalizeCityForGeocoding(cityName))}&country_code=us&count=10&format=json`
         );
         if (!geoRes.ok) continue;
         const geoData = await geoRes.json();
-        const results = geoData.results as Array<{ latitude: number; longitude: number; population?: number }> | undefined;
-        if (!results || results.length === 0) continue;
+        const allResults = geoData.results as
+          | Array<{
+              latitude: number;
+              longitude: number;
+              population?: number;
+              admin1?: string;
+              feature_code?: string;
+            }>
+          | undefined;
+        if (!allResults || allResults.length === 0) continue;
 
-        // Pick the highest-population match to avoid small towns over major cities
-        const best = results.reduce((a, b) => ((b.population ?? 0) > (a.population ?? 0) ? b : a));
+        // HARD state constraint when a known US code is set on the event.
+        // If the filter eliminates all candidates, skip — better to show
+        // no weather than silently mis-populate with another state's data.
+        let candidates = allResults;
+        if (event.state && event.state !== "OTHER") {
+          const fullName = US_STATE_NAMES[event.state.toUpperCase()];
+          if (fullName) {
+            candidates = allResults.filter(
+              (r) => r.admin1?.toLowerCase() === fullName.toLowerCase()
+            );
+            if (candidates.length === 0) continue;
+          }
+        }
+
+        // Prefer populated-place (PPL*) feature codes over airports,
+        // landmarks, etc. Falls back to state-matched candidates if no
+        // PPL match (airport is still state-correct — better than skip).
+        const pplMatches = candidates.filter((r) =>
+          r.feature_code?.startsWith("PPL")
+        );
+        const ranked = pplMatches.length > 0 ? pplMatches : candidates;
+
+        const best = ranked.reduce((a, b) =>
+          (b.population ?? 0) > (a.population ?? 0) ? b : a
+        );
         const { latitude, longitude } = best;
 
         // Fetch forecast
