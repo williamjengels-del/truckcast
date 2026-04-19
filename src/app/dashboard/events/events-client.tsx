@@ -1324,6 +1324,31 @@ export function EventsClient({ initialEvents, userId = "", businessName = "", us
               <Calendar className="h-5 w-5" />
               {activeTab === "all" ? "All Events" : activeTab === "upcoming" ? "Upcoming Events" : activeTab === "unbooked" ? "Unbooked Events" : activeTab === "past_unbooked" ? "Past Unbooked Events" : activeTab === "flagged" ? "Events Needing Sales Data" : "Past Events"}
             </CardTitle>
+            {/* Flagged-tab explainer — spells out why events landed
+                here and what the three row-actions mean. Per-row badges
+                aren't needed because all flagged events share the same
+                cause (past + booked + no net_sales, see flaggedEvents
+                filter around line 360). If the filter ever grows to
+                cover other reasons, move the "why" to per-row chips. */}
+            {activeTab === "flagged" && (
+              <p className="text-sm text-muted-foreground mt-1">
+                Past events you confirmed but haven&apos;t logged sales for yet. Each row affects forecast accuracy — pick one:
+                <span className="block mt-1.5 space-y-0.5">
+                  <span className="block">
+                    <DollarSign className="h-3.5 w-3.5 inline-block mr-1 text-green-600 align-text-bottom" />
+                    <strong>Enter sales</strong> — log what you actually made.
+                  </span>
+                  <span className="block">
+                    <CloudLightning className="h-3.5 w-3.5 inline-block mr-1 text-amber-700 align-text-bottom" />
+                    <strong>Disrupted</strong> — storm, breakdown, or no-show. Excluded from forecast math.
+                  </span>
+                  <span className="block">
+                    <Heart className="h-3.5 w-3.5 inline-block mr-1 text-pink-700 align-text-bottom" />
+                    <strong>Charity</strong> — donated event. Logs $0 intentionally, stays in forecast math.
+                  </span>
+                </span>
+              </p>
+            )}
           </CardHeader>
           <CardContent>
             {filtered.length === 0 ? (
