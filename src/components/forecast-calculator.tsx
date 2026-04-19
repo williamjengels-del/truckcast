@@ -234,10 +234,18 @@ export function ForecastCalculator({
                   <SelectContent>
                     {EVENT_TYPES.map((t) => (
                       <SelectItem key={t} value={t}>
-                        <div className="flex items-center justify-between w-full gap-8">
+                        {/* Name + compact rate badge. Dropped the
+                            "buy rate" suffix + tightened gap-8 → gap-4
+                            so the new longer labels (Private Party,
+                            Reception, Community/Neighborhood) don't
+                            truncate in the Select popover width. The
+                            info line below the Select still spells out
+                            "X% estimated attendee buy rate" once an
+                            option is picked, so context isn't lost. */}
+                        <div className="flex items-center justify-between w-full gap-4">
                           <span>{t}</span>
-                          <span className="text-xs text-muted-foreground">
-                            ~{Math.round((CONVERSION_RATES[t] ?? 0.3) * 100)}% buy rate
+                          <span className="text-xs text-muted-foreground shrink-0">
+                            ~{Math.round((CONVERSION_RATES[t] ?? 0.3) * 100)}%
                           </span>
                         </div>
                       </SelectItem>
