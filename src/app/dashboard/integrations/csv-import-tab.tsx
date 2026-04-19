@@ -16,6 +16,7 @@ import {
   type FieldKey,
   type ParsedRow,
 } from "@/lib/csv-import/parser";
+import { US_STATES, US_STATE_NAMES, OTHER_STATE } from "@/lib/constants";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -80,6 +81,9 @@ export function CsvImportTab() {
   const [sheetsError, setSheetsError] = useState<string | null>(null);
   const [rawText, setRawText] = useState<string>("");
   const [fileName, setFileName] = useState<string>("");
+  // Batch default state — applied to imported rows that don't bring
+  // their own state from the CSV. Null/empty = don't backfill.
+  const [batchDefaultState, setBatchDefaultState] = useState<string>("");
   const [columnMappings, setColumnMappings] = useState<ColumnMapping[]>([]);
   const [dataLines, setDataLines] = useState<string[][]>([]);
 
@@ -376,6 +380,10 @@ export function CsvImportTab() {
       end_time: r.end_time ?? null,
       setup_time: r.setup_time ?? null,
       city: r.city ?? null,
+      // Row state from CSV mapping wins; batch default (set in the
+      // mapping step) fallback. null is fine for historical rows with
+      // no location context — operator fills on next edit.
+      state: r.state ?? batchDefaultState ?? null,
       net_sales: r.net_sales ?? null,
       event_type: r.event_type ?? null,
       location: r.location ?? null,
@@ -682,6 +690,38 @@ export function CsvImportTab() {
                 {" — "}
                 {dataLines.length} data rows, {columnMappings.length} columns
               </p>
+            )}
+
+            {/* Batch default state — applied to rows without their own
+                state from the CSV mapping. Helpful when all/most rows
+                are in the same state (e.g. reactivating a local
+                operator's imported history). Per-row state from a
+                mapped "state" column overrides this default. */}
+            {!columnMappings.some((c) => c.assignedField === "state") && (
+              <div className="flex items-center justify-between gap-3 flex-wrap rounded-md border bg-muted/30 px-3 py-2">
+                <div className="text-xs text-muted-foreground max-w-md">
+                  No <code className="font-mono">state</code> column in this CSV.
+                  Pick a default state to apply to every imported row, or leave
+                  blank and fill in per-event later.
+                </div>
+                <Select
+                  value={batchDefaultState || "__none__"}
+                  onValueChange={(v) => setBatchDefaultState(v === "__none__" ? "" : (v ?? ""))}
+                >
+                  <SelectTrigger className="w-56">
+                    <SelectValue placeholder="Default state…" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__none__">No default (leave blank)</SelectItem>
+                    {US_STATES.map((code) => (
+                      <SelectItem key={code} value={code}>
+                        {code} — {US_STATE_NAMES[code]}
+                      </SelectItem>
+                    ))}
+                    <SelectItem value={OTHER_STATE}>Other / International</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
             )}
 
             {/* Advanced options toggle */}

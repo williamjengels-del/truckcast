@@ -19,6 +19,13 @@
 //   * Behavior is locked to the prior inline implementation.
 //     Commit 4a (this file) is mechanical extraction only.
 
+import { canonicalizeCity } from "@/lib/city-normalize";
+import {
+  US_STATES,
+  US_STATE_NAMES,
+  OTHER_STATE,
+} from "@/lib/constants";
+
 // ═══════════════════════════════════════════════════════════════════════
 // Types
 // ═══════════════════════════════════════════════════════════════════════
@@ -30,6 +37,7 @@ export type FieldKey =
   | "end_time"
   | "setup_time"
   | "city"
+  | "state"
   | "location"
   | "net_sales"
   | "event_type"
@@ -55,6 +63,7 @@ export interface ParsedRow {
   end_time?: string;
   setup_time?: string;
   city?: string;
+  state?: string;
   net_sales?: number;
   event_type?: string;
   location?: string;
@@ -98,6 +107,7 @@ export const FIELD_OPTIONS: { value: FieldKey | "skip"; label: string; descripti
   { value: "end_time", label: "End Time", description: "Can include date + time" },
   { value: "setup_time", label: "Setup Time", description: "Can include date + time" },
   { value: "city", label: "City", description: "City name" },
+  { value: "state", label: "State", description: "US 2-letter state code (MO, IL, CA, …)" },
   { value: "location", label: "Location / Venue", description: "Venue or address" },
   { value: "net_sales", label: "Net Sales", description: "Revenue / sales amount" },
   { value: "event_type", label: "Event Type", description: "Festival, Corporate, etc." },
@@ -125,6 +135,7 @@ export const BASIC_FIELD_VALUES: (FieldKey | "skip")[] = [
   "start_time",
   "end_time",
   "city",
+  "state",
   "location",
   "net_sales",
   "event_type",
@@ -175,6 +186,7 @@ export const COLUMN_ALIASES: Record<FieldKey, string[]> = {
     "arrival time", "load in", "loadin", "load-in",
   ],
   city: ["city", "town", "metro", "market"],
+  state: ["state", "st", "state/province", "province", "region"],
   location: [
     "location", "venue", "address", "place", "site",
     "venue/location", "venue / location", "where",
@@ -416,6 +428,26 @@ export function addDays(dateStr: string, days: number): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
 
+/**
+ * Normalize a user-supplied state input to the 2-letter US code.
+ * Accepts codes ("MO", "mo") and full names ("Missouri", "missouri").
+ * Returns "OTHER" pass-through. Returns undefined for unrecognized
+ * input — callers show that through to preview so the operator sees
+ * what needs fixing rather than silently dropping the row's state.
+ */
+export function normalizeStateInput(raw: string): string | undefined {
+  const s = raw.trim();
+  if (!s) return undefined;
+  const upper = s.toUpperCase();
+  if (upper === OTHER_STATE) return OTHER_STATE;
+  if (US_STATES.includes(upper)) return upper;
+  // Reverse lookup full name → code.
+  for (const [code, name] of Object.entries(US_STATE_NAMES)) {
+    if (name.toLowerCase() === s.toLowerCase()) return code;
+  }
+  return undefined;
+}
+
 export function normalizeWeather(raw: string): string | undefined {
   const s = raw.trim().toLowerCase();
   if (!s) return undefined;
@@ -540,7 +572,16 @@ export function parseWithMapping(
     const validForecast = forecastSales !== undefined && !isNaN(forecastSales) ? forecastSales : undefined;
 
     // ── Other fields ──
-    const city = getValue("city", values).trim() || undefined;
+    // City is canonicalized at parse time so the preview shows the
+    // form the operator will see stored. Normalization happens in the
+    // shared src/lib/city-normalize.ts module.
+    const rawCity = getValue("city", values).trim();
+    const city = rawCity ? canonicalizeCity(rawCity) : undefined;
+    // State: accept 2-letter code or expand from full name via
+    // US_STATE_NAMES reverse lookup. Unknown strings pass through so
+    // the admin can see + fix in preview rather than silently drop.
+    const rawState = getValue("state", values).trim();
+    const state = rawState ? normalizeStateInput(rawState) : undefined;
     const location = getValue("location", values).trim() || undefined;
     const notes = getValue("notes", values).trim() || undefined;
 
@@ -624,7 +665,7 @@ export function parseWithMapping(
           start_time: isFirst ? startTime ?? undefined : undefined,
           end_time: isLast ? endTime ?? undefined : undefined,
           setup_time: isFirst ? setupTime ?? undefined : undefined,
-          city, location,
+          city, state, location,
           net_sales: isLast ? validSales : undefined,
           event_type: eventType,
           fee_type: feeType,
@@ -698,6 +739,7 @@ export function buildImportTemplateCsv(): string {
     "start_time",
     "end_time",
     "city",
+    "state",
     "location",
     "net_sales",
     "event_type",
@@ -721,6 +763,7 @@ export function buildImportTemplateCsv(): string {
       "11:00",
       "20:00",
       "St. Louis",
+      "MO",
       "Kiener Plaza",
       "3200",
       "Festival",
@@ -743,6 +786,7 @@ export function buildImportTemplateCsv(): string {
       "08:00",
       "13:00",
       "St. Louis",
+      "MO",
       "Soulard Market",
       "1450",
       "Community/Neighborhood",

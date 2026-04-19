@@ -41,6 +41,18 @@ interface ImportBody {
   csvText: string;
   columnMappings: ColumnMapping[];
   dupActions?: DupAction[];
+  /**
+   * Batch default state (US 2-letter code or "OTHER"). Applied to
+   * rows that don't have a state from the CSV mapping. If the CSV
+   * has a state column AND provides a value for a row, the row's
+   * value wins — the batch default is strictly a fallback.
+   *
+   * This is the "approach C" dual behavior per the product plan: map
+   * state from the CSV if present, fallback to a one-click batch
+   * default for CSVs that don't have a state column (Nick's
+   * reactivation import, where 200+ events share a single state).
+   */
+  defaultState?: string;
 }
 
 interface InsertError {
@@ -163,6 +175,11 @@ export async function POST(req: NextRequest) {
 
   // Build insert payloads. Mirror the shape self-serve writes — same
   // defaults, same null-vs-empty conventions, same cost-field guard.
+  // state resolution: row's own state (from CSV column mapping) wins;
+  // batch default applied when the row didn't bring one. Both can be
+  // null if neither present — matches "leave NULL for historical"
+  // policy for rows missing location context.
+  const batchDefaultState = body.defaultState ?? null;
   const insertData = rowsToInsert.map((r) => ({
     user_id: userId,
     event_name: r.event_name,
@@ -171,6 +188,7 @@ export async function POST(req: NextRequest) {
     end_time: r.end_time ?? null,
     setup_time: r.setup_time ?? null,
     city: r.city ?? null,
+    state: r.state ?? batchDefaultState,
     net_sales: r.net_sales ?? null,
     event_type: r.event_type ?? null,
     location: r.location ?? null,

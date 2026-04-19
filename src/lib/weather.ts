@@ -1,4 +1,5 @@
 import type { WeatherType } from "./database.types";
+import { US_STATE_NAMES } from "./constants";
 
 /**
  * Normalize a city name before sending to Open-Meteo's geocoding API.
@@ -20,9 +21,21 @@ export function normalizeCityForGeocoding(city: string): string {
 /**
  * Geocode a city name to latitude/longitude using Open-Meteo's free geocoding API.
  * Returns null if the city can't be found.
+ *
+ * When a US state code is provided (e.g. "MO", "IL"), results are
+ * narrowed to that state via Open-Meteo's `admin1` field before the
+ * population-weighted pick. Disambiguates "Saint Louis, Missouri"
+ * from "Saint Louis Park, Minnesota" etc. — historically the highest-
+ * population-first fallback picked correctly for major cities but
+ * silently returned wrong coordinates for smaller cities that share
+ * their name with a major one in another state.
+ * When state is omitted / "OTHER" / unknown code, the original
+ * country-wide population-weighted pick is used (preserves existing
+ * behavior for historical callers).
  */
 export async function geocodeCity(
-  city: string
+  city: string,
+  state?: string | null
 ): Promise<{ latitude: number; longitude: number } | null> {
   if (!city.trim()) return null;
   try {
@@ -32,10 +45,35 @@ export async function geocodeCity(
     );
     if (!res.ok) return null;
     const data = await res.json();
-    const results = data.results as Array<{ latitude: number; longitude: number; population?: number }> | undefined;
-    if (!results || results.length === 0) return null;
+    const allResults = data.results as
+      | Array<{
+          latitude: number;
+          longitude: number;
+          population?: number;
+          admin1?: string;
+        }>
+      | undefined;
+    if (!allResults || allResults.length === 0) return null;
+
+    // State filter — only applied when state is a known US code.
+    // admin1 in Open-Meteo's response is the full state name.
+    let filtered = allResults;
+    if (state && state !== "OTHER") {
+      const fullName = US_STATE_NAMES[state.toUpperCase()];
+      if (fullName) {
+        const byState = allResults.filter(
+          (r) => r.admin1?.toLowerCase() === fullName.toLowerCase()
+        );
+        // Only narrow if we found at least one match — a state filter
+        // that eliminates everything likely means the admin1 label
+        // didn't match (e.g. stale/unusual data). Falling back to the
+        // population-weighted country-wide pick is safer than null.
+        if (byState.length > 0) filtered = byState;
+      }
+    }
+
     // Pick highest-population match — avoids small towns over major cities
-    const best = results.reduce((a, b) =>
+    const best = filtered.reduce((a, b) =>
       (b.population ?? 0) > (a.population ?? 0) ? b : a
     );
     return { latitude: best.latitude, longitude: best.longitude };
@@ -45,17 +83,23 @@ export async function geocodeCity(
 }
 
 /**
- * Given a city and date, resolve coordinates and return the weather classification.
- * Returns null if geocoding fails or weather is unavailable (e.g. > 16 days out).
- * Uses Supabase client for weather_cache reads/writes.
+ * Given a city, state, and date, resolve coordinates and return the
+ * weather classification. Returns null if geocoding fails or weather
+ * is unavailable (e.g. > 16 days out). Uses Supabase client for
+ * weather_cache reads/writes.
+ *
+ * state is optional for backward compatibility, but callers from the
+ * event save path should always provide it — the state filter inside
+ * geocodeCity is what makes weather classification reliable.
  */
 export async function autoClassifyWeather(
   city: string,
   date: string,
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  supabase: any
+  supabase: any,
+  state?: string | null
 ): Promise<{ classification: WeatherType; latitude: number; longitude: number } | null> {
-  const coords = await geocodeCity(city);
+  const coords = await geocodeCity(city, state);
   if (!coords) return null;
   const result = await getWeatherForEvent(coords.latitude, coords.longitude, date, supabase);
   if (!result) return null;

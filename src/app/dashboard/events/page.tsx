@@ -37,6 +37,7 @@ async function EventsContent() {
       userId={realUserId}
       businessName={profile?.business_name ?? ""}
       userCity={profile?.city ?? ""}
+      userState={profile?.state ?? ""}
     />
   );
 }

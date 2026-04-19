@@ -4,6 +4,7 @@ import { getAdminUser } from "@/lib/admin";
 import { logAdminAction } from "@/lib/admin-audit";
 import { recalculateForUserWithClient } from "@/lib/recalculate-service";
 import { autoClassifyWeather } from "@/lib/weather";
+import { canonicalizeCity } from "@/lib/city-normalize";
 import type { EventFormData } from "@/app/dashboard/events/actions";
 
 // PATCH /api/admin/events/[eventId]
@@ -76,28 +77,47 @@ export async function PATCH(
   const changedFields: string[] = [];
   for (const [key, value] of Object.entries(formData)) {
     if (value === undefined) continue;
-    const normalized = value === "" ? null : value;
+    let normalized: unknown = value === "" ? null : value;
+    // Canonicalize city at write time — same treatment as the
+    // user-facing action. "St. Louis" and "Saint Louis" must land on
+    // the same stored form so aggregation/comparison agrees downstream.
+    if (key === "city" && typeof normalized === "string") {
+      const canonical = canonicalizeCity(normalized);
+      normalized = canonical || null;
+    }
     if ((current as Record<string, unknown>)[key] !== normalized) {
       updateData[key] = normalized;
       changedFields.push(key);
     }
   }
 
-  // Weather auto-classify: same trigger as the user action — if city
-  // or date changed and weather wasn't explicitly set, try to re-derive.
+  // Weather auto-classify: same trigger as the user action — if city,
+  // state, or date changed and weather wasn't explicitly set, try to
+  // re-derive. State is read from the update payload if present,
+  // otherwise from the current row.
   const cityChanged = "city" in updateData;
+  const stateChanged = "state" in updateData;
   const dateChanged = "event_date" in updateData;
   const weatherExplicit = "event_weather" in updateData;
-  if ((cityChanged || dateChanged) && !weatherExplicit) {
+  if ((cityChanged || stateChanged || dateChanged) && !weatherExplicit) {
     const resolvedCity =
-      (formData.city as string | undefined) ??
+      (updateData.city as string | null | undefined) ??
       (current as { city: string | null }).city;
     const resolvedDate =
       (formData.event_date as string | undefined) ??
       (current as { event_date: string }).event_date;
+    const resolvedState =
+      (formData.state as string | undefined) ??
+      (current as { state: string | null }).state ??
+      null;
     if (resolvedCity && resolvedDate) {
       try {
-        const wx = await autoClassifyWeather(resolvedCity, resolvedDate, service);
+        const wx = await autoClassifyWeather(
+          resolvedCity,
+          resolvedDate,
+          service,
+          resolvedState
+        );
         if (wx) {
           updateData.event_weather = wx.classification;
           if (!formData.latitude && !(current as { latitude: number | null }).latitude) {

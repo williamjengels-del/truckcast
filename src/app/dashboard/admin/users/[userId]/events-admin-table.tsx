@@ -44,6 +44,8 @@ type SortDir = "asc" | "desc";
 interface Props {
   initialEvents: Event[];
   businessName: string;
+  /** Target user's profile state, for EventForm's state dropdown sort. */
+  profileState?: string;
 }
 
 function formatDate(iso: string | null): string {
@@ -116,7 +118,16 @@ function compareEvents(a: Event, b: Event, field: SortField, dir: SortDir): numb
   return (order(a.anomaly_flag) - order(b.anomaly_flag)) * mult;
 }
 
-export function EventsAdminTable({ initialEvents, businessName }: Props) {
+export function EventsAdminTable({ initialEvents, businessName, profileState }: Props) {
+  // Distinct states this user's events have used — float to top of
+  // EventForm's dropdown below the target's profile state.
+  const recentStates = useMemo(() => {
+    const seen = new Set<string>();
+    for (const e of initialEvents) {
+      if (e.state) seen.add(e.state);
+    }
+    return Array.from(seen);
+  }, [initialEvents]);
   const router = useRouter();
   const [events, setEvents] = useState<Event[]>(initialEvents);
   const [editing, setEditing] = useState<Event | null>(null);
@@ -277,7 +288,9 @@ export function EventsAdminTable({ initialEvents, businessName }: Props) {
                     {e.event_type ?? "—"}
                   </td>
                   <td className="px-4 py-2 text-muted-foreground">
-                    {e.city ?? e.location ?? "—"}
+                    {e.city
+                      ? (e.state ? `${e.city}, ${e.state}` : e.city)
+                      : e.location ?? "—"}
                   </td>
                   <td className="px-4 py-2 text-right font-mono">
                     {formatUsd(e.net_sales)}
@@ -336,6 +349,8 @@ export function EventsAdminTable({ initialEvents, businessName }: Props) {
         onSubmit={handleSave}
         initialData={editing}
         title={editing ? `Edit ${editing.event_name}` : "Edit event"}
+        profileState={profileState}
+        recentStates={recentStates}
       />
     </>
   );

@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { revalidatePath } from "next/cache";
 import { recalculateForUser } from "@/lib/recalculate";
 import { autoClassifyWeather } from "@/lib/weather";
+import { canonicalizeCity } from "@/lib/city-normalize";
 import type { Event } from "@/lib/database.types";
 
 export type EventFormData = {
@@ -14,6 +15,7 @@ export type EventFormData = {
   setup_time?: string;
   location?: string;
   city?: string;
+  state?: string;
   city_area?: string;
   latitude?: number;
   longitude?: number;
@@ -56,20 +58,31 @@ export async function createEvent(formData: EventFormData) {
     is_private: formData.is_private ?? false,
   };
 
-  // Only include optional fields if they have values
+  // Only include optional fields if they have values.
+  // City is canonicalized at write time so downstream aggregation
+  // compares against a stable form regardless of whether the operator
+  // typed "St. Louis" or "Saint Louis". See src/lib/city-normalize.ts.
+  const canonicalCity = canonicalizeCity(formData.city);
   if (formData.start_time) insertData.start_time = formData.start_time;
   if (formData.end_time) insertData.end_time = formData.end_time;
   if (formData.setup_time) insertData.setup_time = formData.setup_time;
   if (formData.location) insertData.location = formData.location;
-  if (formData.city) insertData.city = formData.city;
+  if (canonicalCity) insertData.city = canonicalCity;
+  if (formData.state) insertData.state = formData.state;
   if (formData.city_area) insertData.city_area = formData.city_area;
   if (formData.latitude) insertData.latitude = formData.latitude;
   if (formData.longitude) insertData.longitude = formData.longitude;
 
-  // Auto-geocode + classify weather when city is provided and weather not manually set
-  if (formData.city && !formData.event_weather) {
+  // Auto-geocode + classify weather when city is provided and weather not manually set.
+  // State (when present) disambiguates the geocoding pick.
+  if (canonicalCity && !formData.event_weather) {
     try {
-      const wx = await autoClassifyWeather(formData.city, formData.event_date, supabase);
+      const wx = await autoClassifyWeather(
+        canonicalCity,
+        formData.event_date,
+        supabase,
+        formData.state ?? null
+      );
       if (wx) {
         insertData.event_weather = wx.classification;
         if (!formData.latitude) insertData.latitude = wx.latitude;
@@ -140,22 +153,38 @@ export async function updateEvent(id: string, formData: Partial<EventFormData>) 
     }
   }
 
-  // Auto-geocode + classify weather when city or date changed and weather not manually set
-  const newCity = formData.city;
+  // Canonicalize city at write time if it's in the update payload.
+  if ("city" in formData && formData.city !== undefined) {
+    const canonical = canonicalizeCity(formData.city);
+    updateData.city = canonical || null;
+  }
+
+  // Auto-geocode + classify weather when city / state / date change and
+  // weather not manually set. State is read from the update payload
+  // when changing, or the current event row when unchanged — so a
+  // city-only edit still benefits from the existing state's
+  // disambiguation.
+  const newCity = updateData.city as string | null | undefined;
   const newDate = formData.event_date;
-  if ((newCity || newDate) && !formData.event_weather) {
-    // Fetch current event to fill in missing city/date if only one changed
+  const newState = formData.state;
+  if ((newCity !== undefined || newDate || newState !== undefined) && !formData.event_weather) {
     const { data: current } = await supabase
       .from("events")
-      .select("city, event_date, latitude, longitude")
+      .select("city, state, event_date, latitude, longitude")
       .eq("id", id)
       .eq("user_id", user.id)
       .single();
-    const resolvedCity = newCity || current?.city;
-    const resolvedDate = newDate || current?.event_date;
+    const resolvedCity = newCity ?? current?.city;
+    const resolvedDate = newDate ?? current?.event_date;
+    const resolvedState = newState ?? current?.state ?? null;
     if (resolvedCity && resolvedDate) {
       try {
-        const wx = await autoClassifyWeather(resolvedCity, resolvedDate, supabase);
+        const wx = await autoClassifyWeather(
+          resolvedCity,
+          resolvedDate,
+          supabase,
+          resolvedState
+        );
         if (wx) {
           updateData.event_weather = wx.classification;
           if (!formData.latitude && !current?.latitude) updateData.latitude = wx.latitude;

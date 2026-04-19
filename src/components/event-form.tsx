@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -20,7 +20,15 @@ import {
 } from "@/components/ui/dialog";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
-import { EVENT_TYPES, FEE_TYPES, ANOMALY_FLAGS, CANCELLATION_REASONS } from "@/lib/constants";
+import {
+  EVENT_TYPES,
+  FEE_TYPES,
+  ANOMALY_FLAGS,
+  CANCELLATION_REASONS,
+  US_STATES,
+  US_STATE_NAMES,
+  OTHER_STATE,
+} from "@/lib/constants";
 import type { Event, WeatherType } from "@/lib/database.types";
 import type { EventFormData } from "@/app/dashboard/events/actions";
 import { classifyWeather, normalizeCityForGeocoding } from "@/lib/weather";
@@ -42,6 +50,20 @@ interface EventFormProps {
   onSubmit: (data: EventFormData) => Promise<void>;
   initialData?: Event | null;
   title?: string;
+  /**
+   * Operator's profile state code (e.g. "MO"). Floats to the top of
+   * the state dropdown as a convenience; NOT used as a default value
+   * for the field. Border-state operators (MO/IL cross-traffic) would
+   * be mis-saved by a silent default.
+   */
+  profileState?: string | null;
+  /**
+   * State codes recently used by this operator's events, in any
+   * order. Pinned above the alphabetical list after profileState.
+   * Empty/undefined is fine — the dropdown still renders the full
+   * alphabetical list.
+   */
+  recentStates?: string[];
 }
 
 export function EventForm({
@@ -50,6 +72,8 @@ export function EventForm({
   onSubmit,
   initialData,
   title = "Add Event",
+  profileState,
+  recentStates = [],
 }: EventFormProps) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -78,6 +102,10 @@ export function EventForm({
 
   // Weather auto-suggest
   const [cityValue, setCityValue] = useState<string>(initialData?.city ?? "");
+  // state: edit mode preloads from the event; create mode starts empty
+  // and requires operator to pick explicitly (no profile-state default —
+  // border-state food trucks would be mis-saved by a silent default).
+  const [stateValue, setStateValue] = useState<string>(initialData?.state ?? "");
   const [dateValue, setDateValue] = useState<string>(initialData?.event_date ?? "");
   const [weatherValue, setWeatherValue] = useState<string>(initialData?.event_weather ?? "");
   const [weatherSuggested, setWeatherSuggested] = useState<boolean>(false);
@@ -87,7 +115,7 @@ export function EventForm({
   const [suggestedLon, setSuggestedLon] = useState<number | null>(initialData?.longitude ?? null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const fetchWeatherSuggestion = useCallback(async (city: string, date: string) => {
+  const fetchWeatherSuggestion = useCallback(async (city: string, date: string, state: string) => {
     if (!city.trim() || !date) return;
     setWeatherFetching(true);
     try {
@@ -97,11 +125,25 @@ export function EventForm({
       );
       if (!geoRes.ok) return;
       const geoData = await geoRes.json();
-      const geoResults: Array<{ latitude: number; longitude: number; name: string; admin1?: string; population?: number }> = geoData.results ?? [];
-      if (geoResults.length === 0) return;
+      const allResults: Array<{ latitude: number; longitude: number; name: string; admin1?: string; population?: number }> = geoData.results ?? [];
+      if (allResults.length === 0) return;
+
+      // State filter — narrow to the chosen state's admin1 before the
+      // population-weighted pick. Mirrors the server-side geocodeCity
+      // logic; disambiguates "Saint Louis, MO" vs "Saint Louis Park, MN".
+      let candidates = allResults;
+      if (state && state !== OTHER_STATE) {
+        const fullName = US_STATE_NAMES[state];
+        if (fullName) {
+          const byState = allResults.filter(
+            (r) => r.admin1?.toLowerCase() === fullName.toLowerCase()
+          );
+          if (byState.length > 0) candidates = byState;
+        }
+      }
 
       // Pick highest-population match to prefer major cities over small towns
-      const result = geoResults.reduce((a, b) => ((b.population ?? 0) > (a.population ?? 0) ? b : a));
+      const result = candidates.reduce((a, b) => ((b.population ?? 0) > (a.population ?? 0) ? b : a));
 
       const lat: number = result.latitude;
       const lon: number = result.longitude;
@@ -173,6 +215,7 @@ export function EventForm({
     setLaborCost(initialData?.labor_cost ?? "");
     setOtherCosts(initialData?.other_costs ?? "");
     setCityValue(initialData?.city ?? "");
+    setStateValue(initialData?.state ?? "");
     setDateValue(initialData?.event_date ?? "");
     setWeatherValue(initialData?.event_weather ?? "");
     setWeatherSuggested(false);
@@ -192,13 +235,13 @@ export function EventForm({
     if (debounceRef.current) clearTimeout(debounceRef.current);
     if (cityValue && dateValue) {
       debounceRef.current = setTimeout(() => {
-        fetchWeatherSuggestion(cityValue, dateValue);
+        fetchWeatherSuggestion(cityValue, dateValue, stateValue);
       }, 800);
     }
     return () => {
       if (debounceRef.current) clearTimeout(debounceRef.current);
     };
-  }, [cityValue, dateValue, open, fetchWeatherSuggestion]);
+  }, [cityValue, stateValue, dateValue, open, fetchWeatherSuggestion]);
 
   function toggleAdvancedMode() {
     setAdvancedMode((prev) => {
@@ -228,10 +271,40 @@ export function EventForm({
 
   const afterFeeAmount = calcAfterFee();
 
+  // Dropdown sort order: profile state first, then recently-used,
+  // then alphabetical rest, then "Other/International" last.
+  // Deduplicates — a state pinned by profile won't also appear in the
+  // recent block or the alphabetical block.
+  const stateOptions = useMemo(() => {
+    const pinned: string[] = [];
+    const seen = new Set<string>();
+    if (profileState && US_STATES.includes(profileState)) {
+      pinned.push(profileState);
+      seen.add(profileState);
+    }
+    for (const s of recentStates) {
+      if (US_STATES.includes(s) && !seen.has(s)) {
+        pinned.push(s);
+        seen.add(s);
+      }
+    }
+    const rest = US_STATES.filter((s) => !seen.has(s)).sort();
+    return { pinned, rest };
+  }, [profileState, recentStates]);
+
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setLoading(true);
     setError(null);
+
+    // State is required — Commit A (location data layer). Apply to both
+    // create and edit flows. For existing state-less events the
+    // operator must pick a value at edit time (Option B).
+    if (!stateValue) {
+      setError("State is required. Pick a US state or Other/International.");
+      setLoading(false);
+      return;
+    }
 
     const form = new FormData(e.currentTarget);
     const data: EventFormData = {
@@ -242,6 +315,7 @@ export function EventForm({
       setup_time: (form.get("setup_time") as string) || undefined,
       location: (form.get("location") as string) || undefined,
       city: cityValue || (form.get("city") as string) || undefined,
+      state: stateValue,
       city_area: (form.get("city_area") as string) || undefined,
       booked: form.get("booked") === "true",
       is_private: form.get("is_private") === "true",
@@ -390,20 +464,60 @@ export function EventForm({
                   </Select>
                 </div>
               )}
-              <div className="col-span-2 space-y-2">
-                <Label htmlFor="city">City</Label>
-                <Input
-                  id="city"
-                  name="city"
-                  value={cityValue}
-                  onChange={(e) => {
-                    setCityValue(e.target.value);
-                    setWeatherSuggested(false);
-                    setWeatherBadge(null);
-                  }}
-                  placeholder="St. Louis"
-                />
-                <p className="text-xs text-muted-foreground">Used for weather adjustments and local pattern matching</p>
+              <div className="col-span-2 grid grid-cols-3 gap-3">
+                <div className="col-span-2 space-y-2">
+                  <Label htmlFor="city">City</Label>
+                  <Input
+                    id="city"
+                    name="city"
+                    value={cityValue}
+                    onChange={(e) => {
+                      setCityValue(e.target.value);
+                      setWeatherSuggested(false);
+                      setWeatherBadge(null);
+                    }}
+                    placeholder="Enter city"
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Used for weather adjustments and local pattern matching.
+                  </p>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="state">
+                    State <span className="text-destructive">*</span>
+                  </Label>
+                  <Select
+                    value={stateValue}
+                    onValueChange={(v) => {
+                      setStateValue(v ?? "");
+                      setWeatherSuggested(false);
+                      setWeatherBadge(null);
+                    }}
+                  >
+                    <SelectTrigger id="state">
+                      <SelectValue placeholder="Select state…" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {stateOptions.pinned.length > 0 && (
+                        <>
+                          {stateOptions.pinned.map((code) => (
+                            <SelectItem key={`pinned-${code}`} value={code}>
+                              {code} — {US_STATE_NAMES[code]}
+                            </SelectItem>
+                          ))}
+                          <div className="my-1 border-t" />
+                        </>
+                      )}
+                      {stateOptions.rest.map((code) => (
+                        <SelectItem key={code} value={code}>
+                          {code} — {US_STATE_NAMES[code]}
+                        </SelectItem>
+                      ))}
+                      <div className="my-1 border-t" />
+                      <SelectItem value={OTHER_STATE}>Other / International</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
               </div>
               {/* Show net sales in simple mode only if past event */}
               {(!advancedMode && isPastEvent) || advancedMode ? (

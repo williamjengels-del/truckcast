@@ -8,12 +8,23 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { TruckIcon } from "lucide-react";
+import { US_STATES, US_STATE_NAMES, OTHER_STATE } from "@/lib/constants";
 
 export default function SignupPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [businessName, setBusinessName] = useState("");
+  // Operator's home state — required. Used as the default pin at the
+  // top of EventForm's state dropdown for event creation later.
+  const [profileState, setProfileState] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
@@ -24,6 +35,12 @@ export default function SignupPage() {
     e.preventDefault();
     setLoading(true);
     setError(null);
+
+    if (!profileState) {
+      setError("Please select your home state.");
+      setLoading(false);
+      return;
+    }
 
     const { data, error } = await supabase.auth.signUp({
       email,
@@ -47,7 +64,12 @@ export default function SignupPage() {
       await supabase
         .from("profiles")
         .upsert(
-          { id: data.user.id, business_name: businessName, subscription_tier: "starter" },
+          {
+            id: data.user.id,
+            business_name: businessName,
+            state: profileState,
+            subscription_tier: "starter",
+          },
           { onConflict: "id" }
         );
     }
@@ -123,6 +145,31 @@ export default function SignupPage() {
                 onChange={(e) => setBusinessName(e.target.value)}
                 required
               />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="state">
+                Home State <span className="text-destructive">*</span>
+              </Label>
+              <Select
+                value={profileState}
+                onValueChange={(v) => setProfileState(v ?? "")}
+              >
+                <SelectTrigger id="state">
+                  <SelectValue placeholder="Select your state…" />
+                </SelectTrigger>
+                <SelectContent>
+                  {US_STATES.map((code) => (
+                    <SelectItem key={code} value={code}>
+                      {code} — {US_STATE_NAMES[code]}
+                    </SelectItem>
+                  ))}
+                  <SelectItem value={OTHER_STATE}>Other / International</SelectItem>
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">
+                Where your truck primarily operates. You can tag individual
+                events to other states later.
+              </p>
             </div>
             <div className="space-y-2">
               <Label htmlFor="email">Email</Label>

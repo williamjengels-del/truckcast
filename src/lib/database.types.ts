@@ -64,6 +64,7 @@ export interface Event {
   setup_time: string | null;
   location: string | null;
   city: string | null;
+  state: string | null;
   city_area: string | null;
   latitude: number | null;
   longitude: number | null;

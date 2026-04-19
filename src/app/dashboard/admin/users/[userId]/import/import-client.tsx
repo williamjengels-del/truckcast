@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useMemo, useCallback, useRef } from "react";
+import { US_STATES, US_STATE_NAMES, OTHER_STATE } from "@/lib/constants";
 import {
   buildImportTemplateCsv,
   matchHeader,
@@ -72,6 +73,11 @@ export function ImportEventsClient({ userId, targetLabel }: Props) {
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<ImportResult | null>(null);
   const [isDragging, setIsDragging] = useState(false);
+  // Batch default state — applies to rows that don't bring their own
+  // state from the CSV. Per-row state from a mapped "state" column
+  // wins. Primary use: Nick's reactivation import where 200+ events
+  // are all in MO.
+  const [batchDefaultState, setBatchDefaultState] = useState<string>("");
   const dragCounter = useRef(0);
 
   // ── Upload step ──────────────────────────────────────────────────
@@ -268,6 +274,7 @@ export function ImportEventsClient({ userId, targetLabel }: Props) {
           userId,
           csvText: rawText,
           columnMappings,
+          defaultState: batchDefaultState || undefined,
           dupActions: resolvedDuplicates.map((d) => ({
             event_name: d.event_name,
             event_date: d.event_date,
@@ -381,6 +388,38 @@ export function ImportEventsClient({ userId, targetLabel }: Props) {
             </div>
           </CardHeader>
           <CardContent className="space-y-3">
+            {/* Batch default state — only surfaced when the CSV has no
+                state column mapped. For bulk reactivation imports where
+                all rows share a state (Nick's 200+ events all in MO),
+                this saves per-row editing later. Per-row state from a
+                mapped "state" column always wins. */}
+            {!columnMappings.some((c) => c.assignedField === "state") && (
+              <div className="flex items-center justify-between gap-3 flex-wrap rounded-md border bg-muted/30 px-3 py-2 mb-2">
+                <div className="text-xs text-muted-foreground max-w-md">
+                  No <code className="font-mono">state</code> column in this CSV.
+                  Pick a default to apply to every imported row.
+                </div>
+                <Select
+                  value={batchDefaultState || "__none__"}
+                  onValueChange={(v) =>
+                    setBatchDefaultState(v === "__none__" ? "" : (v ?? ""))
+                  }
+                >
+                  <SelectTrigger className="w-56">
+                    <SelectValue placeholder="Default state…" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__none__">No default (leave blank)</SelectItem>
+                    {US_STATES.map((code) => (
+                      <SelectItem key={code} value={code}>
+                        {code} — {US_STATE_NAMES[code]}
+                      </SelectItem>
+                    ))}
+                    <SelectItem value={OTHER_STATE}>Other / International</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
             {columnMappings.map((col) => (
               <div key={col.index} className="flex items-center gap-3 text-sm">
                 <div className="w-48 shrink-0">

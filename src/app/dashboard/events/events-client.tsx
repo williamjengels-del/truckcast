@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -92,6 +92,8 @@ interface EventsClientProps {
   userId?: string;
   businessName?: string;
   userCity?: string;
+  /** Operator's profile state code — pinned to top of dropdown, not a default. */
+  userState?: string;
 }
 
 // WMO weather code to icon/label
@@ -118,7 +120,16 @@ function getWeatherIconSmall(code: number): React.ReactNode {
   return <Zap className="h-3 w-3 text-yellow-600" />;
 }
 
-export function EventsClient({ initialEvents, userId = "", businessName = "", userCity = "" }: EventsClientProps) {
+export function EventsClient({ initialEvents, userId = "", businessName = "", userCity = "", userState = "" }: EventsClientProps) {
+  // Distinct state codes used by this operator's events — floats to
+  // top of EventForm's state dropdown after the profile state.
+  const recentStates = useMemo(() => {
+    const seen = new Set<string>();
+    for (const e of initialEvents) {
+      if (e.state) seen.add(e.state);
+    }
+    return Array.from(seen);
+  }, [initialEvents]);
   const [showForm, setShowForm] = useState(false);
   const [editingEvent, setEditingEvent] = useState<Event | null>(null);
   const [duplicatingEvent, setDuplicatingEvent] = useState<Event | null>(null);
@@ -1812,6 +1823,8 @@ export function EventsClient({ initialEvents, userId = "", businessName = "", us
         open={showForm}
         onOpenChange={setShowForm}
         onSubmit={handleCreate}
+        profileState={userState}
+        recentStates={recentStates}
       />
 
       {/* Edit Event Dialog — always mounted so Base UI dialog can open/close correctly */}
@@ -1821,6 +1834,8 @@ export function EventsClient({ initialEvents, userId = "", businessName = "", us
         onSubmit={handleUpdate}
         initialData={editingEvent}
         title="Edit Event"
+        profileState={userState}
+        recentStates={recentStates}
       />
 
       {/* Duplicate Event Dialog — opens a pre-filled create form with cleared sales/dates */}
@@ -1830,6 +1845,8 @@ export function EventsClient({ initialEvents, userId = "", businessName = "", us
         onSubmit={handleCreate}
         initialData={duplicatingEvent}
         title="Duplicate Event"
+        profileState={userState}
+        recentStates={recentStates}
       />
 
       {/* Sales Entry Dialog — always mounted for same reason */}

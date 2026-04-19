@@ -366,6 +366,7 @@ export default async function UserDetailPage({ params }: PageProps) {
           <EventsAdminTable
             initialEvents={recentEvents as Event[]}
             businessName={profile.business_name ?? email ?? ""}
+            profileState={profile.state ?? undefined}
           />
         </CardContent>
       </Card>
