@@ -11,7 +11,9 @@ import { Badge } from "@/components/ui/badge";
 import {
   Select,
   SelectContent,
+  SelectGroup,
   SelectItem,
+  SelectLabel,
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
@@ -26,7 +28,19 @@ import {
   Utensils,
   CloudSun,
 } from "lucide-react";
-import { WEATHER_COEFFICIENTS, DAY_OF_WEEK_COEFFICIENTS, EVENT_TYPES, WEATHER_TYPES } from "@/lib/constants";
+import { WEATHER_COEFFICIENTS, DAY_OF_WEEK_COEFFICIENTS, EVENT_TYPES_FOOD_TRUCK, EVENT_TYPES_CATERING, WEATHER_TYPES } from "@/lib/constants";
+
+// Catering-exclusive types — EVENT_TYPES_CATERING minus the cross-mode
+// types (Corporate, Fundraiser/Charity) that legitimately live under
+// food truck for this calculator. The calculator's math is attendance
+// × avg-ticket × conversion-rate, which naturally assumes walk-up
+// service. Corporate and Fundraiser/Charity fit that math under their
+// food-truck interpretation (office picnic, public fundraiser) — so
+// they stay in the food-truck group here. Wedding, Private Party, and
+// Reception are purely catering-mode shapes.
+const CATERING_ONLY_TYPES = EVENT_TYPES_CATERING.filter(
+  (t) => !(EVENT_TYPES_FOOD_TRUCK as readonly string[]).includes(t)
+);
 import type { Event } from "@/lib/database.types";
 import type { CalibratedCoefficients } from "@/lib/forecast-engine";
 
@@ -231,25 +245,50 @@ export function ForecastCalculator({
                   <SelectTrigger>
                     <SelectValue placeholder="Select event type" />
                   </SelectTrigger>
-                  <SelectContent>
-                    {EVENT_TYPES.map((t) => (
-                      <SelectItem key={t} value={t}>
-                        {/* Name + compact rate badge. Dropped the
-                            "buy rate" suffix + tightened gap-8 → gap-4
-                            so the new longer labels (Private Party,
-                            Reception, Community/Neighborhood) don't
-                            truncate in the Select popover width. The
-                            info line below the Select still spells out
-                            "X% estimated attendee buy rate" once an
-                            option is picked, so context isn't lost. */}
-                        <div className="flex items-center justify-between w-full gap-4">
-                          <span>{t}</span>
-                          <span className="text-xs text-muted-foreground shrink-0">
-                            ~{Math.round((CONVERSION_RATES[t] ?? 0.3) * 100)}%
-                          </span>
-                        </div>
-                      </SelectItem>
-                    ))}
+                  {/* w-auto + min-w-(--anchor-width) lets the popover
+                      grow beyond the trigger width when content
+                      demands it. shadcn's default is w-(--anchor-width)
+                      which locks popover to trigger width and, combined
+                      with overflow-x-hidden, clips the longer labels
+                      (Community/Neighborhood, Fundraiser/Charity,
+                      Private Party, Reception). Surfaced via Julian's
+                      Commit D smoke test. */}
+                  <SelectContent className="w-auto min-w-(--anchor-width)">
+                    {/* Grouped by mode so the operator can see at a
+                        glance which types are food-truck-walk-up shapes
+                        vs catering shapes. Corporate and Fundraiser/
+                        Charity live under Food truck here because the
+                        calculator's conversion-rate math fits their
+                        walk-up interpretation (office picnic, public
+                        fundraiser); they'd also be valid catering
+                        types in the event form, which uses different
+                        per-mode dropdowns. */}
+                    <SelectGroup>
+                      <SelectLabel>Food truck events</SelectLabel>
+                      {EVENT_TYPES_FOOD_TRUCK.map((t) => (
+                        <SelectItem key={t} value={t}>
+                          <div className="flex items-center justify-between w-full gap-6 whitespace-nowrap">
+                            <span>{t}</span>
+                            <span className="text-xs text-muted-foreground shrink-0">
+                              ~{Math.round((CONVERSION_RATES[t] ?? 0.3) * 100)}%
+                            </span>
+                          </div>
+                        </SelectItem>
+                      ))}
+                    </SelectGroup>
+                    <SelectGroup>
+                      <SelectLabel>Catering events</SelectLabel>
+                      {CATERING_ONLY_TYPES.map((t) => (
+                        <SelectItem key={t} value={t}>
+                          <div className="flex items-center justify-between w-full gap-6 whitespace-nowrap">
+                            <span>{t}</span>
+                            <span className="text-xs text-muted-foreground shrink-0">
+                              ~{Math.round((CONVERSION_RATES[t] ?? 0.3) * 100)}%
+                            </span>
+                          </div>
+                        </SelectItem>
+                      ))}
+                    </SelectGroup>
                   </SelectContent>
                 </Select>
                 {eventType && (
