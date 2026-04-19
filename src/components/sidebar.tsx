@@ -10,6 +10,13 @@ import { Button } from "@/components/ui/button";
 import { navItems } from "@/lib/nav-items";
 import type { SubscriptionTier } from "@/lib/database.types";
 
+// Reads flow through /api/dashboard/sidebar-state (Commit 5c-iv) so
+// the sidebar automatically shows the target's state during admin
+// impersonation. Sign-out still uses the direct Supabase client —
+// it's an auth operation, not a table mutation, and it should always
+// sign out the REAL session (the admin), never the impersonation
+// target.
+
 export function Sidebar() {
   const pathname = usePathname();
   const router = useRouter();
@@ -20,38 +27,24 @@ export function Sidebar() {
 
   useEffect(() => {
     async function load() {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
-
-      const [profileRes, unloggedRes] = await Promise.all([
-        supabase.from("profiles").select("subscription_tier, owner_user_id").eq("id", user.id).single(),
-        supabase
-          .from("events")
-          .select("id, event_mode, invoice_revenue, anomaly_flag, cancellation_reason")
-          .eq("user_id", user.id)
-          .eq("booked", true)
-          .is("net_sales", null)
-          .is("cancellation_reason", null)
-          .neq("fee_type", "pre_settled")
-          .lt("event_date", new Date().toISOString().split("T")[0]),
-      ]);
-
-      if (profileRes.data) {
-        setTier(profileRes.data.subscription_tier);
-        setIsManager(!!profileRes.data.owner_user_id);
+      try {
+        const res = await fetch("/api/dashboard/sidebar-state");
+        if (!res.ok) return;
+        const data = (await res.json()) as {
+          subscription_tier: SubscriptionTier;
+          is_manager: boolean;
+          unlogged_count: number;
+        };
+        setTier(data.subscription_tier);
+        setIsManager(data.is_manager);
+        setUnloggedCount(data.unlogged_count);
+      } catch {
+        // Non-fatal — sidebar renders with default state. A real
+        // network outage surfaces elsewhere in the UI.
       }
-
-      // Mirror the Needs Attention tab filter exactly:
-      // exclude catering with invoice revenue, and disrupted events
-      const unloggedEvents = (unloggedRes.data ?? []).filter(
-        (e) =>
-          !(e.event_mode === "catering" && (e.invoice_revenue ?? 0) > 0) &&
-          e.anomaly_flag !== "disrupted"
-      );
-      setUnloggedCount(unloggedEvents.length);
     }
     load();
-  }, [supabase]);
+  }, []);
 
   async function handleSignOut() {
     await supabase.auth.signOut();

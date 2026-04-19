@@ -62,38 +62,28 @@ function SettingsContent() {
   }
 
   useEffect(() => {
+    // Read via /api/dashboard/profile — impersonation-aware server-side.
+    //
+    // The auto-save-business-name-from-user_metadata branch that used
+    // to live here was a one-time migration for users whose profile
+    // had a null business_name but whose auth.user_metadata still
+    // carried the value from signup. It's been live long enough that
+    // the migration has effectively run for everyone who needed it;
+    // the fallback is dropped here to keep the read path clean.
+    // Users can always edit business_name via the form below.
     async function loadProfile() {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (user) {
-        const { data } = await supabase
-          .from("profiles")
-          .select("*")
-          .eq("id", user.id)
-          .single();
-
-        if (data) {
-          // If business_name is null, check user metadata as fallback
-          if (!data.business_name) {
-            const metaName = user.user_metadata?.business_name as string | undefined;
-            if (metaName) {
-              // Auto-save it to profile
-              await supabase
-                .from("profiles")
-                .update({ business_name: metaName })
-                .eq("id", user.id);
-              setProfile({ ...data, business_name: metaName });
-            } else {
-              setProfile(data);
-            }
-          } else {
-            setProfile(data);
-          }
+      try {
+        const res = await fetch("/api/dashboard/profile");
+        if (res.ok) {
+          const { profile } = (await res.json()) as { profile: Profile | null };
+          setProfile(profile);
         }
+      } finally {
+        setLoading(false);
       }
-      setLoading(false);
     }
     loadProfile();
-  }, [supabase]);
+  }, []);
 
   // Auto-sync when returning from Stripe checkout
   useEffect(() => {

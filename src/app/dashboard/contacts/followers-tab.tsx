@@ -1,53 +1,39 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { createClient } from "@/lib/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Users, Bell } from "lucide-react";
 import type { FollowSubscriber, Profile } from "@/lib/database.types";
 
+// Reads via /api/dashboard/followers. The endpoint bundles profile +
+// active subscribers into a single round-trip and gates the subscriber
+// list on premium tier server-side — non-premium accounts never see
+// the list.
+
 export function FollowersTab() {
   const [subscribers, setSubscribers] = useState<FollowSubscriber[]>([]);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [loading, setLoading] = useState(true);
-  const supabase = createClient();
 
   useEffect(() => {
     async function load() {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-      if (!user) {
+      try {
+        const res = await fetch("/api/dashboard/followers");
+        if (res.ok) {
+          const data = (await res.json()) as {
+            profile: Profile | null;
+            followers: FollowSubscriber[];
+          };
+          setProfile(data.profile);
+          setSubscribers(data.followers);
+        }
+      } finally {
         setLoading(false);
-        return;
       }
-
-      const { data: profileData } = await supabase
-        .from("profiles")
-        .select("*")
-        .eq("id", user.id)
-        .single();
-
-      setProfile(profileData);
-
-      if (profileData?.subscription_tier !== "premium") {
-        setLoading(false);
-        return;
-      }
-
-      const { data: subs } = await supabase
-        .from("follow_subscribers")
-        .select("*")
-        .eq("truck_user_id", user.id)
-        .is("unsubscribed_at", null)
-        .order("subscribed_at", { ascending: false });
-
-      setSubscribers(subs || []);
-      setLoading(false);
     }
     load();
-  }, [supabase]);
+  }, []);
 
   if (loading) {
     return (

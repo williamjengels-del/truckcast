@@ -3,6 +3,7 @@
 import { Suspense, useState, useEffect, useCallback } from "react";
 import { useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
+import { useImpersonation } from "@/components/impersonation-context";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -31,9 +32,15 @@ export function PosTab() {
 }
 
 function PosSettingsContent() {
+  // userId for the Toast sync-email address comes from impersonation
+  // context — effective id, so during impersonation we show the
+  // target's sync+<token>@vendcast.co address (which is where their
+  // Cloudflare worker forwards emails).
+  const { effectiveUserId } = useImpersonation();
+  const userId = effectiveUserId;
+
   const [connections, setConnections] = useState<PosConnection[]>([]);
   const [profile, setProfile] = useState<Profile | null>(null);
-  const [userId, setUserId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState<PosProvider | null>(null);
   const [disconnecting, setDisconnecting] = useState<PosProvider | null>(null);
@@ -41,41 +48,44 @@ function PosSettingsContent() {
     Record<string, LocationSelection[]>
   >({});
   const searchParams = useSearchParams();
+
+  // Direct Supabase client retained for mutations (disconnect,
+  // selected_location_ids update). 5b proxy block prevents these
+  // from running during impersonation.
   const supabase = createClient();
 
   const success = searchParams.get("success");
   const error = searchParams.get("error");
 
   const loadData = useCallback(async () => {
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    if (!user) return;
-
-    setUserId(user.id);
-
-    const [{ data: profileData }, { data: connectionsData }] =
-      await Promise.all([
-        supabase.from("profiles").select("*").eq("id", user.id).single(),
-        supabase.from("pos_connections").select("*").eq("user_id", user.id),
+    try {
+      const [profileRes, connectionsRes] = await Promise.all([
+        fetch("/api/dashboard/profile"),
+        fetch("/api/dashboard/pos-connections"),
       ]);
+      const profileData = profileRes.ok
+        ? ((await profileRes.json()) as { profile: Profile | null }).profile
+        : null;
+      const connectionsData = connectionsRes.ok
+        ? ((await connectionsRes.json()) as { connections: PosConnection[] }).connections
+        : [];
 
-    setProfile(profileData as Profile | null);
-    const conns = (connectionsData ?? []) as PosConnection[];
-    setConnections(conns);
+      setProfile(profileData);
+      setConnections(connectionsData);
 
-    // Build location selections map
-    const selections: Record<string, LocationSelection[]> = {};
-    for (const conn of conns) {
-      selections[conn.provider] = conn.location_ids.map((id) => ({
-        id,
-        selected: conn.selected_location_ids.includes(id),
-      }));
+      // Build location selections map
+      const selections: Record<string, LocationSelection[]> = {};
+      for (const conn of connectionsData) {
+        selections[conn.provider] = conn.location_ids.map((id) => ({
+          id,
+          selected: conn.selected_location_ids.includes(id),
+        }));
+      }
+      setLocationSelections(selections);
+    } finally {
+      setLoading(false);
     }
-    setLocationSelections(selections);
-
-    setLoading(false);
-  }, [supabase]);
+  }, []);
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect

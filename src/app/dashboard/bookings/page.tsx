@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { createClient } from "@/lib/supabase/client";
+import { useImpersonation } from "@/components/impersonation-context";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -23,33 +24,37 @@ const STATUS_COLORS: Record<BookingRequest["status"], string> = {
 };
 
 export default function BookingsPage() {
-  const [userId, setUserId] = useState<string | null>(null);
+  // userId comes from impersonation context — the effective user id.
+  // During impersonation this is the target's id so copyBookingLink()
+  // produces the target's booking URL (correct — admin wants to see
+  // what the target's customers see).
+  const { effectiveUserId } = useImpersonation();
+  const userId = effectiveUserId;
+
   const [requests, setRequests] = useState<BookingRequest[]>([]);
   const [loading, setLoading] = useState(true);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [updatingId, setUpdatingId] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
 
+  // Direct Supabase client retained for the status-update mutation
+  // only. Mutation is blocked by the Commit 5b proxy during
+  // impersonation (expected — admin can't modify target's booking
+  // status under read-only impersonation).
   const supabase = createClient();
 
   const load = useCallback(async () => {
     setLoading(true);
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    if (!user) return;
-
-    setUserId(user.id);
-
-    const { data } = await supabase
-      .from("booking_requests")
-      .select("*")
-      .eq("truck_user_id", user.id)
-      .order("created_at", { ascending: false });
-
-    setRequests((data as BookingRequest[]) ?? []);
-    setLoading(false);
-  }, [supabase]);
+    try {
+      const res = await fetch("/api/dashboard/bookings");
+      if (res.ok) {
+        const data = (await res.json()) as { bookings: BookingRequest[] };
+        setRequests(data.bookings ?? []);
+      }
+    } finally {
+      setLoading(false);
+    }
+  }, []);
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
