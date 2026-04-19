@@ -124,6 +124,19 @@ const STATUS_STYLES: Record<PhaseStatus, string> = {
     "bg-slate-100 text-slate-700 border-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-700",
 };
 
+// Softer tints for the full-card background fill. Same hue family as
+// the pill but lighter so body text stays readable at 14px/15px.
+const CARD_STYLES: Record<PhaseStatus, string> = {
+  SHIPPED:
+    "border-emerald-200 bg-emerald-50 dark:border-emerald-900 dark:bg-emerald-950/30",
+  BUILDING:
+    "border-amber-200 bg-amber-50 dark:border-amber-900 dark:bg-amber-950/30",
+  NEXT:
+    "border-blue-200 bg-blue-50 dark:border-blue-900 dark:bg-blue-950/30",
+  LATER:
+    "border-slate-200 bg-slate-50 dark:border-slate-700 dark:bg-slate-900/50",
+};
+
 function StatusPill({ status }: { status: PhaseStatus }) {
   return (
     <span
@@ -205,7 +218,7 @@ export default function RoadmapPage() {
           {PHASES.map((phase) => (
             <section
               key={phase.label}
-              className="rounded-xl border-2 border-primary/20 bg-primary/5 p-6"
+              className={`rounded-xl border-2 p-6 ${CARD_STYLES[phase.status]}`}
             >
               <div className="flex items-center gap-3 flex-wrap mb-2">
                 <StatusPill status={phase.status} />
