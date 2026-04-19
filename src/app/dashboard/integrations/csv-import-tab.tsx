@@ -386,26 +386,21 @@ export function CsvImportTab() {
       .map((d) => d.existing_event_id);
 
     if (replaceIds.length > 0) {
-      // If replacing most/all events, delete all at once to avoid .in() size limits
-      const allDuplicateIds = resolvedDuplicates.map((d) => d.existing_event_id);
-      const replacingAll = replaceIds.length === allDuplicateIds.length;
-
-      if (replacingAll) {
-        const { error: delError } = await supabase.from("events").delete().eq("user_id", user.id);
+      // ALWAYS delete by specific event ids, chunked. The prior
+      // "replacingAll → delete().eq(user_id)" optimization was a data
+      // loss bug: replacingAll just meant "every DUPLICATE is marked
+      // replace" — NOT "every existing event is a duplicate". If the
+      // user had 100 events and 10 duplicates, choosing "replace all"
+      // wiped all 100. Now always scoped to replaceIds. The .in()
+      // chunk size handles arbitrary counts safely. See Julian's
+      // post-Commit-E smoke test where this path triggered.
+      const CHUNK = 100;
+      for (let i = 0; i < replaceIds.length; i += CHUNK) {
+        const { error: delError } = await supabase.from("events").delete().in("id", replaceIds.slice(i, i + CHUNK));
         if (delError) {
           setImportError(`Delete failed: ${delError.message}`);
           setImporting(false);
           return;
-        }
-      } else {
-        const CHUNK = 100;
-        for (let i = 0; i < replaceIds.length; i += CHUNK) {
-          const { error: delError } = await supabase.from("events").delete().in("id", replaceIds.slice(i, i + CHUNK));
-          if (delError) {
-            setImportError(`Delete failed: ${delError.message}`);
-            setImporting(false);
-            return;
-          }
         }
       }
     }
