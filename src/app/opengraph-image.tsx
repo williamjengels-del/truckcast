@@ -69,8 +69,17 @@ export default function OgImage() {
         </div>
 
         {/* Headline */}
+        {/* display: "contents" satisfies Satori's multi-child-div rule
+            without altering layout. The children here are text + span
+            + text (flowing inline text with a mid-phrase color
+            highlight), so flex would require retrofitting flexWrap +
+            justifyContent to preserve the original appearance. Because
+            Satori accepts "contents" and it's invisible to layout, use
+            it — zero visual risk. See df6ace3 for the earlier Satori
+            fix on the icon routes that used the flex approach. */}
         <div
           style={{
+            display: "contents",
             fontSize: 58,
             fontWeight: 800,
             color: "#fff",
