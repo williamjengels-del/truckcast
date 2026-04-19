@@ -36,6 +36,8 @@ export type AdminAction =
   | "user.import_events"       // Commit 4
   | "user.impersonate_start"   // Commit 5
   | "user.impersonate_end"     // Commit 5
+  | "user.event_edit"          // Commit 9
+  | "user.event_anomaly_flag"  // Commit 9
   // testimonial.*
   | "testimonial.create"
   | "testimonial.update"

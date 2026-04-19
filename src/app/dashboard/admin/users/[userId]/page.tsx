@@ -10,6 +10,8 @@ import { buttonVariants } from "@/components/ui/button-variants";
 import { ChevronLeft, Upload } from "lucide-react";
 import { ImpersonateButton } from "./impersonate-button";
 import { ResetTrialButton } from "./reset-trial-button";
+import { EventsAdminTable } from "./events-admin-table";
+import type { Event } from "@/lib/database.types";
 
 // Auth handled by /dashboard/admin/layout.tsx.
 
@@ -98,9 +100,11 @@ export default async function UserDetailPage({ params }: PageProps) {
   const [profileResult, authResult, recentEventsResult, allEventsResult, auditResult] = await Promise.all([
     service.from("profiles").select("*").eq("id", userId).maybeSingle(),
     service.auth.admin.getUserById(userId),
+    // select("*") — EventForm (reused in the admin edit modal per
+    // Commit 9) needs the full ~25-column Event shape as initialData.
     service
       .from("events")
-      .select("id, event_name, event_date, event_type, net_sales, booked, city, location")
+      .select("*")
       .eq("user_id", userId)
       .order("event_date", { ascending: false })
       .limit(10),
@@ -343,48 +347,13 @@ export default async function UserDetailPage({ params }: PageProps) {
         </CardContent>
       </Card>
 
-      {/* Recent events */}
+      {/* Recent events — Edit + Flag inline per row (Commit 9) */}
       <Card>
         <CardHeader>
           <CardTitle className="text-base">Recent events</CardTitle>
         </CardHeader>
         <CardContent className="p-0">
-          {recentEvents.length === 0 ? (
-            <p className="p-6 text-sm text-muted-foreground">No events yet.</p>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead className="border-b bg-muted/50 text-left">
-                  <tr>
-                    <th className="px-4 py-2 font-medium">Date</th>
-                    <th className="px-4 py-2 font-medium">Event</th>
-                    <th className="px-4 py-2 font-medium">Type</th>
-                    <th className="px-4 py-2 font-medium">Location</th>
-                    <th className="px-4 py-2 font-medium text-right">Net sales</th>
-                    <th className="px-4 py-2 font-medium text-center">Booked</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {recentEvents.map((e) => (
-                    <tr key={e.id} className="border-b last:border-b-0">
-                      <td className="px-4 py-2 whitespace-nowrap">{formatDate(e.event_date)}</td>
-                      <td className="px-4 py-2">{e.event_name ?? "—"}</td>
-                      <td className="px-4 py-2 text-muted-foreground">{e.event_type ?? "—"}</td>
-                      <td className="px-4 py-2 text-muted-foreground">
-                        {e.city ?? e.location ?? "—"}
-                      </td>
-                      <td className="px-4 py-2 text-right font-mono">
-                        {formatUsd(e.net_sales)}
-                      </td>
-                      <td className="px-4 py-2 text-center">
-                        {e.booked === true ? "✓" : e.booked === false ? "✗" : "—"}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
+          <EventsAdminTable initialEvents={recentEvents as Event[]} />
         </CardContent>
       </Card>
 
