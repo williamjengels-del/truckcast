@@ -247,6 +247,7 @@ export function ForecastCalculator({
                   <Label>Expected Attendance <span className="text-destructive">*</span></Label>
                   <Input
                     type="number"
+                    onWheel={(e) => e.currentTarget.blur()}
                     placeholder="e.g. 5000"
                     value={attendance}
                     onChange={(e) => { setAttendance(e.target.value); setCalculated(false); }}
@@ -256,6 +257,7 @@ export function ForecastCalculator({
                   <Label>Avg Ticket Price</Label>
                   <Input
                     type="number"
+                    onWheel={(e) => e.currentTarget.blur()}
                     placeholder="$14 (default)"
                     value={avgTicket}
                     onChange={(e) => { setAvgTicket(e.target.value); setCalculated(false); }}
@@ -268,6 +270,7 @@ export function ForecastCalculator({
                 <Label>Number of Food Trucks at Event</Label>
                 <Input
                   type="number"
+                  onWheel={(e) => e.currentTarget.blur()}
                   min="1"
                   placeholder="1"
                   value={numTrucks}
@@ -351,6 +354,7 @@ export function ForecastCalculator({
                     <Label>{feeType === "percentage" || feeType === "commission_with_minimum" ? "Rate (%)" : "Amount ($)"}</Label>
                     <Input
                       type="number"
+                      onWheel={(e) => e.currentTarget.blur()}
                       placeholder="0"
                       value={feeRate}
                       onChange={(e) => { setFeeRate(e.target.value); setCalculated(false); }}
@@ -362,6 +366,7 @@ export function ForecastCalculator({
                     <Label>Minimum ($)</Label>
                     <Input
                       type="number"
+                      onWheel={(e) => e.currentTarget.blur()}
                       placeholder="0"
                       value={salesMinimum}
                       onChange={(e) => { setSalesMinimum(e.target.value); setCalculated(false); }}

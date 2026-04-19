@@ -175,6 +175,7 @@ export function SalesEntryDialog({
                   id="invoice_revenue"
                   name="invoice_revenue"
                   type="number"
+                  onWheel={(e) => e.currentTarget.blur()}
                   step="0.01"
                   min="0"
                   defaultValue={event.invoice_revenue > 0 ? event.invoice_revenue : ""}
@@ -192,6 +193,7 @@ export function SalesEntryDialog({
                   id="net_sales"
                   name="net_sales"
                   type="number"
+                  onWheel={(e) => e.currentTarget.blur()}
                   step="0.01"
                   min="0"
                   defaultValue={event.net_sales ?? ""}
@@ -211,6 +213,7 @@ export function SalesEntryDialog({
                   id="net_sales"
                   name="net_sales"
                   type="number"
+                  onWheel={(e) => e.currentTarget.blur()}
                   step="0.01"
                   min="0"
                   defaultValue={event.net_sales ?? ""}
@@ -229,6 +232,7 @@ export function SalesEntryDialog({
                   id="invoice_revenue"
                   name="invoice_revenue"
                   type="number"
+                  onWheel={(e) => e.currentTarget.blur()}
                   step="0.01"
                   min="0"
                   defaultValue={event.invoice_revenue > 0 ? event.invoice_revenue : ""}
@@ -296,6 +300,7 @@ export function SalesEntryDialog({
                       id="food_cost"
                       name="food_cost"
                       type="number"
+                      onWheel={(e) => e.currentTarget.blur()}
                       step="0.01"
                       min="0"
                       defaultValue={event.food_cost ?? ""}
@@ -311,6 +316,7 @@ export function SalesEntryDialog({
                       id="labor_cost"
                       name="labor_cost"
                       type="number"
+                      onWheel={(e) => e.currentTarget.blur()}
                       step="0.01"
                       min="0"
                       defaultValue={event.labor_cost ?? ""}
@@ -326,6 +332,7 @@ export function SalesEntryDialog({
                       id="other_costs"
                       name="other_costs"
                       type="number"
+                      onWheel={(e) => e.currentTarget.blur()}
                       step="0.01"
                       min="0"
                       defaultValue={event.other_costs ?? ""}

@@ -261,6 +261,7 @@ export function WhatIfPanel({
                   <Label className="text-xs">Expected Attendance</Label>
                   <Input
                     type="number"
+                    onWheel={(e) => e.currentTarget.blur()}
                     min="0"
                     placeholder="e.g. 5000"
                     value={attendance}
@@ -272,6 +273,7 @@ export function WhatIfPanel({
                   <Label className="text-xs">Avg Ticket Price</Label>
                   <Input
                     type="number"
+                    onWheel={(e) => e.currentTarget.blur()}
                     min="0"
                     step="0.01"
                     placeholder={`$${DEFAULT_TICKET} (default)`}
@@ -289,6 +291,7 @@ export function WhatIfPanel({
                 </Label>
                 <Input
                   type="number"
+                  onWheel={(e) => e.currentTarget.blur()}
                   min="1"
                   placeholder="1"
                   value={numTrucks}
@@ -384,6 +387,7 @@ export function WhatIfPanel({
                       </Label>
                       <Input
                         type="number"
+                        onWheel={(e) => e.currentTarget.blur()}
                         min="0"
                         placeholder="0"
                         value={feeRate}
@@ -396,6 +400,7 @@ export function WhatIfPanel({
                         <Label className="text-xs">Minimum ($)</Label>
                         <Input
                           type="number"
+                          onWheel={(e) => e.currentTarget.blur()}
                           min="0"
                           placeholder="0"
                           value={salesMinimum}

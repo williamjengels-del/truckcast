@@ -545,6 +545,7 @@ export function EventForm({
                     id="net_sales"
                     name="net_sales"
                     type="number"
+                    onWheel={(e) => e.currentTarget.blur()}
                     step="0.01"
                     min="0"
                     value={netSales}
@@ -564,6 +565,7 @@ export function EventForm({
                     id="invoice_revenue"
                     name="invoice_revenue"
                     type="number"
+                    onWheel={(e) => e.currentTarget.blur()}
                     step="0.01"
                     min="0"
                     value={invoiceRevenue}
@@ -684,6 +686,7 @@ export function EventForm({
                       id="expected_attendance"
                       name="expected_attendance"
                       type="number"
+                      onWheel={(e) => e.currentTarget.blur()}
                       min="0"
                       defaultValue={initialData?.expected_attendance ?? ""}
                     />
@@ -695,6 +698,7 @@ export function EventForm({
                       id="other_trucks"
                       name="other_trucks"
                       type="number"
+                      onWheel={(e) => e.currentTarget.blur()}
                       min="0"
                       defaultValue={initialData?.other_trucks ?? ""}
                     />
@@ -736,6 +740,7 @@ export function EventForm({
                       id="fee_rate"
                       name="fee_rate"
                       type="number"
+                      onWheel={(e) => e.currentTarget.blur()}
                       step="0.01"
                       min="0"
                       value={feeRate}
@@ -748,6 +753,7 @@ export function EventForm({
                       id="sales_minimum"
                       name="sales_minimum"
                       type="number"
+                      onWheel={(e) => e.currentTarget.blur()}
                       step="0.01"
                       min="0"
                       value={salesMinimum}
@@ -776,6 +782,7 @@ export function EventForm({
                       id="food_cost"
                       name="food_cost"
                       type="number"
+                      onWheel={(e) => e.currentTarget.blur()}
                       step="0.01"
                       min="0"
                       value={foodCost}
@@ -790,6 +797,7 @@ export function EventForm({
                       id="labor_cost"
                       name="labor_cost"
                       type="number"
+                      onWheel={(e) => e.currentTarget.blur()}
                       step="0.01"
                       min="0"
                       value={laborCost}
@@ -804,6 +812,7 @@ export function EventForm({
                       id="other_costs"
                       name="other_costs"
                       type="number"
+                      onWheel={(e) => e.currentTarget.blur()}
                       step="0.01"
                       min="0"
                       value={otherCosts}

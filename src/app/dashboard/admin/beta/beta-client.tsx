@@ -130,6 +130,7 @@ export function BetaClient() {
               <Label>Number of codes</Label>
               <Input
                 type="number"
+                onWheel={(e) => e.currentTarget.blur()}
                 min={1}
                 max={50}
                 value={count}
@@ -140,6 +141,7 @@ export function BetaClient() {
               <Label>Trial days</Label>
               <Input
                 type="number"
+                onWheel={(e) => e.currentTarget.blur()}
                 min={1}
                 value={trialDays}
                 onChange={(e) => setTrialDays(parseInt(e.target.value) || 60)}
