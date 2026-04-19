@@ -2,7 +2,6 @@ import { createClient as createServiceClient } from "@supabase/supabase-js";
 import Link from "next/link";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { ResetAccountButton } from "./reset-button";
 import { getAdminUser } from "@/lib/admin";
 
 interface RecentProfile {
@@ -220,18 +219,9 @@ export default async function AdminOverviewPage() {
         ))}
       </div>
 
-      {/* Developer Tools */}
-      <Card className="border-destructive/40">
-        <CardHeader>
-          <CardTitle className="text-base">Developer Tools</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-2">
-          <p className="text-sm text-muted-foreground">
-            Wipes all your events, performance data, contacts, and booking requests, then redirects to onboarding. Admin status and subscription tier are preserved.
-          </p>
-          <ResetAccountButton />
-        </CardContent>
-      </Card>
+      {/* "Reset Account" developer tool moved to Settings → Danger Zone
+          in Commit 7. It's a user-facing self-action now, not an admin
+          shortcut — reachable for every user at /dashboard/settings. */}
 
       {/* Recent signups */}
       <Card>

@@ -12,6 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { EmbedWidgetSection } from "@/components/embed-widget-section";
 import { InstallSettingsCard } from "@/components/install-settings-card";
 import { PushNotificationsCard } from "@/components/push-notifications-card";
+import { DangerZoneCard } from "./danger-zone-card";
 import type { Profile } from "@/lib/database.types";
 
 const US_TIMEZONES = [
@@ -313,6 +314,9 @@ function SettingsContent() {
 
       <TeamAccessCard profile={profile} />
       <ManagerInviteCard profile={profile} />
+
+      {/* Destructive actions — keep at the end of the page. */}
+      <DangerZoneCard />
     </div>
   );
 }
