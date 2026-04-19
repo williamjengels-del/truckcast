@@ -193,7 +193,21 @@ export async function POST(req: NextRequest) {
   // a hard-coded "food_truck" fallback; this lets an admin flip it to
   // "catering" for predominantly-catering historical imports.
   const batchDefaultMode = body.defaultMode ?? null;
-  const insertData = rowsToInsert.map((r) => ({
+  const insertData = rowsToInsert.map((r) => {
+    // Resolve event_mode first — fee_type default below depends on it.
+    const resolvedMode: "food_truck" | "catering" =
+      (r.event_mode ?? batchDefaultMode) === "catering" ? "catering" : "food_truck";
+    // Catering rows are almost always pre-settled (operator invoiced
+    // up-front, no walk-up sales to settle). When the CSV doesn't
+    // provide a fee_type, seed "pre_settled" for catering, "none"
+    // otherwise. Explicit CSV values win either way. Mirrors self-
+    // serve behavior in csv-import-tab.tsx.
+    const resolvedFeeType = r.fee_type
+      ? matchFeeType(r.fee_type)
+      : resolvedMode === "catering"
+      ? "pre_settled"
+      : "none";
+    return {
     user_id: userId,
     event_name: r.event_name,
     event_date: r.event_date,
@@ -205,7 +219,7 @@ export async function POST(req: NextRequest) {
     net_sales: r.net_sales ?? null,
     event_type: r.event_type ?? null,
     location: r.location ?? null,
-    fee_type: matchFeeType(r.fee_type ?? ""),
+    fee_type: resolvedFeeType,
     fee_rate: r.fee_rate ?? 0,
     sales_minimum: r.sales_minimum ?? 0,
     forecast_sales: r.forecast_sales ?? null,
@@ -215,16 +229,15 @@ export async function POST(req: NextRequest) {
     anomaly_flag: r.anomaly_flag ?? "normal",
     event_weather: r.weather_type ?? null,
     expected_attendance: r.expected_attendance ?? null,
-    event_mode: ((r.event_mode ?? batchDefaultMode) === "catering"
-      ? "catering"
-      : "food_truck") as "food_truck" | "catering",
+    event_mode: resolvedMode,
     pos_source: "manual" as const,
     // Cost fields skipped when undefined so environments without the
     // cost-columns migration don't 400. Matches self-serve behavior.
     ...(r.food_cost !== undefined ? { food_cost: r.food_cost } : {}),
     ...(r.labor_cost !== undefined ? { labor_cost: r.labor_cost } : {}),
     ...(r.other_costs !== undefined ? { other_costs: r.other_costs } : {}),
-  }));
+    };
+  });
 
   const BATCH_SIZE = 50;
   let inserted = 0;

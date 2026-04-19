@@ -207,6 +207,32 @@ export function ImportEventsClient({ userId, targetLabel }: Props) {
   const validCount = parsedRows.filter((r) => r.valid).length;
   const invalidCount = parsedRows.filter((r) => !r.valid).length;
 
+  // Mode breakdown — mirrors csv-import-tab.tsx. Uses the same
+  // resolution the API insert uses so the preview chip reflects the
+  // actual stored values, not just parser output. See Commit E.
+  const hasModeColumn = columnMappings.some((c) => c.assignedField === "event_mode");
+  const hasTypeColumn = columnMappings.some((c) => c.assignedField === "event_type");
+  const modeBreakdown = useMemo(() => {
+    let ft = 0;
+    let cat = 0;
+    let inferredCat = 0;
+    for (const r of parsedRows) {
+      if (!r.valid) continue;
+      const mode = (r.event_mode ?? batchDefaultMode) === "catering" ? "catering" : "food_truck";
+      if (mode === "catering") {
+        cat += 1;
+        if (!hasModeColumn && r.event_mode === "catering") {
+          inferredCat += 1;
+        }
+      } else {
+        ft += 1;
+      }
+    }
+    return { foodTruck: ft, catering: cat, inferredCatering: inferredCat };
+  }, [parsedRows, batchDefaultMode, hasModeColumn]);
+  const showInferenceSuffix =
+    !hasModeColumn && hasTypeColumn && modeBreakdown.inferredCatering > 0;
+
   async function handleCheckDuplicates() {
     const validRows = parsedRows.filter((r) => r.valid);
     if (validRows.length === 0) {
@@ -519,6 +545,15 @@ export function ImportEventsClient({ userId, targetLabel }: Props) {
                   {" · importing to "}
                   <span className="font-medium">{targetLabel}</span>
                 </p>
+                {/* Mode breakdown — same treatment as self-serve preview.
+                    Renders only when at least one valid row is catering;
+                    pure food-truck imports don't benefit. See Commit E. */}
+                {validCount > 0 && modeBreakdown.catering > 0 && (
+                  <p className="text-xs text-blue-700 dark:text-blue-400 mt-1">
+                    {modeBreakdown.foodTruck} food truck · {modeBreakdown.catering} catering
+                    {showInferenceSuffix && " (auto-classified from event_type)"}
+                  </p>
+                )}
               </div>
               <Button variant="outline" size="sm" onClick={() => setStep("map")}>
                 <ArrowLeft className="h-4 w-4 mr-1" />

@@ -252,6 +252,39 @@ export function CsvImportTab() {
   const validCount = parsedRows.filter((r) => r.valid).length;
   const invalidCount = parsedRows.filter((r) => !r.valid).length;
 
+  // Mode breakdown across VALID rows using the same resolution the
+  // import insert uses: per-row event_mode > batchDefaultMode >
+  // hard-coded "food_truck". Drives the preview-summary chip so the
+  // operator can sanity-check the split before committing. The
+  // "auto-classified from event_type" suffix fires only when the CSV
+  // didn't map an event_mode column AND at least one row landed as
+  // catering via the parser's event_type inference — i.e. the
+  // inference layer actually did work worth surfacing.
+  const hasModeColumn = columnMappings.some((c) => c.assignedField === "event_mode");
+  const hasTypeColumn = columnMappings.some((c) => c.assignedField === "event_type");
+  const modeBreakdown = useMemo(() => {
+    let ft = 0;
+    let cat = 0;
+    let inferredCat = 0;
+    for (const r of parsedRows) {
+      if (!r.valid) continue;
+      const mode = (r.event_mode ?? batchDefaultMode) === "catering" ? "catering" : "food_truck";
+      if (mode === "catering") {
+        cat += 1;
+        if (!hasModeColumn && r.event_mode === "catering") {
+          // event_mode came from the parser's event_type inference
+          // since no event_mode column was mapped.
+          inferredCat += 1;
+        }
+      } else {
+        ft += 1;
+      }
+    }
+    return { foodTruck: ft, catering: cat, inferredCatering: inferredCat };
+  }, [parsedRows, batchDefaultMode, hasModeColumn]);
+  const showInferenceSuffix =
+    !hasModeColumn && hasTypeColumn && modeBreakdown.inferredCatering > 0;
+
   // Count of events that will actually be imported given current duplicate actions
   const dupActionMap = new Map(duplicates.map((d) => [`${d.event_name}|${d.event_date}`, d.action]));
   const importableCount = parsedRows.filter((r) => {
@@ -377,41 +410,54 @@ export function CsvImportTab() {
       }
     }
 
-    const insertData = rowsToInsert.map((r) => ({
-      user_id: user.id,
-      event_name: r.event_name,
-      event_date: r.event_date,
-      start_time: r.start_time ?? null,
-      end_time: r.end_time ?? null,
-      setup_time: r.setup_time ?? null,
-      city: r.city ?? null,
-      // Row state from CSV mapping wins; batch default (set in the
-      // mapping step) fallback. null is fine for historical rows with
-      // no location context — operator fills on next edit.
-      state: r.state ?? batchDefaultState ?? null,
-      net_sales: r.net_sales ?? null,
-      event_type: r.event_type ?? null,
-      location: r.location ?? null,
-      fee_type: matchFeeType(r.fee_type ?? ""),
-      fee_rate: r.fee_rate ?? 0,
-      sales_minimum: r.sales_minimum ?? 0,
-      forecast_sales: r.forecast_sales ?? null,
-      notes: r.notes ?? null,
-      booked: r.booked !== undefined ? r.booked : true, // default true — historical imports are confirmed events
-      event_tier: r.event_tier ?? null,
-      anomaly_flag: r.anomaly_flag ?? "normal",
-      event_weather: r.weather_type ?? null,
-      expected_attendance: r.expected_attendance ?? null,
-      // Per-row event_mode wins; batch default fills rows that didn't
-      // bring one. Hard-coded "food_truck" is the final fallback
-      // (matches the DB default + pre-batchDefaultMode behavior).
-      event_mode: ((r.event_mode ?? batchDefaultMode) === "catering" ? "catering" : "food_truck") as "food_truck" | "catering",
-      pos_source: "manual" as const,
-      // Cost fields — only included when non-null to avoid errors if migration hasn't been applied yet
-      ...(r.food_cost !== undefined ? { food_cost: r.food_cost } : {}),
-      ...(r.labor_cost !== undefined ? { labor_cost: r.labor_cost } : {}),
-      ...(r.other_costs !== undefined ? { other_costs: r.other_costs } : {}),
-    }));
+    const insertData = rowsToInsert.map((r) => {
+      // Resolve event_mode first — downstream defaults (fee_type below)
+      // depend on knowing whether the row lands as catering.
+      const resolvedMode: "food_truck" | "catering" =
+        (r.event_mode ?? batchDefaultMode) === "catering" ? "catering" : "food_truck";
+      // fee_type default per mode: catering rows are almost always
+      // pre-settled (operator is invoiced up-front, no walk-up sales to
+      // settle), so when the CSV doesn't provide a fee_type we seed
+      // "pre_settled" for catering rows. Food-truck rows keep the
+      // pre-existing "none" default. Explicit CSV values still win.
+      const resolvedFeeType = r.fee_type
+        ? matchFeeType(r.fee_type)
+        : resolvedMode === "catering"
+        ? "pre_settled"
+        : "none";
+      return {
+        user_id: user.id,
+        event_name: r.event_name,
+        event_date: r.event_date,
+        start_time: r.start_time ?? null,
+        end_time: r.end_time ?? null,
+        setup_time: r.setup_time ?? null,
+        city: r.city ?? null,
+        // Row state from CSV mapping wins; batch default (set in the
+        // mapping step) fallback. null is fine for historical rows with
+        // no location context — operator fills on next edit.
+        state: r.state ?? batchDefaultState ?? null,
+        net_sales: r.net_sales ?? null,
+        event_type: r.event_type ?? null,
+        location: r.location ?? null,
+        fee_type: resolvedFeeType,
+        fee_rate: r.fee_rate ?? 0,
+        sales_minimum: r.sales_minimum ?? 0,
+        forecast_sales: r.forecast_sales ?? null,
+        notes: r.notes ?? null,
+        booked: r.booked !== undefined ? r.booked : true, // default true — historical imports are confirmed events
+        event_tier: r.event_tier ?? null,
+        anomaly_flag: r.anomaly_flag ?? "normal",
+        event_weather: r.weather_type ?? null,
+        expected_attendance: r.expected_attendance ?? null,
+        event_mode: resolvedMode,
+        pos_source: "manual" as const,
+        // Cost fields — only included when non-null to avoid errors if migration hasn't been applied yet
+        ...(r.food_cost !== undefined ? { food_cost: r.food_cost } : {}),
+        ...(r.labor_cost !== undefined ? { labor_cost: r.labor_cost } : {}),
+        ...(r.other_costs !== undefined ? { other_costs: r.other_costs } : {}),
+      };
+    });
 
     if (insertData.length === 0) {
       setImportError(`Nothing to insert — rowsToInsert was empty. Valid rows: ${validRows.length}, duplicates: ${resolvedDuplicates.length}, actions: ${resolvedDuplicates.map(d => d.action).join(",").slice(0, 100)}`);
@@ -1074,7 +1120,7 @@ export function CsvImportTab() {
           </CardHeader>
           <CardContent className="space-y-4">
             {/* Summary badges */}
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-3 flex-wrap">
               <Badge variant="secondary" className="bg-green-100 text-green-800">
                 {validCount} valid
               </Badge>
@@ -1086,6 +1132,17 @@ export function CsvImportTab() {
               {multiDayCount > 0 && (
                 <Badge variant="secondary" className="bg-purple-100 text-purple-800">
                   {multiDayCount} multi-day rows
+                </Badge>
+              )}
+              {/* Mode breakdown — sanity-check chip so the operator can
+                  verify the food-truck / catering split before committing.
+                  Only rendered when at least one valid row is catering;
+                  a pure food-truck import doesn't benefit from the chip
+                  and the suffix would be empty. */}
+              {validCount > 0 && modeBreakdown.catering > 0 && (
+                <Badge variant="secondary" className="bg-blue-100 text-blue-800">
+                  {modeBreakdown.foodTruck} food truck · {modeBreakdown.catering} catering
+                  {showInferenceSuffix && " (auto-classified from event_type)"}
                 </Badge>
               )}
             </div>

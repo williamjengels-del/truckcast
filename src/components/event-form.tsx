@@ -401,7 +401,18 @@ export function EventForm({
             </button>
             <button
               type="button"
-              onClick={() => setEventMode("catering")}
+              onClick={() => {
+                setEventMode("catering");
+                // Most catering events are pre-settled (operator is
+                // invoiced up-front, no walk-up sales to settle). Seed
+                // that default when the operator hasn't already picked
+                // a fee_type. Guarded to NEW events only — editing an
+                // existing event respects its stored fee_type. Opt (a),
+                // Commit E follow-up. Operator can still change after.
+                if (!initialData && feeType === "none") {
+                  setFeeType("pre_settled");
+                }
+              }}
               className={`flex-1 py-1.5 px-3 rounded-md text-sm font-medium transition-colors ${
                 eventMode === "catering"
                   ? "bg-violet-600 shadow-sm text-white"

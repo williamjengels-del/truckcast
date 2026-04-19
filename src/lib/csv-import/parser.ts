@@ -362,9 +362,16 @@ export function matchFeeType(raw: string): string {
   return mappings[lower] ?? "none";
 }
 
+// Includes the legacy "Private/Catering" value so CSVs that still carry
+// that exact string pass the exact-match check in matchEventType and
+// land as-is (lets historical data round-trip). New-event creation
+// UIs offer the post-split types (Private / Wedding / Private Party /
+// Reception) instead. See Commit D for the enum + UI split.
 export const VALID_EVENT_TYPES = [
   "Festival", "Concert", "Community/Neighborhood", "Corporate",
-  "Weekly Series", "Private/Catering", "Sports Event", "Fundraiser/Charity",
+  "Weekly Series", "Private", "Sports Event", "Fundraiser/Charity",
+  "Wedding", "Private Party", "Reception",
+  "Private/Catering", // legacy — kept for exact-match on historical CSVs
 ];
 
 export function matchEventType(raw: string): string | undefined {
@@ -381,8 +388,21 @@ export function matchEventType(raw: string): string | undefined {
     farmers: "Community/Neighborhood", "farmers market": "Community/Neighborhood",
     corporate: "Corporate", office: "Corporate",
     weekly: "Weekly Series", series: "Weekly Series", recurring: "Weekly Series",
-    private: "Private/Catering", catering: "Private/Catering",
-    wedding: "Private/Catering", party: "Private/Catering",
+    // Post-split aliases — see Commit D + E:
+    //   "private" alone = food-truck event type (truck at private venue
+    //     running walk-up service). NOT a catering signal.
+    //   "wedding" / "reception" / "private party" / "party" = catering-mode
+    //     types introduced with Commit D.
+    //   "catering" alone is deliberately NOT an event_type — it's a mode
+    //     signal handled in the event-mode inference block below. A CSV
+    //     cell reading literally "Catering" in the event_type column
+    //     leaves event_type unset (undefined) and triggers event_mode
+    //     inference to "catering".
+    private: "Private",
+    wedding: "Wedding",
+    reception: "Reception",
+    "private party": "Private Party",
+    party: "Private Party",
     sports: "Sports Event", game: "Sports Event", "sports event": "Sports Event",
     fundraiser: "Fundraiser/Charity", charity: "Fundraiser/Charity",
     benefit: "Fundraiser/Charity", nonprofit: "Fundraiser/Charity",
@@ -616,6 +636,20 @@ export function parseWithMapping(
     const validAttendance = expectedAttendance !== undefined && !isNaN(expectedAttendance) ? expectedAttendance : undefined;
 
     // ── Event mode ──
+    // Precedence:
+    //   1. Explicit event_mode column from CSV (existing behavior)
+    //   2. Inferred from event_type column value matching catering
+    //      aliases (Commit E — see EVENT_TYPE_CATERING_ALIASES below)
+    //   3. Left undefined here; the import client layers batch-default
+    //      + DB default ("food_truck") downstream.
+    //
+    // The explicit event_mode list still accepts "private" as a legacy
+    // catering signal because when an operator writes "private" in the
+    // MODE column they clearly mean private-catering shape. The new
+    // event_type inference list is stricter — bare "private" there is
+    // NOT a catering signal because "Private" is a legitimate food-
+    // truck event_type (truck parked at a private venue running walk-
+    // up service).
     const rawMode = getValue("event_mode", values).trim().toLowerCase();
     let eventMode: string | undefined = undefined;
     if (rawMode) {
@@ -623,6 +657,14 @@ export function parseWithMapping(
         eventMode = "catering";
       } else {
         eventMode = "food_truck";
+      }
+    } else if (rawType) {
+      // event_type → event_mode inference (strict catering aliases only).
+      const lowerType = rawType.toLowerCase();
+      if (
+        ["catering", "private catering", "catering - private", "catering/private", "caterings"].includes(lowerType)
+      ) {
+        eventMode = "catering";
       }
     }
 
