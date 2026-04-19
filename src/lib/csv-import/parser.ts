@@ -411,7 +411,15 @@ export function matchEventType(raw: string): string | undefined {
   for (const [keyword, type] of Object.entries(mappings)) {
     if (lower.includes(keyword)) return type;
   }
-  return raw.trim() || undefined;
+  // No match — return undefined so the insert layer stores null, NOT
+  // the raw string. event_type is a strict Postgres enum; sending
+  // unrecognized values (e.g. "Catering" after Commit E removed the
+  // "catering" alias, or custom operator labels like "Brewery Pop-Up")
+  // fails the whole insert batch with "invalid input value for enum
+  // event_type". Better to drop the value and let the operator pick a
+  // real type via edit than to reject the row. Surfaced via Julian's
+  // Commit E smoke import where event_type="Catering" rows failed.
+  return undefined;
 }
 
 // ═══════════════════════════════════════════════════════════════════════
