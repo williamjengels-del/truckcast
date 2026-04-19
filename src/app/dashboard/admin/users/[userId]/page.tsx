@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge";
 // "use client"). See src/components/ui/button-variants.ts for detail.
 import { buttonVariants } from "@/components/ui/button-variants";
 import { ChevronLeft, Upload } from "lucide-react";
+import { ImpersonateButton } from "./impersonate-button";
 
 // Auth handled by /dashboard/admin/layout.tsx.
 
@@ -297,13 +298,12 @@ export default async function UserDetailPage({ params }: PageProps) {
         </Card>
       </div>
 
-      {/* Actions — import now lives here. Impersonate + trial-reset
-          buttons land in Commits 5–6 and slot into this same card. */}
+      {/* Actions — import + impersonate. Trial reset lands in Commit 6. */}
       <Card>
         <CardHeader>
           <CardTitle className="text-base">Actions</CardTitle>
         </CardHeader>
-        <CardContent className="space-y-3">
+        <CardContent className="space-y-4 divide-y [&>*]:pt-4 [&>*:first-child]:pt-0">
           <div className="flex items-center justify-between gap-3 flex-wrap">
             <div>
               <div className="font-medium text-sm">Import events</div>
@@ -320,10 +320,13 @@ export default async function UserDetailPage({ params }: PageProps) {
               Import events
             </Link>
           </div>
-          <p className="text-xs text-muted-foreground pt-1 border-t">
-            Impersonate (read-only) and trial reset are shipping in subsequent
-            admin workstream commits. For tier changes and trial extensions, use
-            the inline controls on{" "}
+          <ImpersonateButton
+            userId={profile.id}
+            targetLabel={profile.business_name ?? email ?? "this user"}
+          />
+          <p className="text-xs text-muted-foreground">
+            Trial reset is shipping in a subsequent admin workstream commit.
+            For tier changes and trial extensions, use the inline controls on{" "}
             <Link href="/dashboard/admin/users" className="underline">
               the users index
             </Link>

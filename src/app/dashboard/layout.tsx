@@ -15,6 +15,7 @@ import {
   ImpersonationProvider,
   type ImpersonationState,
 } from "@/components/impersonation-context";
+import { ImpersonationBanner } from "@/components/impersonation-banner";
 import { createClient } from "@/lib/supabase/server";
 import { resolveScopedSupabase } from "@/lib/dashboard-scope";
 
@@ -113,6 +114,10 @@ export default async function DashboardLayout({
         <Sidebar />
         <div className="flex flex-1 flex-col overflow-hidden">
           <Header />
+          {/* Impersonation banner renders only when active — mounted
+              before Trial / Manager banners so the read-only state is
+              the most prominent signal in the chrome. */}
+          <ImpersonationBanner />
           <TrialBanner />
           {managerBanner && (
             <div className="shrink-0 bg-violet-600 text-white text-xs text-center py-1.5 px-4 font-medium">
