@@ -20,6 +20,16 @@ const nextConfig: NextConfig = {
         permanent: true,
       },
 
+      // Marketing: /pricing → homepage pricing preview anchor.
+      // Temporary redirect (307) because a standalone /pricing page is
+      // planned — we don't want search engines to permanently cache a
+      // fragment redirect. When the real page ships, remove this rule.
+      {
+        source: "/pricing",
+        destination: "/#pricing",
+        permanent: false,
+      },
+
       // Phase 4 IA consolidation — preserve bookmarks + operator muscle memory.
       // Source match is exact (no trailing /:path*) so dynamic sub-routes like
       // /dashboard/forecasts/calculator and /dashboard/performance/[name] still

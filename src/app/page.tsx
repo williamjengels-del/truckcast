@@ -308,8 +308,9 @@ export default async function LandingPage() {
           </div>
         </div>
 
-        {/* Pricing Preview */}
-        <div className="container mx-auto px-4 py-20">
+        {/* Pricing Preview — also the fragment target for /pricing
+            (see next.config.ts redirects). */}
+        <div id="pricing" className="container mx-auto px-4 py-20 scroll-mt-20">
           <h2 className="text-center text-3xl font-bold mb-4">
             Simple pricing
           </h2>
