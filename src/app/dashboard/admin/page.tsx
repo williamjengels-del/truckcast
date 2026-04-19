@@ -3,6 +3,7 @@ import Link from "next/link";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { getAdminUser } from "@/lib/admin";
+import { PlatformMetrics, type DailyPoint } from "./platform-metrics";
 
 interface RecentProfile {
   id: string;
@@ -27,6 +28,10 @@ export default async function AdminOverviewPage() {
   sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
   const sevenDaysAgoStr = sevenDaysAgo.toISOString();
 
+  const thirtyDaysAgo = new Date();
+  thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+  const thirtyDaysAgoStr = thirtyDaysAgo.toISOString();
+
   // Check if cost migration has been applied (events.food_cost column exists)
   let costMigrationApplied = false;
   try {
@@ -46,6 +51,9 @@ export default async function AdminOverviewPage() {
     { count: activeThisWeek },
     { data: allProfiles },
     { data: invites },
+    { data: signupsWithin30d },
+    { data: eventsCreatedWithin30d },
+    authListResult,
   ] = await Promise.all([
     serviceClient.from("profiles").select("*", { count: "exact", head: true }),
     serviceClient
@@ -64,6 +72,18 @@ export default async function AdminOverviewPage() {
     serviceClient
       .from("beta_invites")
       .select("id, redeemed_by"),
+    // Platform metrics (Commit 8) — timestamp-only queries kept lean.
+    serviceClient
+      .from("profiles")
+      .select("created_at")
+      .gte("created_at", thirtyDaysAgoStr),
+    serviceClient
+      .from("events")
+      .select("created_at")
+      .gte("created_at", thirtyDaysAgoStr),
+    // auth.admin.listUsers for last_sign_in_at — perPage caps at 1000
+    // per Supabase API; paginate if the user base ever crosses that.
+    serviceClient.auth.admin.listUsers({ perPage: 1000 }),
   ]);
 
   const sharingEnabled = (allProfiles ?? []).filter(
@@ -82,6 +102,35 @@ export default async function AdminOverviewPage() {
     month: "long",
     day: "numeric",
   });
+
+  // ── Platform metrics series (Commit 8) ─────────────────────────────
+  // Bucket timestamps into a padded 30-element daily series so charts
+  // show empty days rather than collapsing them.
+  function buildDailySeries(
+    rows: { created_at: string }[] | null | undefined
+  ): DailyPoint[] {
+    const byDay = new Map<string, number>();
+    for (let d = 29; d >= 0; d--) {
+      const date = new Date();
+      date.setDate(date.getDate() - d);
+      byDay.set(date.toISOString().slice(0, 10), 0);
+    }
+    for (const r of rows ?? []) {
+      const key = r.created_at.slice(0, 10);
+      if (byDay.has(key)) byDay.set(key, (byDay.get(key) ?? 0) + 1);
+    }
+    return Array.from(byDay.entries()).map(([date, count]) => ({ date, count }));
+  }
+
+  const signupsPerDay = buildDailySeries(signupsWithin30d);
+  const eventsPerDay = buildDailySeries(eventsCreatedWithin30d);
+  const totalSignupsIn30d = (signupsWithin30d ?? []).length;
+  const totalEventsLoggedIn30d = (eventsCreatedWithin30d ?? []).length;
+
+  const activeUsers7d = (authListResult?.data?.users ?? []).filter((u) => {
+    if (!u.last_sign_in_at) return false;
+    return new Date(u.last_sign_in_at) >= sevenDaysAgo;
+  }).length;
 
   // Check if Stripe is in test mode (key starts with "sk_test_")
   const stripeKey = process.env.STRIPE_SECRET_KEY ?? "";
@@ -198,6 +247,15 @@ export default async function AdminOverviewPage() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Platform metrics (Commit 8) */}
+      <PlatformMetrics
+        signupsPerDay={signupsPerDay}
+        eventsPerDay={eventsPerDay}
+        activeUsers7d={activeUsers7d}
+        totalSignupsIn30d={totalSignupsIn30d}
+        totalEventsLoggedIn30d={totalEventsLoggedIn30d}
+      />
 
       {/* Nav cards */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
