@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Copy, Plus, RefreshCw } from "lucide-react";
+import { formatDate } from "@/lib/format-time";
 
 interface Invite {
   id: string;
@@ -217,7 +218,7 @@ export function BetaClient() {
                     )}
                     {inv.redeemed_at && (
                       <span className="text-xs text-muted-foreground">
-                        {new Date(inv.redeemed_at).toLocaleDateString()}
+                        {formatDate(inv.redeemed_at)}
                       </span>
                     )}
                   </div>

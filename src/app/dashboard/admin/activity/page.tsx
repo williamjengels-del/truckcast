@@ -1,6 +1,7 @@
 import { createClient as createServiceClient } from "@supabase/supabase-js";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { formatTimestamp } from "@/lib/format-time";
 
 interface AdminActionRow {
   id: string;
@@ -55,16 +56,6 @@ function renderSummary(row: AdminActionRow): string {
     default:
       return JSON.stringify(m);
   }
-}
-
-function formatTimestamp(iso: string): string {
-  const d = new Date(iso);
-  return d.toLocaleString(undefined, {
-    month: "short",
-    day: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-  });
 }
 
 export default async function AdminActivityPage() {

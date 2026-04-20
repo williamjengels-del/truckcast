@@ -4,6 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { getAdminUser } from "@/lib/admin";
 import { PlatformMetrics, type DailyPoint } from "./platform-metrics";
+import { formatDate } from "@/lib/format-time";
 
 interface RecentProfile {
   id: string;
@@ -309,11 +310,7 @@ export default async function AdminOverviewPage() {
                       {profile.subscription_tier}
                     </Badge>
                     <span className="text-xs text-muted-foreground">
-                      {new Date(profile.created_at).toLocaleDateString("en-US", {
-                        month: "short",
-                        day: "numeric",
-                        year: "numeric",
-                      })}
+                      {formatDate(profile.created_at)}
                     </span>
                   </div>
                 </div>

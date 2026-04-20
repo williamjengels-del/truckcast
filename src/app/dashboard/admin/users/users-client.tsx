@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { RefreshCw, CheckCircle, Trash2, Search } from "lucide-react";
+import { formatDate } from "@/lib/format-time";
 
 interface AdminUser {
   id: string;
@@ -288,7 +289,7 @@ export function UsersClient() {
                         </div>
                       </td>
                       <td className="p-3 text-xs text-muted-foreground whitespace-nowrap">
-                        {new Date(user.created_at).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
+                        {formatDate(user.created_at)}
                       </td>
                       <td className="p-3">
                         <div className="flex items-center gap-1">
@@ -298,7 +299,7 @@ export function UsersClient() {
                               size="sm"
                               className="h-7 px-2 text-xs text-muted-foreground hover:text-blue-600"
                               disabled={extending === user.id}
-                              title={user.trial_extended_until ? `Extended until ${new Date(user.trial_extended_until).toLocaleDateString()}` : "Extend trial period"}
+                              title={user.trial_extended_until ? `Extended until ${formatDate(user.trial_extended_until)}` : "Extend trial period"}
                               onClick={() => handleExtendTrial(user.id, user.business_name ?? user.email ?? "")}
                             >
                               {user.trial_extended_until && new Date(user.trial_extended_until) > new Date()

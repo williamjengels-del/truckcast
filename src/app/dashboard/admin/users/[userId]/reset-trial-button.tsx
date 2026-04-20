@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { RotateCcw, Loader2, AlertCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { formatDate } from "@/lib/format-time";
 
 // Admin-only "Reset trial" action on the user detail page. Fires
 // /api/admin/users/reset-trial which writes trial_extended_until =
@@ -21,14 +22,9 @@ interface Props {
   currentExtendedUntil: string | null;
 }
 
-function formatDate(iso: string | null): string {
-  if (!iso) return "none";
-  return new Date(iso).toLocaleDateString(undefined, {
-    year: "numeric",
-    month: "short",
-    day: "numeric",
-  });
-}
+// formatDate moved to @/lib/format-time. Local callers pass
+// { fallback: "none" } to preserve the original null-state copy
+// ("Current extension: none" reads cleaner than "— extension").
 
 export function ResetTrialButton({
   userId,
@@ -61,7 +57,7 @@ export function ResetTrialButton({
   async function handleReset() {
     const ok = window.confirm(
       `Reset trial for ${targetLabel} to a fresh 14 days starting now?\n\n` +
-        `Current extension: ${formatDate(currentExtendedUntil)}\n` +
+        `Current extension: ${formatDate(currentExtendedUntil, { fallback: "none" })}\n` +
         `This will overwrite trial_extended_until and log user.trial_reset to the audit trail.`
     );
     if (!ok) return;
@@ -96,7 +92,7 @@ export function ResetTrialButton({
         <div className="font-medium text-sm">Reset trial</div>
         <div className="text-xs text-muted-foreground">
           Give {targetLabel} a fresh 14-day trial starting now. Current
-          extension: {formatDate(currentExtendedUntil)}. Logged as{" "}
+          extension: {formatDate(currentExtendedUntil, { fallback: "none" })}. Logged as{" "}
           <code className="font-mono text-xs bg-muted px-1 rounded">user.trial_reset</code>.
         </div>
         {error && (

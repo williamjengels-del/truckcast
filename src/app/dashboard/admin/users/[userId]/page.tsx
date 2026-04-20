@@ -12,6 +12,7 @@ import { ImpersonateButton } from "./impersonate-button";
 import { ResetTrialButton } from "./reset-trial-button";
 import { EventsAdminTable } from "./events-admin-table";
 import type { Event } from "@/lib/database.types";
+import { formatDate, formatTimestamp } from "@/lib/format-time";
 
 // Auth handled by /dashboard/admin/layout.tsx.
 
@@ -25,24 +26,11 @@ const TIER_COLORS: Record<string, string> = {
   premium: "bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400",
 };
 
-function formatDate(iso: string | null): string {
-  if (!iso) return "—";
-  return new Date(iso).toLocaleDateString(undefined, {
-    year: "numeric",
-    month: "short",
-    day: "numeric",
-  });
-}
-
-function formatDateTime(iso: string): string {
-  return new Date(iso).toLocaleString(undefined, {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-  });
-}
+// formatDate + formatTimestamp now live in @/lib/format-time and are
+// timezone-aware (viewer's browser tz, with the "short" tz abbrev
+// included on formatTimestamp). Removed local copies that rendered in
+// UTC without tz hint — see commit: "Render admin timestamps in
+// viewer timezone via shared helper".
 
 function formatUsd(n: number | null | undefined): string {
   if (n == null) return "—";
@@ -302,7 +290,7 @@ export default async function UserDetailPage({ params }: PageProps) {
               <span className="text-muted-foreground">Last sign-in</span>
               <span>
                 {authUser?.last_sign_in_at
-                  ? formatDateTime(authUser.last_sign_in_at)
+                  ? formatTimestamp(authUser.last_sign_in_at)
                   : "—"}
               </span>
             </div>
@@ -396,7 +384,7 @@ export default async function UserDetailPage({ params }: PageProps) {
                   {auditRows.map((row) => (
                     <tr key={row.id} className="border-b last:border-b-0">
                       <td className="px-4 py-2 whitespace-nowrap text-muted-foreground">
-                        <span title={row.created_at}>{formatDateTime(row.created_at)}</span>
+                        <span title={row.created_at}>{formatTimestamp(row.created_at)}</span>
                       </td>
                       <td className="px-4 py-2 whitespace-nowrap">
                         {adminEmailMap[row.admin_user_id] ?? row.admin_user_id.slice(0, 8)}

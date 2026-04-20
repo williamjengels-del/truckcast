@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Trash2 } from "lucide-react";
+import { formatTimestamp } from "@/lib/format-time";
 
 interface FeedbackRow {
   id: string;
@@ -54,10 +55,7 @@ export function FeedbackTable({ initialRows }: { initialRows: FeedbackRow[] }) {
               <td className="p-3 text-sm font-mono text-muted-foreground">{row.page || "—"}</td>
               <td className="p-3 text-sm whitespace-pre-wrap">{row.message}</td>
               <td className="p-3 text-sm text-muted-foreground">
-                {new Date(row.created_at).toLocaleDateString("en-US", {
-                  month: "short", day: "numeric", year: "numeric",
-                  hour: "numeric", minute: "2-digit",
-                })}
+                {formatTimestamp(row.created_at)}
               </td>
               <td className="p-3">
                 <Button
