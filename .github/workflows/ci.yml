@@ -1,0 +1,69 @@
+name: CI
+
+# Runs on every PR to main AND on every push to main (belt and
+# suspenders — catches anything that slipped through, e.g. direct
+# pushes, missing required-check config, squash-merge weirdness).
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Need actual line endings, not CRLF-normalized.
+          # .gitattributes handles it but belt-and-suspenders.
+          fetch-depth: 1
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      - name: Install deps
+        run: npm ci
+
+      - name: TypeScript
+        run: npx tsc --noEmit
+
+      - name: Unit tests (vitest)
+        run: npm test
+
+      # Lint has pre-existing errors on main (13 at the time this
+      # workflow landed). Running it here as a diagnostic only —
+      # continue-on-error so it doesn't block PRs. Flip to required
+      # once the existing errors are cleaned up.
+      - name: Lint (non-blocking)
+        run: npm run lint
+        continue-on-error: true
+
+  # Post-deploy smoke. Only runs after the deploy workflow has put
+  # vendcast.co on the new commit. Separate job so test failures
+  # don't cancel the deploy, and deploy failures don't skip verify.
+  smoke:
+    needs: check
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+      - name: Install deps
+        run: npm ci
+      - name: Wait for Vercel deploy to promote
+        # Deploy workflow runs in parallel and takes ~60-90s. Smoke
+        # before then hits the old commit. Simple sleep is adequate
+        # for a solo-maintained project; upgrade to polling
+        # /api/version if flakes become an issue.
+        run: sleep 90
+      - name: Smoke test against production
+        run: npm run smoke
+        env:
+          EXPECTED_COMMIT: ${{ github.sha }}

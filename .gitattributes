@@ -1,0 +1,21 @@
+# Normalize line endings so test fixtures don't get CRLF'd on Windows
+# checkouts. The csv-import parser test asserts exact-byte equality on
+# fixture contents — if git converts LF → CRLF on Windows, the test
+# fails with a confusing "expected X, got X" diff where only invisible
+# characters differ.
+#
+# Declare each fixture type with eol=lf; let the rest auto-detect.
+* text=auto eol=lf
+
+# Binary files — never touch
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.webp binary
+*.ico binary
+*.pdf binary
+*.pem binary
+
+# CSV fixtures must keep embedded \n newlines intact for tests
+tests/fixtures/*.csv text eol=lf
