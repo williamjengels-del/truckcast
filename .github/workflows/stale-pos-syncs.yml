@@ -1,0 +1,63 @@
+name: Stale POS Syncs Diagnostic
+
+# Runs the stale-POS-syncs diagnostic on a schedule. Catches silent
+# sync failures like the 2026-04-19 Toast Worker SPF bug automatically
+# instead of waiting for a customer complaint or a daily manual check.
+#
+# Schedule: every Monday at 15:00 UTC (10:00 AM Central). Weekly is
+# enough granularity for a "did anyone go silent" check — daily would
+# be noisy for a small user base. Adjust cron if user volume grows.
+#
+# Requires: GitHub repository secret `SUPABASE_SERVICE_ROLE_KEY`.
+# Also uses `NEXT_PUBLIC_SUPABASE_URL` which is already exposed in
+# the deploy workflow env — we repeat it here via secret to keep the
+# workflow self-contained.
+
+on:
+  schedule:
+    # Monday 15:00 UTC = 10:00 AM Central (CDT in summer, CST adds 1h).
+    - cron: "0 15 * * 1"
+  # Allow manual trigger from the Actions tab — useful for ad-hoc
+  # health checks between scheduled runs.
+  workflow_dispatch:
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      - name: Install deps
+        run: npm ci
+
+      - name: Run stale-sync diagnostic
+        env:
+          SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: node scripts/diagnose-stale-pos-syncs.mjs 2
+
+  # Separate failure-notify step because the diagnose step exits 1 on
+  # critical findings — which is correct behavior, not a bug — and
+  # we want a clearer signal than "a random workflow failed." Future:
+  # swap this for a webhook to Discord/Slack/email, but a GitHub
+  # Actions summary is adequate for a solo-maintained project.
+  summary:
+    needs: diagnose
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Post summary
+        run: |
+          if [ "${{ needs.diagnose.result }}" = "success" ]; then
+            echo "### POS sync health: OK" >> "$GITHUB_STEP_SUMMARY"
+            echo "No critical stale syncs detected." >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "### POS sync health: FAIL" >> "$GITHUB_STEP_SUMMARY"
+            echo "At least one connection is critically stale (>7 days)." >> "$GITHUB_STEP_SUMMARY"
+            echo "See the 'diagnose' job log for the per-connection breakdown." >> "$GITHUB_STEP_SUMMARY"
+            echo "Expected Toast-related failures while the Cloudflare Worker SPF fix is pending." >> "$GITHUB_STEP_SUMMARY"
+          fi
