@@ -69,10 +69,16 @@ await check("/api/feedback (POST) rejects unauth with 401", async () => {
   return "auth enforced";
 });
 
-await check("/roadmap loads (public)", async () => {
+await check("/roadmap loads with expected phase content", async () => {
   const res = await fetch(`${baseUrl}/roadmap`);
   if (res.status !== 200) throw new Error(`status ${res.status}`);
-  return `status=${res.status}`;
+  const html = await res.text();
+  // Sanity: the page has at least one shipped phase and one building
+  // phase. Catches a blank/errored render that still returns 200.
+  if (!html.includes("Phase 1")) throw new Error("no 'Phase 1' in body");
+  if (!html.includes("SHIPPED")) throw new Error("no 'SHIPPED' status pill");
+  if (!html.includes("BUILDING")) throw new Error("no 'BUILDING' status pill");
+  return "phases + status pills present";
 });
 
 await check("/contact loads (public)", async () => {
@@ -92,6 +98,31 @@ await check("/api/contact (POST) rejects empty body with 400", async () => {
   });
   if (res.status !== 400) throw new Error(`expected 400, got ${res.status}`);
   return "validation enforced";
+});
+
+await check("/api/contact honeypot returns 200 without sending email", async () => {
+  // Honeypot path — if the hidden `website` field is filled, the
+  // handler returns 200 { ok: true } and short-circuits BEFORE the
+  // Resend email call (src/app/api/contact/route.ts:54). Proves the
+  // whole pipeline is live and the honeypot branch is wired
+  // correctly, without actually emailing Julian. If the handler ever
+  // regresses to send the email anyway, Julian gets unexpected mail
+  // from the smoke run — which is the signal.
+  const res = await fetch(`${baseUrl}/api/contact`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      name: "smoke-test",
+      email: "smoke@example.invalid",
+      subject: "General question",
+      message: "this should never be sent",
+      website: "https://bot.example.com", // honeypot tripped
+    }),
+  });
+  if (res.status !== 200) throw new Error(`expected 200, got ${res.status}`);
+  const body = await res.json();
+  if (body.ok !== true) throw new Error(`expected ok:true, got ${JSON.stringify(body)}`);
+  return "honeypot intercepted";
 });
 
 await check("anonymous mutation is NOT middleware-blocked", async () => {

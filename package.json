@@ -11,7 +11,9 @@
     "test:watch": "vitest",
     "test:e2e": "playwright test",
     "test:e2e:install": "playwright install --with-deps chromium",
-    "smoke": "node scripts/smoke-test.mjs"
+    "smoke": "node scripts/smoke-test.mjs",
+    "check": "tsc --noEmit && vitest run",
+    "check:full": "tsc --noEmit && vitest run && npm run smoke"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.88.0",
