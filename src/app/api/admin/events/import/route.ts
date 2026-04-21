@@ -5,8 +5,8 @@ import { logAdminAction } from "@/lib/admin-audit";
 import { recalculateForUserWithClient } from "@/lib/recalculate-service";
 import {
   matchFeeType,
+  parseCSV,
   parseWithMapping,
-  splitCSVLine,
   type ColumnMapping,
 } from "@/lib/csv-import/parser";
 
@@ -70,14 +70,7 @@ interface InsertError {
 }
 
 function parseCsvTextToLines(csvText: string): string[][] {
-  const lines = csvText.trim().split("\n");
-  if (lines.length < 2) return [];
-  const out: string[][] = [];
-  for (let i = 1; i < lines.length; i++) {
-    if (!lines[i].trim()) continue;
-    out.push(splitCSVLine(lines[i]));
-  }
-  return out;
+  return parseCSV(csvText).rows;
 }
 
 export async function POST(req: NextRequest) {

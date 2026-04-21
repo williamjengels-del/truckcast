@@ -5,8 +5,8 @@ import { US_STATES, US_STATE_NAMES, OTHER_STATE } from "@/lib/constants";
 import {
   buildImportTemplateCsv,
   matchHeader,
+  parseCSV,
   parseWithMapping,
-  splitCSVLine,
   ADVANCED_FIELD_VALUES,
   BASIC_FIELD_VALUES,
   FIELD_OPTIONS,
@@ -90,17 +90,10 @@ export function ImportEventsClient({ userId, targetLabel }: Props) {
     setRawText(text);
     setFileName(source);
 
-    const lines = text.trim().split("\n");
-    if (lines.length < 2) {
+    const { headers, rows: parsedDataLines } = parseCSV(text);
+    if (headers.length === 0 || parsedDataLines.length === 0) {
       setError("CSV appears empty or has only a header row.");
       return;
-    }
-
-    const headers = splitCSVLine(lines[0]);
-    const parsedDataLines: string[][] = [];
-    for (let i = 1; i < lines.length; i++) {
-      if (!lines[i].trim()) continue;
-      parsedDataLines.push(splitCSVLine(lines[i]));
     }
     setDataLines(parsedDataLines);
 

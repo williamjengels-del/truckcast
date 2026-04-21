@@ -19,6 +19,7 @@
 //   * Behavior is locked to the prior inline implementation.
 //     Commit 4a (this file) is mechanical extraction only.
 
+import Papa from "papaparse";
 import { canonicalizeCity } from "@/lib/city-normalize";
 import {
   US_STATES,
@@ -426,22 +427,28 @@ export function matchEventType(raw: string): string | undefined {
 // CSV helpers
 // ═══════════════════════════════════════════════════════════════════════
 
-export function splitCSVLine(line: string): string[] {
-  const values: string[] = [];
-  let current = "";
-  let inQuotes = false;
-  for (const char of line) {
-    if (char === '"') {
-      inQuotes = !inQuotes;
-    } else if (char === "," && !inQuotes) {
-      values.push(current.trim());
-      current = "";
-    } else {
-      current += char;
-    }
-  }
-  values.push(current.trim());
-  return values;
+export interface ParsedCsv {
+  headers: string[];
+  rows: string[][];
+}
+
+// RFC 4180-compliant CSV parse. Respects double-quote quoting and CRLF
+// inside quoted fields — critical for notes fields that contain newlines
+// (Airtable rich-text exports, 673 of 907 rows in a recent import).
+// Returns rows with each cell trimmed, matching the prior splitCSVLine
+// contract so downstream field parsers are unaffected. Interior
+// whitespace (including embedded newlines) inside a cell is preserved.
+export function parseCSV(text: string): ParsedCsv {
+  const result = Papa.parse<string[]>(text, {
+    skipEmptyLines: "greedy",
+  });
+  const data = result.data;
+  if (data.length === 0) return { headers: [], rows: [] };
+  const headers = (data[0] ?? []).map((h) => String(h ?? "").trim());
+  const rows = data
+    .slice(1)
+    .map((r) => r.map((v) => (v == null ? "" : String(v).trim())));
+  return { headers, rows };
 }
 
 export function daysBetween(startDate: string, endDate: string): number {
