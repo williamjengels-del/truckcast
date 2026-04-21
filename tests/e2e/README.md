@@ -13,10 +13,14 @@ be reproduced. This suite exists as **regression protection** so that future
 refactors (e.g. any follow-on to the `middleware.ts` → `proxy.ts` migration)
 can't silently break the block.
 
-The unit side of that coverage — a vitest test that constructs a `NextRequest`
-with a valid cookie and asserts `updateSession` returns 403 — is still an open
-gap flagged by that same brief. This Playwright suite covers the live HTTP
-path; a vitest test would additionally cover the gate logic in isolation.
+The unit side of that coverage lives in
+[`src/lib/supabase/middleware.test.ts`](../../src/lib/supabase/middleware.test.ts):
+12 vitest tests that call `updateSession` directly with hand-built
+`NextRequest`s carrying signed (or tampered, or expired) cookies. That file
+closes the gap the 2026-04-21 brief flagged — the gate logic now has CI-level
+regression protection that runs on every `npm test`, without requiring a
+deployment or admin credentials. This Playwright suite complements it by
+exercising the same guarantees over real HTTP against a live deployment.
 
 ## What these tests do
 
@@ -114,12 +118,18 @@ npx playwright test impersonation-ui-flow
 
 ## What's NOT tested here
 
-- Expired / forged / tampered `vc_impersonate` cookie → the gate should
-  treat it as no-cookie and let the route execute normally. Candidate for
-  an additional spec; would require access to `IMPERSONATION_SIGNING_SECRET`
-  to construct a cookie with past expiry.
-- The "no-impersonation baseline" — e.g. an unauth'd POST to a mutation
-  route returns 401 from the route handler, not the middleware. Would
-  catch over-blocking regressions. Candidate for a future spec.
-- The vitest-level unit test on `maybeBlockMutationUnderImpersonation`
-  called out in the 2026-04-21 brief.
+The vitest suite at [`src/lib/supabase/middleware.test.ts`](../../src/lib/supabase/middleware.test.ts)
+covers the unit-level cases — tampered signatures, expired cookies,
+no-cookie pass-through, GET requests, admin-route exemption, and
+server-action blocking. Those run on every `npm test` without any
+network or credential requirements.
+
+Remaining gaps at the live-HTTP layer:
+
+- Stale-session edge case — a real browser session that acquired its
+  cookie before a middleware deploy and retains it afterwards. Would
+  require staged deploys to reproduce; not easily captured in CI.
+- Concurrent impersonation sessions from the same admin across multiple
+  browsers. Design intent is "cookie binds to the admin who started it"
+  (see `getEffectiveUserId` note in `admin-impersonation.ts:196`); not
+  exercised by this suite.
