@@ -55,6 +55,15 @@ function maybeBlockMutationUnderImpersonation(
   request: NextRequest
 ): NextResponse | null {
   const method = request.method;
+  const pathname = request.nextUrl.pathname;
+
+  // TEMP DEBUG (remove after root-cause): fires on every proxy pass so we
+  // can see whether the proxy ran at all for the POS Sync POST.
+  console.log("[impersonation-debug] entered proxy", {
+    method,
+    pathname,
+  });
+
   if (
     method !== "POST" &&
     method !== "PATCH" &&
@@ -65,16 +74,42 @@ function maybeBlockMutationUnderImpersonation(
   }
 
   const cookieValue = request.cookies.get(IMPERSONATION_COOKIE)?.value;
+
+  // TEMP DEBUG (remove after root-cause): pins down whether the cookie is
+  // arriving on mutating requests or getting dropped before the proxy.
+  console.log("[impersonation-debug] cookie check", {
+    method,
+    pathname,
+    hasCookie: !!cookieValue,
+    cookieLen: cookieValue?.length ?? 0,
+  });
+
   if (!cookieValue) return null;
 
   const ctx = verifyImpersonationCookie(cookieValue);
-  if (!ctx) return null;
 
-  const pathname = request.nextUrl.pathname;
+  // TEMP DEBUG (remove after root-cause): distinguishes "cookie present
+  // but failed verify" (signing secret mismatch, tamper, expiry) from
+  // "cookie present and valid".
+  console.log("[impersonation-debug] verify result", {
+    pathname,
+    ctxValid: !!ctx,
+  });
+
+  if (!ctx) return null;
 
   const isApi = pathname.startsWith("/api/");
   const isAdminApi = pathname.startsWith("/api/admin/");
   const isServerAction = request.headers.get("next-action") !== null;
+
+  // TEMP DEBUG (remove after root-cause): final gate decision.
+  console.log("[impersonation-debug] gate decision", {
+    pathname,
+    isApi,
+    isAdminApi,
+    isServerAction,
+    willBlock: (isApi && !isAdminApi) || isServerAction,
+  });
 
   if (isApi && !isAdminApi) {
     return blockedResponse();
