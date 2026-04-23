@@ -32,7 +32,7 @@ async function check(name, fn) {
 console.log(`Smoke test against ${baseUrl}`);
 console.log("");
 
-await check("/api/version returns 200 with a commit", async () => {
+await check("/api/version returns 200 with expected env", async () => {
   const res = await fetch(`${baseUrl}/api/version`);
   if (res.status !== 200) throw new Error(`status ${res.status}`);
   const body = await res.json();
@@ -41,6 +41,11 @@ await check("/api/version returns 200 with a commit", async () => {
   }
   if (expectedCommit && !body.commit.startsWith(expectedCommit)) {
     throw new Error(`expected commit ${expectedCommit}, got ${body.commit}`);
+  }
+  // Only enforce env=production when hitting the canonical domain.
+  // Preview/dev URLs correctly return different env values.
+  if (baseUrl.includes("vendcast.co") && body.env !== "production") {
+    throw new Error(`expected env=production on vendcast.co, got env=${body.env}`);
   }
   return `commit=${body.commit.slice(0, 7)} env=${body.env} ref=${body.commitRef}`;
 });
@@ -123,6 +128,33 @@ await check("/api/contact honeypot returns 200 without sending email", async () 
   const body = await res.json();
   if (body.ok !== true) throw new Error(`expected ok:true, got ${JSON.stringify(body)}`);
   return "honeypot intercepted";
+});
+
+await check("/pricing redirects 307 to /#pricing (placeholder still)", async () => {
+  // Per v6 brief: the real /pricing page is queued but not shipped.
+  // When it ships, this smoke fails — reminder to update both the
+  // redirect config in next.config.ts and this assertion. If you
+  // remove the redirect without updating smoke, CI catches it.
+  const res = await fetch(`${baseUrl}/pricing`, { redirect: "manual" });
+  if (res.status !== 307) throw new Error(`expected 307, got ${res.status}`);
+  const location = res.headers.get("location") ?? "";
+  if (!location.endsWith("/#pricing")) {
+    throw new Error(`expected location ending /#pricing, got ${location}`);
+  }
+  return "placeholder redirect intact";
+});
+
+await check("/dashboard redirects unauth users to /login", async () => {
+  // Proves the middleware trial/auth gate still fires for dashboard
+  // routes when no Supabase session is present. Regression would
+  // mean unauth'd users could reach dashboard pages directly.
+  const res = await fetch(`${baseUrl}/dashboard`, { redirect: "manual" });
+  if (res.status !== 307) throw new Error(`expected 307, got ${res.status}`);
+  const location = res.headers.get("location") ?? "";
+  if (!location.endsWith("/login") && !location.includes("/login?")) {
+    throw new Error(`expected redirect to /login, got ${location}`);
+  }
+  return "auth gate firing";
 });
 
 await check("anonymous mutation is NOT middleware-blocked", async () => {
