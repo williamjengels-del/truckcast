@@ -1345,59 +1345,20 @@ export function EventsClient({ initialEvents, userId = "", businessName = "", us
           )}
         </div>
 
-        {/* Filters */}
-        <div className="flex items-center gap-3 flex-wrap">
-          <div className="relative flex-1 max-w-sm min-w-48">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-            <Input
-              placeholder="Search events..."
-              className="pl-9"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-            />
-          </div>
-          {years.length > 1 && (
-            <Select value={yearFilter} onValueChange={(val) => setYearFilter(val ?? "all")}>
-              <SelectTrigger className="w-28">
-                <SelectValue placeholder="Year" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Years</SelectItem>
-                {years.map((y) => (
-                  <SelectItem key={y} value={y.toString()}>
-                    {y}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          )}
-          <div className="flex border rounded-md overflow-hidden text-xs">
-            <button
-              className={`px-3 py-1.5 font-medium transition-colors ${modeFilter === "all" ? "bg-primary text-primary-foreground" : "bg-background text-muted-foreground hover:text-foreground"}`}
-              onClick={() => setModeFilter("all")}
-            >All</button>
-            <button
-              className={`px-3 py-1.5 font-medium transition-colors border-x ${modeFilter === "food_truck" ? "bg-primary text-primary-foreground" : "bg-background text-muted-foreground hover:text-foreground"}`}
-              onClick={() => setModeFilter("food_truck")}
-            >🚚 Vending</button>
-            <button
-              className={`px-3 py-1.5 font-medium transition-colors ${modeFilter === "catering" ? "bg-violet-600 text-white" : "bg-background text-muted-foreground hover:text-foreground"}`}
-              onClick={() => setModeFilter("catering")}
-            >🍽️ Catering</button>
-          </div>
-          {initialEvents.length > 0 && (
-            <Button
-              variant="ghost"
-              size="sm"
-              className="text-destructive hover:text-destructive hover:bg-destructive/10 ml-auto"
-              onClick={handleDeleteAll}
-              disabled={deleting}
-            >
-              <Trash2 className="h-4 w-4 mr-1" />
-              {deleting ? "Deleting..." : "Delete All"}
-            </Button>
-          )}
-        </div>
+        {/*
+         * Filter bar (search + year + mode + delete all) was lifted out
+         * of ListView as of 2026-04-24 — it now renders as a sibling at
+         * the EventsClient level, right before <ListView />. Rationale:
+         * ListView is a nested function component whose reference
+         * changes every render, so React treats it as a new component
+         * type and unmounts+remounts it per keystroke. When the search
+         * <input> lived inside ListView, it was destroyed and recreated
+         * with each keystroke → focus lost. As a sibling of ListView,
+         * the filter bar stays mounted even when ListView churns.
+         * Proper follow-up is to extract ListView entirely (557 lines,
+         * ~30 closure refs) — this is the minimal fix that unblocks
+         * usable search without that big refactor.
+         */}
 
         {/* Past Unbooked explanation banner */}
         {activeTab === "past_unbooked" && pastUnbookedEvents.length > 0 && (
@@ -1951,7 +1912,67 @@ export function EventsClient({ initialEvents, userId = "", businessName = "", us
           </div>
         </div>
       ) : (
-        <ListView />
+        <>
+          {/*
+           * Filter bar — lifted OUT of ListView so the search <input>
+           * survives ListView's per-render remount (see long comment
+           * inside ListView for the full explanation). Tabs still live
+           * inside ListView since they don't host text inputs.
+           */}
+          <div className="flex items-center gap-3 flex-wrap">
+            <div className="relative flex-1 max-w-sm min-w-48">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input
+                placeholder="Search events..."
+                className="pl-9"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+              />
+            </div>
+            {years.length > 1 && (
+              <Select value={yearFilter} onValueChange={(val) => setYearFilter(val ?? "all")}>
+                <SelectTrigger className="w-28">
+                  <SelectValue placeholder="Year" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Years</SelectItem>
+                  {years.map((y) => (
+                    <SelectItem key={y} value={y.toString()}>
+                      {y}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
+            <div className="flex border rounded-md overflow-hidden text-xs">
+              <button
+                className={`px-3 py-1.5 font-medium transition-colors ${modeFilter === "all" ? "bg-primary text-primary-foreground" : "bg-background text-muted-foreground hover:text-foreground"}`}
+                onClick={() => setModeFilter("all")}
+              >All</button>
+              <button
+                className={`px-3 py-1.5 font-medium transition-colors border-x ${modeFilter === "food_truck" ? "bg-primary text-primary-foreground" : "bg-background text-muted-foreground hover:text-foreground"}`}
+                onClick={() => setModeFilter("food_truck")}
+              >🚚 Vending</button>
+              <button
+                className={`px-3 py-1.5 font-medium transition-colors ${modeFilter === "catering" ? "bg-violet-600 text-white" : "bg-background text-muted-foreground hover:text-foreground"}`}
+                onClick={() => setModeFilter("catering")}
+              >🍽️ Catering</button>
+            </div>
+            {initialEvents.length > 0 && (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="text-destructive hover:text-destructive hover:bg-destructive/10 ml-auto"
+                onClick={handleDeleteAll}
+                disabled={deleting}
+              >
+                <Trash2 className="h-4 w-4 mr-1" />
+                {deleting ? "Deleting..." : "Delete All"}
+              </Button>
+            )}
+          </div>
+          <ListView />
+        </>
       )}
 
       {/* Share Schedule Modal */}
