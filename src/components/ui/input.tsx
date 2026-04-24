@@ -1,11 +1,27 @@
 import * as React from "react"
-import { Input as InputPrimitive } from "@base-ui/react/input"
 
 import { cn } from "@/lib/utils"
 
+// Native <input>, not @base-ui/react/input.
+//
+// Why: Base UI's Input is a passthrough to Field.Control which expects
+// a <Field.Root> parent. Used standalone (as every shared caller does
+// here), Field.Control still subscribes to an implicit Field context
+// and fires setFilled / setFocused / setDirty into it on every render
+// via a useIsoLayoutEffect. That cascades re-renders that swap the
+// input's ref and drop focus after the first keystroke — the
+// "one-letter-at-a-time" bug originally reported 2026-04-21, still
+// present after a useMemo refactor that ruled out render cost.
+//
+// Native <input> has none of that machinery. Same className, same
+// props surface — any caller passing value+onChange gets a standard
+// controlled input that holds focus normally.
+//
+// If a caller in the future wants Field integration, use Base UI's
+// Input directly inside a <Field.Root>, not through this component.
 function Input({ className, type, ...props }: React.ComponentProps<"input">) {
   return (
-    <InputPrimitive
+    <input
       type={type}
       data-slot="input"
       className={cn(
