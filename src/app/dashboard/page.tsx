@@ -24,6 +24,7 @@ import { DashboardCharts } from "./dashboard-charts";
 import { DashboardHeroChart } from "./hero-chart";
 import { SetupProgress } from "@/components/setup-progress";
 import { DayOfEventBlock } from "@/components/day-of-event-block";
+import { DunningBanner } from "@/components/dunning-banner";
 import { JourneyCallout } from "@/components/journey-callout";
 import { KeyTakeaways } from "@/components/key-takeaways";
 import { computeJourneyState } from "@/lib/user-journey";
@@ -344,6 +345,11 @@ export default async function DashboardPage() {
 
   return (
     <div className="space-y-6">
+      <DunningBanner
+        status={profile?.last_payment_status ?? null}
+        failureReason={profile?.last_payment_failure_reason ?? null}
+      />
+
       {scopedClient && scopedUserId && (
         <DayOfEventBlock
           events={events}
