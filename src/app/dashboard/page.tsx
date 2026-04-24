@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 export const metadata: Metadata = { title: "Dashboard" };
 
 import Link from "next/link";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { resolveScopedSupabase } from "@/lib/dashboard-scope";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -22,6 +23,7 @@ import {
 import { DashboardCharts } from "./dashboard-charts";
 import { DashboardHeroChart } from "./hero-chart";
 import { SetupProgress } from "@/components/setup-progress";
+import { DayOfEventBlock } from "@/components/day-of-event-block";
 import { JourneyCallout } from "@/components/journey-callout";
 import { KeyTakeaways } from "@/components/key-takeaways";
 import { computeJourneyState } from "@/lib/user-journey";
@@ -53,8 +55,12 @@ export default async function DashboardPage() {
   let events: Event[] = [];
   let performances: EventPerformance[] = [];
   let posConnected = false;
+  let scopedClient: SupabaseClient | null = null;
+  let scopedUserId: string | null = null;
 
   if (scope.kind !== "unauthorized") {
+    scopedClient = scope.client;
+    scopedUserId = scope.userId;
     const [profileRes, eventsRes, perfRes, posRes] = await Promise.all([
       scope.client.from("profiles").select("*").eq("id", scope.userId).single(),
       scope.client
@@ -338,6 +344,15 @@ export default async function DashboardPage() {
 
   return (
     <div className="space-y-6">
+      {scopedClient && scopedUserId && (
+        <DayOfEventBlock
+          events={events}
+          timezone={profile?.timezone ?? "America/Chicago"}
+          supabase={scopedClient}
+          userId={scopedUserId}
+        />
+      )}
+
       <SetupProgress
         hasEvents={hasEvents}
         hasSales={hasSales}
