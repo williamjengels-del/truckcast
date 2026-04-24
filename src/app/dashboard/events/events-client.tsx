@@ -120,8 +120,8 @@ function getWeatherIconSmall(code: number): React.ReactNode {
   return <Zap className="h-3 w-3 text-yellow-600" />;
 }
 
-// Pure formatter — hoisted so the module-scope components below can
-// use it without needing an EventsClient closure.
+// Pure formatters — hoisted so the module-scope components below can
+// use them without needing an EventsClient closure.
 function formatCurrency(val: number | null) {
   if (val === null || val === undefined) return "—";
   return `$${val.toLocaleString("en-US", {
@@ -129,6 +129,37 @@ function formatCurrency(val: number | null) {
     maximumFractionDigits: 2,
   })}`;
 }
+
+function formatDate(dateStr: string) {
+  return new Date(dateStr + "T00:00:00").toLocaleDateString("en-US", {
+    weekday: "short",
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
+}
+
+// SortIcon — small per-column helper. Hoisted + memoized. Takes
+// `sortField` and `sortDirection` as props so it doesn't close over
+// EventsClient state, keeping its reference stable across renders.
+const SortIcon = React.memo(function SortIcon({
+  field,
+  sortField,
+  sortDirection,
+}: {
+  field: SortField;
+  sortField: SortField;
+  sortDirection: SortDirection;
+}) {
+  if (sortField !== field) {
+    return <ChevronsUpDown className="h-3 w-3 ml-1 opacity-40" />;
+  }
+  return sortDirection === "asc" ? (
+    <ChevronUp className="h-3 w-3 ml-1" />
+  ) : (
+    <ChevronDown className="h-3 w-3 ml-1" />
+  );
+});
 
 // ─── Row-level components: hoisted + memoized ─────────────────────────
 // These were previously defined inside EventsClient. That created a
@@ -242,6 +273,588 @@ const ForecastVsActual = React.memo(function ForecastVsActual({
     </div>
   );
 });
+
+interface ListViewProps {
+  // State
+  activeTab: TabMode;
+  setActiveTab: React.Dispatch<React.SetStateAction<TabMode>>;
+  sortField: SortField;
+  setSortField: React.Dispatch<React.SetStateAction<SortField>>;
+  sortDirection: SortDirection;
+  setSortDirection: React.Dispatch<React.SetStateAction<SortDirection>>;
+  bookingId: string | null;
+  setBookingId: React.Dispatch<React.SetStateAction<string | null>>;
+  setEditingEvent: React.Dispatch<React.SetStateAction<Event | null>>;
+  setSalesEvent: React.Dispatch<React.SetStateAction<Event | null>>;
+  setDuplicatingEvent: React.Dispatch<React.SetStateAction<Event | null>>;
+  // Derived / memoized collections
+  initialEvents: Event[];
+  upcomingEvents: Event[];
+  unbookedEvents: Event[];
+  pastEvents: Event[];
+  pastUnbookedEvents: Event[];
+  flaggedEvents: Event[];
+  cancelledEvents: Event[];
+  filtered: Event[];
+  sorted: Event[];
+  weatherMap: Map<string, WeatherForecast>;
+  today: string;
+  // Handlers
+  handleTabChange: (tab: TabMode) => void;
+  handleSort: (field: SortField) => void;
+  handleDuplicate: (event: Event) => void;
+  handleDelete: (id: string) => void;
+  handleQuickBook: (event: Event) => Promise<void>;
+  handleDismiss: (eventId: string, reason: "disrupted" | "charity") => Promise<void>;
+}
+
+function ListView({
+  activeTab,
+  setActiveTab,
+  sortField,
+  setSortField,
+  sortDirection,
+  setSortDirection,
+  bookingId,
+  setBookingId,
+  setEditingEvent,
+  setSalesEvent,
+  setDuplicatingEvent,
+  initialEvents,
+  upcomingEvents,
+  unbookedEvents,
+  pastEvents,
+  pastUnbookedEvents,
+  flaggedEvents,
+  cancelledEvents,
+  filtered,
+  sorted,
+  weatherMap,
+  today,
+  handleTabChange,
+  handleSort,
+  handleDuplicate,
+  handleDelete,
+  handleQuickBook,
+  handleDismiss,
+}: ListViewProps) {
+  return (
+    <>
+      {/* All / Upcoming / Unbooked / Past / Needs Attention Tabs */}
+      <div className="flex gap-1 border-b overflow-x-auto">
+        <button
+          className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${
+            activeTab === "all"
+              ? "border-primary text-foreground"
+              : "border-transparent text-muted-foreground hover:text-foreground"
+          }`}
+          onClick={() => handleTabChange("all")}
+        >
+          All ({initialEvents.length})
+        </button>
+        <button
+          className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${
+            activeTab === "upcoming"
+              ? "border-primary text-foreground"
+              : "border-transparent text-muted-foreground hover:text-foreground"
+          }`}
+          onClick={() => handleTabChange("upcoming")}
+        >
+          Upcoming ({upcomingEvents.length})
+        </button>
+        <button
+          className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${
+            activeTab === "unbooked"
+              ? "border-primary text-foreground"
+              : "border-transparent text-muted-foreground hover:text-foreground"
+          }`}
+          onClick={() => handleTabChange("unbooked")}
+        >
+          Unbooked ({unbookedEvents.length})
+        </button>
+        <button
+          className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${
+            activeTab === "past"
+              ? "border-primary text-foreground"
+              : "border-transparent text-muted-foreground hover:text-foreground"
+          }`}
+          onClick={() => handleTabChange("past")}
+        >
+          Past ({pastEvents.length})
+        </button>
+        {pastUnbookedEvents.length > 0 && (
+          <button
+            className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${
+              activeTab === "past_unbooked"
+                ? "border-slate-500 text-slate-700 dark:text-slate-300"
+                : "border-transparent text-muted-foreground hover:text-foreground"
+            }`}
+            onClick={() => handleTabChange("past_unbooked")}
+          >
+            Past Unbooked ({pastUnbookedEvents.length})
+          </button>
+        )}
+        {flaggedEvents.length > 0 && (
+          <button
+            className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors flex items-center gap-1.5 whitespace-nowrap ${
+              activeTab === "flagged"
+                ? "border-amber-500 text-amber-700 dark:text-amber-400"
+                : "border-transparent text-amber-600 dark:text-amber-500 hover:text-amber-700"
+            }`}
+            onClick={() => handleTabChange("flagged")}
+          >
+            Needs Attention
+            <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-amber-500 px-1.5 text-[10px] font-bold text-white">
+              {flaggedEvents.length}
+            </span>
+          </button>
+        )}
+        {cancelledEvents.length > 0 && (
+          <button
+            className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${
+              activeTab === "cancelled"
+                ? "border-slate-500 text-slate-700 dark:text-slate-300"
+                : "border-transparent text-muted-foreground hover:text-foreground"
+            }`}
+            onClick={() => handleTabChange("cancelled")}
+          >
+            Cancelled ({cancelledEvents.length})
+          </button>
+        )}
+      </div>
+
+      {/*
+       * Filter bar (search + year + mode + delete all) was lifted out
+       * of ListView as of 2026-04-24 — it now renders as a sibling at
+       * the EventsClient level, right before <ListView />. Rationale:
+       * ListView is a nested function component whose reference
+       * changes every render, so React treats it as a new component
+       * type and unmounts+remounts it per keystroke. When the search
+       * <input> lived inside ListView, it was destroyed and recreated
+       * with each keystroke → focus lost. As a sibling of ListView,
+       * the filter bar stays mounted even when ListView churns.
+       * Proper follow-up is to extract ListView entirely (557 lines,
+       * ~30 closure refs) — this is the minimal fix that unblocks
+       * usable search without that big refactor.
+       */}
+
+      {/* Past Unbooked explanation banner */}
+      {activeTab === "past_unbooked" && pastUnbookedEvents.length > 0 && (
+        <div className="rounded-lg border border-slate-200 bg-slate-50 dark:border-slate-700 dark:bg-slate-900/30 px-4 py-3 text-sm text-slate-700 dark:text-slate-300">
+          These events are in your history but were never marked as booked. If they actually happened and you have sales data, click <strong>Edit</strong> → mark as booked → log the sales. If they were tentatives that fell through, you can leave or delete them.
+        </div>
+      )}
+
+      {/* Events Table */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Calendar className="h-5 w-5" />
+            {activeTab === "all" ? "All Events" : activeTab === "upcoming" ? "Upcoming Events" : activeTab === "unbooked" ? "Unbooked Events" : activeTab === "past_unbooked" ? "Past Unbooked Events" : activeTab === "flagged" ? "Events Needing Sales Data" : "Past Events"}
+          </CardTitle>
+          {/* Flagged-tab explainer — spells out why events landed
+              here and what the three row-actions mean. Per-row badges
+              aren't needed because all flagged events share the same
+              cause (past + booked + no net_sales, see flaggedEvents
+              filter around line 360). If the filter ever grows to
+              cover other reasons, move the "why" to per-row chips. */}
+          {activeTab === "flagged" && (
+            <p className="text-sm text-muted-foreground mt-1">
+              Past events you confirmed but haven&apos;t logged sales for yet. Each row affects forecast accuracy — pick one:
+              <span className="block mt-1.5 space-y-0.5">
+                <span className="block">
+                  <DollarSign className="h-3.5 w-3.5 inline-block mr-1 text-green-600 align-text-bottom" />
+                  <strong>Enter sales</strong> — log what you actually made.
+                </span>
+                <span className="block">
+                  <CloudLightning className="h-3.5 w-3.5 inline-block mr-1 text-amber-700 align-text-bottom" />
+                  <strong>Disrupted</strong> — storm, breakdown, or no-show. Excluded from forecast math.
+                </span>
+                <span className="block">
+                  <Heart className="h-3.5 w-3.5 inline-block mr-1 text-pink-700 align-text-bottom" />
+                  <strong>Charity</strong> — donated event. Logs $0 intentionally, stays in forecast math.
+                </span>
+              </span>
+            </p>
+          )}
+        </CardHeader>
+        <CardContent>
+          {filtered.length === 0 ? (
+            <div className="h-32 flex items-center justify-center text-muted-foreground">
+              {initialEvents.length === 0
+                ? "No events yet. Add your first event to get started."
+                : "No events match your search."}
+            </div>
+          ) : (
+            <>
+            {/* Mobile card list — replaces the horizontally-scrolling table
+                at <sm. Surfaces the essentials (date, name, location, sales,
+                forecast) with one tap-to-edit target per card. Flagged-tab
+                quick actions (Enter sales / Book it) render as pill buttons
+                below the card body to stay touchable. */}
+            <div className="sm:hidden space-y-2">
+              {sorted.map((event) => {
+                const isCatering = (event.event_mode ?? "food_truck") === "catering";
+                const displaySales = isCatering && (event.invoice_revenue ?? 0) > 0
+                  ? (event.net_sales ?? 0) + (event.invoice_revenue ?? 0)
+                  : event.net_sales;
+                const needsSales = event.event_date <= today && !event.net_sales && !event.cancellation_reason && !(isCatering && (event.invoice_revenue ?? 0) > 0);
+                const isUnbookedFuture = !event.booked && event.event_date >= today && !event.cancellation_reason;
+                return (
+                  <button
+                    key={event.id}
+                    type="button"
+                    onClick={() => setEditingEvent(event)}
+                    className={`w-full text-left rounded-lg border bg-card p-3 hover:bg-muted/50 transition-colors ${
+                      isCatering ? "border-l-[3px] border-l-violet-500" :
+                      activeTab === "all" && event.booked ? "border-l-[3px] border-l-green-500" :
+                      activeTab === "all" && !event.booked ? "border-l-[3px] border-l-slate-300 dark:border-l-slate-600" :
+                      ""
+                    }`}
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="text-xs font-medium text-muted-foreground whitespace-nowrap">
+                            {formatDate(event.event_date)}
+                          </span>
+                          {event.cancellation_reason && (
+                            <Badge variant="outline" className="text-[10px] text-red-600 border-red-300 dark:text-red-400 dark:border-red-700">
+                              Cancelled
+                            </Badge>
+                          )}
+                          {!event.booked && !event.cancellation_reason && (
+                            <Badge variant="outline" className="text-[10px]">Unbooked</Badge>
+                          )}
+                          {event.event_date >= today && weatherMap.has(event.id) && <WeatherBadge event={event} weatherMap={weatherMap} />}
+                        </div>
+                        <div className="font-medium text-sm mt-1 truncate">{event.event_name}</div>
+                        {(event.event_type || event.location || event.city) && (
+                          <div className="text-xs text-muted-foreground mt-0.5 truncate">
+                            {[event.event_type, event.location ?? event.city].filter(Boolean).join(" · ")}
+                          </div>
+                        )}
+                        <ForecastVsActual event={event} today={today} />
+                      </div>
+                      <div className="text-right shrink-0">
+                        <div className="text-sm font-semibold tabular-nums">
+                          {formatCurrency(displaySales)}
+                          {isCatering && (event.invoice_revenue ?? 0) > 0 && (
+                            <span className="text-[10px] text-violet-600 ml-1">inv</span>
+                          )}
+                        </div>
+                        {event.event_date >= today && event.forecast_sales && (
+                          <div className="mt-1">
+                            <ForecastInline event={event} />
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                    {(needsSales || isUnbookedFuture) && (
+                      <div
+                        className="mt-2 pt-2 border-t flex items-center gap-2 flex-wrap"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        {isUnbookedFuture && (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="h-11 text-xs text-emerald-700 border-emerald-300 hover:bg-emerald-50 dark:text-emerald-400 dark:border-emerald-800"
+                            disabled={bookingId === event.id}
+                            onClick={() => handleQuickBook(event)}
+                          >
+                            <BookCheck className="h-3.5 w-3.5 mr-1.5" />
+                            {bookingId === event.id ? "Booking..." : "Book it"}
+                          </Button>
+                        )}
+                        {needsSales && (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="h-11 text-xs text-green-700 border-green-300 hover:bg-green-50 dark:text-green-400 dark:border-green-800"
+                            onClick={() => setSalesEvent(event)}
+                          >
+                            <DollarSign className="h-3.5 w-3.5 mr-1.5" />
+                            {isCatering ? "Log invoice" : "Log sales"}
+                          </Button>
+                        )}
+                      </div>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+
+            <div className="hidden sm:block overflow-x-auto">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead
+                    className="cursor-pointer select-none pr-6 whitespace-nowrap"
+                    onClick={() => handleSort("event_date")}
+                  >
+                    <span className="inline-flex items-center">
+                      Date
+                      <SortIcon field="event_date" sortField={sortField} sortDirection={sortDirection} />
+                    </span>
+                  </TableHead>
+                  <TableHead
+                    className="cursor-pointer select-none"
+                    onClick={() => handleSort("event_name")}
+                  >
+                    <span className="inline-flex items-center">
+                      Event
+                      <SortIcon field="event_name" sortField={sortField} sortDirection={sortDirection} />
+                    </span>
+                  </TableHead>
+                  <TableHead
+                    className="hidden md:table-cell cursor-pointer select-none pl-6 pr-4"
+                    onClick={() => handleSort("event_type")}
+                  >
+                    <span className="inline-flex items-center">
+                      Type
+                      <SortIcon field="event_type" sortField={sortField} sortDirection={sortDirection} />
+                    </span>
+                  </TableHead>
+                  <TableHead
+                    className="hidden xl:table-cell cursor-pointer select-none"
+                    onClick={() => handleSort("location")}
+                  >
+                    <span className="inline-flex items-center">
+                      Location
+                      <SortIcon field="location" sortField={sortField} sortDirection={sortDirection} />
+                    </span>
+                  </TableHead>
+                  <TableHead
+                    className="cursor-pointer select-none text-right"
+                    onClick={() => handleSort("net_sales")}
+                  >
+                    <span className="inline-flex items-center justify-end">
+                      Net Sales
+                      <SortIcon field="net_sales" sortField={sortField} sortDirection={sortDirection} />
+                    </span>
+                  </TableHead>
+                  <TableHead
+                    className="hidden md:table-cell cursor-pointer select-none text-right"
+                    onClick={() => handleSort("net_after_fees")}
+                  >
+                    <span className="inline-flex items-center justify-end">
+                      After Fees
+                      <SortIcon field="net_after_fees" sortField={sortField} sortDirection={sortDirection} />
+                    </span>
+                  </TableHead>
+                  <TableHead
+                    className="hidden lg:table-cell cursor-pointer select-none text-right"
+                    onClick={() => handleSort("forecast_sales")}
+                  >
+                    <span className="inline-flex items-center justify-end">
+                      Forecast
+                      <SortIcon field="forecast_sales" sortField={sortField} sortDirection={sortDirection} />
+                    </span>
+                  </TableHead>
+                  <TableHead
+                    className="hidden xl:table-cell cursor-pointer select-none text-right"
+                    onClick={() => handleSort("net_profit")}
+                  >
+                    <span className="inline-flex items-center justify-end">
+                      Profit
+                      <SortIcon field="net_profit" sortField={sortField} sortDirection={sortDirection} />
+                    </span>
+                  </TableHead>
+                  <TableHead></TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {sorted.map((event) => (
+                  <TableRow
+                    key={event.id}
+                    className={`cursor-pointer hover:bg-muted/50 transition-colors ${
+                      (event.event_mode ?? "food_truck") === "catering"
+                        ? "border-l-[3px] border-l-violet-500 bg-violet-50/30 dark:bg-violet-950/10"
+                        : activeTab === "all"
+                          ? event.booked
+                            ? "border-l-[3px] border-l-green-500 bg-green-50/40 dark:bg-green-950/10"
+                            : "border-l-[3px] border-l-slate-300 dark:border-l-slate-600 bg-slate-50/60 dark:bg-slate-900/20"
+                          : ""
+                    }`}
+                    onClick={() => setEditingEvent(event)}
+                  >
+                    <TableCell className="whitespace-nowrap text-sm pr-6">
+                      {formatDate(event.event_date)}
+                      {event.cancellation_reason && (
+                        <Badge variant="outline" className="ml-2 text-xs text-red-600 border-red-300 dark:text-red-400 dark:border-red-700">
+                          Cancelled
+                        </Badge>
+                      )}
+                      {!event.booked && !event.cancellation_reason && (
+                        <Badge variant="outline" className="ml-2 text-xs">
+                          Unbooked
+                        </Badge>
+                      )}
+                      {/* Weather badge for upcoming events within 14 days */}
+                      {event.event_date >= today && weatherMap.has(event.id) && (
+                        <WeatherBadge event={event} weatherMap={weatherMap} />
+                      )}
+                    </TableCell>
+                    <TableCell className="font-medium">
+                      <div>{event.event_name}</div>
+                      {/* Forecast vs Actual for past events */}
+                      <ForecastVsActual event={event} today={today} />
+                    </TableCell>
+                    <TableCell className="hidden md:table-cell text-sm text-muted-foreground pl-6 pr-4">
+                      {event.event_type ?? "—"}
+                    </TableCell>
+                    <TableCell className="hidden xl:table-cell text-sm text-muted-foreground">
+                      {event.location ?? event.city ?? "—"}
+                    </TableCell>
+                    <TableCell className="text-right font-medium">
+                      {event.event_mode === "catering" && (event.invoice_revenue ?? 0) > 0 ? (
+                        <span title={`Invoice: ${formatCurrency(event.invoice_revenue)}\nOn-site: ${formatCurrency(event.net_sales)}`}>
+                          {formatCurrency((event.net_sales ?? 0) + (event.invoice_revenue ?? 0))}
+                          <span className="text-[10px] text-violet-600 ml-1">inv</span>
+                        </span>
+                      ) : (
+                        formatCurrency(event.net_sales)
+                      )}
+                    </TableCell>
+                    <TableCell className="hidden md:table-cell text-right text-sm">
+                      {formatCurrency(event.net_after_fees)}
+                    </TableCell>
+                    <TableCell className="hidden lg:table-cell text-right text-sm text-muted-foreground">
+                      <ForecastInline event={event} />
+                      {event.event_date >= today && (
+                        <WeatherForecastImpact event={event} today={today} />
+                      )}
+                    </TableCell>
+                    <TableCell className="hidden xl:table-cell text-right text-sm font-medium">
+                      {(() => {
+                        const hasCost = event.food_cost !== null || event.labor_cost !== null || event.other_costs !== null;
+                        if (!hasCost) return <span className="text-muted-foreground">—</span>;
+                        const rev = (event.net_sales ?? 0) + (event.event_mode === "catering" ? (event.invoice_revenue ?? 0) : 0);
+                        const costs = (event.food_cost ?? 0) + (event.labor_cost ?? 0) + (event.other_costs ?? 0);
+                        const p = rev - costs;
+                        const margin = rev > 0 ? (p / rev) * 100 : 0;
+                        return (
+                          <span className={p >= 0 ? "text-green-700 dark:text-green-400" : "text-red-600"} title={`Margin: ${margin.toFixed(1)}%`}>
+                            {formatCurrency(p)}
+                          </span>
+                        );
+                      })()}
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex items-center gap-1 justify-end" onClick={(e) => e.stopPropagation()}>
+                        {/* Flagged tab: show dismiss options instead of standard actions */}
+                        {activeTab === "flagged" ? (
+                          <>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-8 w-8 text-green-600"
+                              title="Enter sales"
+                              onClick={() => setSalesEvent(event)}
+                            >
+                              <DollarSign className="h-4 w-4" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-8 px-2 text-xs text-amber-700 hover:text-amber-900 hover:bg-amber-50"
+                              title="Dismiss: storm, cancellation, or no-show (excluded from forecasts)"
+                              onClick={() => handleDismiss(event.id, "disrupted")}
+                            >
+                              <CloudLightning className="h-3.5 w-3.5 mr-1" />
+                              Disrupted
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-8 px-2 text-xs text-pink-700 hover:text-pink-900 hover:bg-pink-50"
+                              title="Dismiss: charity or donated event (logs $0 intentionally)"
+                              onClick={() => handleDismiss(event.id, "charity")}
+                            >
+                              <Heart className="h-3.5 w-3.5 mr-1" />
+                              Charity
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-8 w-8"
+                              title="Edit event"
+                              onClick={() => setEditingEvent(event)}
+                            >
+                              <Pencil className="h-4 w-4" />
+                            </Button>
+                          </>
+                        ) : (
+                          <>
+                            {/* Unbooked events: show "Book It" button */}
+                            {!event.booked && event.event_date >= today && (
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="h-8 px-2 text-xs text-emerald-700 hover:text-emerald-900 hover:bg-emerald-50 dark:text-emerald-400 dark:hover:bg-emerald-950/30"
+                                title="Mark as booked — moves to Upcoming"
+                                disabled={bookingId === event.id}
+                                onClick={() => handleQuickBook(event)}
+                              >
+                                <BookCheck className="h-3.5 w-3.5 mr-1" />
+                                {bookingId === event.id ? "Booking..." : "Book It"}
+                              </Button>
+                            )}
+                            {event.event_date <= today && !event.net_sales && (
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-8 w-8 text-green-600"
+                                title="Enter sales"
+                                onClick={() => setSalesEvent(event)}
+                              >
+                                <DollarSign className="h-4 w-4" />
+                              </Button>
+                            )}
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-8 w-8"
+                              title="Edit event"
+                              onClick={() => setEditingEvent(event)}
+                            >
+                              <Pencil className="h-4 w-4" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-8 w-8 text-muted-foreground hover:text-foreground"
+                              title="Duplicate event"
+                              onClick={() => handleDuplicate(event)}
+                            >
+                              <CopyPlus className="h-4 w-4" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-8 w-8 text-destructive"
+                              title="Delete event"
+                              onClick={() => handleDelete(event.id)}
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </>
+                        )}
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+            </div>
+            </>
+          )}
+        </CardContent>
+      </Card>
+    </>
+  );
+}
 
 export function EventsClient({ initialEvents, userId = "", businessName = "", userCity = "", userState = "" }: EventsClientProps) {
   // Distinct state codes used by this operator's events — floats to
@@ -639,17 +1252,6 @@ export function EventsClient({ initialEvents, userId = "", businessName = "", us
     }
   }
 
-  function SortIcon({ field }: { field: SortField }) {
-    if (sortField !== field) {
-      return <ChevronsUpDown className="h-3 w-3 ml-1 opacity-40" />;
-    }
-    return sortDirection === "asc" ? (
-      <ChevronUp className="h-3 w-3 ml-1" />
-    ) : (
-      <ChevronDown className="h-3 w-3 ml-1" />
-    );
-  }
-
   async function handleCreate(data: EventFormData) {
     await createEvent(data);
     router.refresh();
@@ -821,15 +1423,6 @@ export function EventsClient({ initialEvents, userId = "", businessName = "", us
     a.download = `vendcast-events-${new Date().toISOString().split("T")[0]}.csv`;
     a.click();
     URL.revokeObjectURL(url);
-  }
-
-  function formatDate(dateStr: string) {
-    return new Date(dateStr + "T00:00:00").toLocaleDateString("en-US", {
-      weekday: "short",
-      month: "short",
-      day: "numeric",
-      year: "numeric",
-    });
   }
 
   // Build social share text
@@ -1259,524 +1852,6 @@ export function EventsClient({ initialEvents, userId = "", businessName = "", us
   }
 
   // ---- LIST VIEW ----
-  function ListView() {
-    return (
-      <>
-        {/* All / Upcoming / Unbooked / Past / Needs Attention Tabs */}
-        <div className="flex gap-1 border-b overflow-x-auto">
-          <button
-            className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${
-              activeTab === "all"
-                ? "border-primary text-foreground"
-                : "border-transparent text-muted-foreground hover:text-foreground"
-            }`}
-            onClick={() => handleTabChange("all")}
-          >
-            All ({initialEvents.length})
-          </button>
-          <button
-            className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${
-              activeTab === "upcoming"
-                ? "border-primary text-foreground"
-                : "border-transparent text-muted-foreground hover:text-foreground"
-            }`}
-            onClick={() => handleTabChange("upcoming")}
-          >
-            Upcoming ({upcomingEvents.length})
-          </button>
-          <button
-            className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${
-              activeTab === "unbooked"
-                ? "border-primary text-foreground"
-                : "border-transparent text-muted-foreground hover:text-foreground"
-            }`}
-            onClick={() => handleTabChange("unbooked")}
-          >
-            Unbooked ({unbookedEvents.length})
-          </button>
-          <button
-            className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${
-              activeTab === "past"
-                ? "border-primary text-foreground"
-                : "border-transparent text-muted-foreground hover:text-foreground"
-            }`}
-            onClick={() => handleTabChange("past")}
-          >
-            Past ({pastEvents.length})
-          </button>
-          {pastUnbookedEvents.length > 0 && (
-            <button
-              className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${
-                activeTab === "past_unbooked"
-                  ? "border-slate-500 text-slate-700 dark:text-slate-300"
-                  : "border-transparent text-muted-foreground hover:text-foreground"
-              }`}
-              onClick={() => handleTabChange("past_unbooked")}
-            >
-              Past Unbooked ({pastUnbookedEvents.length})
-            </button>
-          )}
-          {flaggedEvents.length > 0 && (
-            <button
-              className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors flex items-center gap-1.5 whitespace-nowrap ${
-                activeTab === "flagged"
-                  ? "border-amber-500 text-amber-700 dark:text-amber-400"
-                  : "border-transparent text-amber-600 dark:text-amber-500 hover:text-amber-700"
-              }`}
-              onClick={() => handleTabChange("flagged")}
-            >
-              Needs Attention
-              <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-amber-500 px-1.5 text-[10px] font-bold text-white">
-                {flaggedEvents.length}
-              </span>
-            </button>
-          )}
-          {cancelledEvents.length > 0 && (
-            <button
-              className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${
-                activeTab === "cancelled"
-                  ? "border-slate-500 text-slate-700 dark:text-slate-300"
-                  : "border-transparent text-muted-foreground hover:text-foreground"
-              }`}
-              onClick={() => handleTabChange("cancelled")}
-            >
-              Cancelled ({cancelledEvents.length})
-            </button>
-          )}
-        </div>
-
-        {/*
-         * Filter bar (search + year + mode + delete all) was lifted out
-         * of ListView as of 2026-04-24 — it now renders as a sibling at
-         * the EventsClient level, right before <ListView />. Rationale:
-         * ListView is a nested function component whose reference
-         * changes every render, so React treats it as a new component
-         * type and unmounts+remounts it per keystroke. When the search
-         * <input> lived inside ListView, it was destroyed and recreated
-         * with each keystroke → focus lost. As a sibling of ListView,
-         * the filter bar stays mounted even when ListView churns.
-         * Proper follow-up is to extract ListView entirely (557 lines,
-         * ~30 closure refs) — this is the minimal fix that unblocks
-         * usable search without that big refactor.
-         */}
-
-        {/* Past Unbooked explanation banner */}
-        {activeTab === "past_unbooked" && pastUnbookedEvents.length > 0 && (
-          <div className="rounded-lg border border-slate-200 bg-slate-50 dark:border-slate-700 dark:bg-slate-900/30 px-4 py-3 text-sm text-slate-700 dark:text-slate-300">
-            These events are in your history but were never marked as booked. If they actually happened and you have sales data, click <strong>Edit</strong> → mark as booked → log the sales. If they were tentatives that fell through, you can leave or delete them.
-          </div>
-        )}
-
-        {/* Events Table */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Calendar className="h-5 w-5" />
-              {activeTab === "all" ? "All Events" : activeTab === "upcoming" ? "Upcoming Events" : activeTab === "unbooked" ? "Unbooked Events" : activeTab === "past_unbooked" ? "Past Unbooked Events" : activeTab === "flagged" ? "Events Needing Sales Data" : "Past Events"}
-            </CardTitle>
-            {/* Flagged-tab explainer — spells out why events landed
-                here and what the three row-actions mean. Per-row badges
-                aren't needed because all flagged events share the same
-                cause (past + booked + no net_sales, see flaggedEvents
-                filter around line 360). If the filter ever grows to
-                cover other reasons, move the "why" to per-row chips. */}
-            {activeTab === "flagged" && (
-              <p className="text-sm text-muted-foreground mt-1">
-                Past events you confirmed but haven&apos;t logged sales for yet. Each row affects forecast accuracy — pick one:
-                <span className="block mt-1.5 space-y-0.5">
-                  <span className="block">
-                    <DollarSign className="h-3.5 w-3.5 inline-block mr-1 text-green-600 align-text-bottom" />
-                    <strong>Enter sales</strong> — log what you actually made.
-                  </span>
-                  <span className="block">
-                    <CloudLightning className="h-3.5 w-3.5 inline-block mr-1 text-amber-700 align-text-bottom" />
-                    <strong>Disrupted</strong> — storm, breakdown, or no-show. Excluded from forecast math.
-                  </span>
-                  <span className="block">
-                    <Heart className="h-3.5 w-3.5 inline-block mr-1 text-pink-700 align-text-bottom" />
-                    <strong>Charity</strong> — donated event. Logs $0 intentionally, stays in forecast math.
-                  </span>
-                </span>
-              </p>
-            )}
-          </CardHeader>
-          <CardContent>
-            {filtered.length === 0 ? (
-              <div className="h-32 flex items-center justify-center text-muted-foreground">
-                {initialEvents.length === 0
-                  ? "No events yet. Add your first event to get started."
-                  : "No events match your search."}
-              </div>
-            ) : (
-              <>
-              {/* Mobile card list — replaces the horizontally-scrolling table
-                  at <sm. Surfaces the essentials (date, name, location, sales,
-                  forecast) with one tap-to-edit target per card. Flagged-tab
-                  quick actions (Enter sales / Book it) render as pill buttons
-                  below the card body to stay touchable. */}
-              <div className="sm:hidden space-y-2">
-                {sorted.map((event) => {
-                  const isCatering = (event.event_mode ?? "food_truck") === "catering";
-                  const displaySales = isCatering && (event.invoice_revenue ?? 0) > 0
-                    ? (event.net_sales ?? 0) + (event.invoice_revenue ?? 0)
-                    : event.net_sales;
-                  const needsSales = event.event_date <= today && !event.net_sales && !event.cancellation_reason && !(isCatering && (event.invoice_revenue ?? 0) > 0);
-                  const isUnbookedFuture = !event.booked && event.event_date >= today && !event.cancellation_reason;
-                  return (
-                    <button
-                      key={event.id}
-                      type="button"
-                      onClick={() => setEditingEvent(event)}
-                      className={`w-full text-left rounded-lg border bg-card p-3 hover:bg-muted/50 transition-colors ${
-                        isCatering ? "border-l-[3px] border-l-violet-500" :
-                        activeTab === "all" && event.booked ? "border-l-[3px] border-l-green-500" :
-                        activeTab === "all" && !event.booked ? "border-l-[3px] border-l-slate-300 dark:border-l-slate-600" :
-                        ""
-                      }`}
-                    >
-                      <div className="flex items-start justify-between gap-2">
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2 flex-wrap">
-                            <span className="text-xs font-medium text-muted-foreground whitespace-nowrap">
-                              {formatDate(event.event_date)}
-                            </span>
-                            {event.cancellation_reason && (
-                              <Badge variant="outline" className="text-[10px] text-red-600 border-red-300 dark:text-red-400 dark:border-red-700">
-                                Cancelled
-                              </Badge>
-                            )}
-                            {!event.booked && !event.cancellation_reason && (
-                              <Badge variant="outline" className="text-[10px]">Unbooked</Badge>
-                            )}
-                            {event.event_date >= today && weatherMap.has(event.id) && <WeatherBadge event={event} weatherMap={weatherMap} />}
-                          </div>
-                          <div className="font-medium text-sm mt-1 truncate">{event.event_name}</div>
-                          {(event.event_type || event.location || event.city) && (
-                            <div className="text-xs text-muted-foreground mt-0.5 truncate">
-                              {[event.event_type, event.location ?? event.city].filter(Boolean).join(" · ")}
-                            </div>
-                          )}
-                          <ForecastVsActual event={event} today={today} />
-                        </div>
-                        <div className="text-right shrink-0">
-                          <div className="text-sm font-semibold tabular-nums">
-                            {formatCurrency(displaySales)}
-                            {isCatering && (event.invoice_revenue ?? 0) > 0 && (
-                              <span className="text-[10px] text-violet-600 ml-1">inv</span>
-                            )}
-                          </div>
-                          {event.event_date >= today && event.forecast_sales && (
-                            <div className="mt-1">
-                              <ForecastInline event={event} />
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                      {(needsSales || isUnbookedFuture) && (
-                        <div
-                          className="mt-2 pt-2 border-t flex items-center gap-2 flex-wrap"
-                          onClick={(e) => e.stopPropagation()}
-                        >
-                          {isUnbookedFuture && (
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              className="h-11 text-xs text-emerald-700 border-emerald-300 hover:bg-emerald-50 dark:text-emerald-400 dark:border-emerald-800"
-                              disabled={bookingId === event.id}
-                              onClick={() => handleQuickBook(event)}
-                            >
-                              <BookCheck className="h-3.5 w-3.5 mr-1.5" />
-                              {bookingId === event.id ? "Booking..." : "Book it"}
-                            </Button>
-                          )}
-                          {needsSales && (
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              className="h-11 text-xs text-green-700 border-green-300 hover:bg-green-50 dark:text-green-400 dark:border-green-800"
-                              onClick={() => setSalesEvent(event)}
-                            >
-                              <DollarSign className="h-3.5 w-3.5 mr-1.5" />
-                              {isCatering ? "Log invoice" : "Log sales"}
-                            </Button>
-                          )}
-                        </div>
-                      )}
-                    </button>
-                  );
-                })}
-              </div>
-
-              <div className="hidden sm:block overflow-x-auto">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead
-                      className="cursor-pointer select-none pr-6 whitespace-nowrap"
-                      onClick={() => handleSort("event_date")}
-                    >
-                      <span className="inline-flex items-center">
-                        Date
-                        <SortIcon field="event_date" />
-                      </span>
-                    </TableHead>
-                    <TableHead
-                      className="cursor-pointer select-none"
-                      onClick={() => handleSort("event_name")}
-                    >
-                      <span className="inline-flex items-center">
-                        Event
-                        <SortIcon field="event_name" />
-                      </span>
-                    </TableHead>
-                    <TableHead
-                      className="hidden md:table-cell cursor-pointer select-none pl-6 pr-4"
-                      onClick={() => handleSort("event_type")}
-                    >
-                      <span className="inline-flex items-center">
-                        Type
-                        <SortIcon field="event_type" />
-                      </span>
-                    </TableHead>
-                    <TableHead
-                      className="hidden xl:table-cell cursor-pointer select-none"
-                      onClick={() => handleSort("location")}
-                    >
-                      <span className="inline-flex items-center">
-                        Location
-                        <SortIcon field="location" />
-                      </span>
-                    </TableHead>
-                    <TableHead
-                      className="cursor-pointer select-none text-right"
-                      onClick={() => handleSort("net_sales")}
-                    >
-                      <span className="inline-flex items-center justify-end">
-                        Net Sales
-                        <SortIcon field="net_sales" />
-                      </span>
-                    </TableHead>
-                    <TableHead
-                      className="hidden md:table-cell cursor-pointer select-none text-right"
-                      onClick={() => handleSort("net_after_fees")}
-                    >
-                      <span className="inline-flex items-center justify-end">
-                        After Fees
-                        <SortIcon field="net_after_fees" />
-                      </span>
-                    </TableHead>
-                    <TableHead
-                      className="hidden lg:table-cell cursor-pointer select-none text-right"
-                      onClick={() => handleSort("forecast_sales")}
-                    >
-                      <span className="inline-flex items-center justify-end">
-                        Forecast
-                        <SortIcon field="forecast_sales" />
-                      </span>
-                    </TableHead>
-                    <TableHead
-                      className="hidden xl:table-cell cursor-pointer select-none text-right"
-                      onClick={() => handleSort("net_profit")}
-                    >
-                      <span className="inline-flex items-center justify-end">
-                        Profit
-                        <SortIcon field="net_profit" />
-                      </span>
-                    </TableHead>
-                    <TableHead></TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {sorted.map((event) => (
-                    <TableRow
-                      key={event.id}
-                      className={`cursor-pointer hover:bg-muted/50 transition-colors ${
-                        (event.event_mode ?? "food_truck") === "catering"
-                          ? "border-l-[3px] border-l-violet-500 bg-violet-50/30 dark:bg-violet-950/10"
-                          : activeTab === "all"
-                            ? event.booked
-                              ? "border-l-[3px] border-l-green-500 bg-green-50/40 dark:bg-green-950/10"
-                              : "border-l-[3px] border-l-slate-300 dark:border-l-slate-600 bg-slate-50/60 dark:bg-slate-900/20"
-                            : ""
-                      }`}
-                      onClick={() => setEditingEvent(event)}
-                    >
-                      <TableCell className="whitespace-nowrap text-sm pr-6">
-                        {formatDate(event.event_date)}
-                        {event.cancellation_reason && (
-                          <Badge variant="outline" className="ml-2 text-xs text-red-600 border-red-300 dark:text-red-400 dark:border-red-700">
-                            Cancelled
-                          </Badge>
-                        )}
-                        {!event.booked && !event.cancellation_reason && (
-                          <Badge variant="outline" className="ml-2 text-xs">
-                            Unbooked
-                          </Badge>
-                        )}
-                        {/* Weather badge for upcoming events within 14 days */}
-                        {event.event_date >= today && weatherMap.has(event.id) && (
-                          <WeatherBadge event={event} weatherMap={weatherMap} />
-                        )}
-                      </TableCell>
-                      <TableCell className="font-medium">
-                        <div>{event.event_name}</div>
-                        {/* Forecast vs Actual for past events */}
-                        <ForecastVsActual event={event} today={today} />
-                      </TableCell>
-                      <TableCell className="hidden md:table-cell text-sm text-muted-foreground pl-6 pr-4">
-                        {event.event_type ?? "—"}
-                      </TableCell>
-                      <TableCell className="hidden xl:table-cell text-sm text-muted-foreground">
-                        {event.location ?? event.city ?? "—"}
-                      </TableCell>
-                      <TableCell className="text-right font-medium">
-                        {event.event_mode === "catering" && (event.invoice_revenue ?? 0) > 0 ? (
-                          <span title={`Invoice: ${formatCurrency(event.invoice_revenue)}\nOn-site: ${formatCurrency(event.net_sales)}`}>
-                            {formatCurrency((event.net_sales ?? 0) + (event.invoice_revenue ?? 0))}
-                            <span className="text-[10px] text-violet-600 ml-1">inv</span>
-                          </span>
-                        ) : (
-                          formatCurrency(event.net_sales)
-                        )}
-                      </TableCell>
-                      <TableCell className="hidden md:table-cell text-right text-sm">
-                        {formatCurrency(event.net_after_fees)}
-                      </TableCell>
-                      <TableCell className="hidden lg:table-cell text-right text-sm text-muted-foreground">
-                        <ForecastInline event={event} />
-                        {event.event_date >= today && (
-                          <WeatherForecastImpact event={event} today={today} />
-                        )}
-                      </TableCell>
-                      <TableCell className="hidden xl:table-cell text-right text-sm font-medium">
-                        {(() => {
-                          const hasCost = event.food_cost !== null || event.labor_cost !== null || event.other_costs !== null;
-                          if (!hasCost) return <span className="text-muted-foreground">—</span>;
-                          const rev = (event.net_sales ?? 0) + (event.event_mode === "catering" ? (event.invoice_revenue ?? 0) : 0);
-                          const costs = (event.food_cost ?? 0) + (event.labor_cost ?? 0) + (event.other_costs ?? 0);
-                          const p = rev - costs;
-                          const margin = rev > 0 ? (p / rev) * 100 : 0;
-                          return (
-                            <span className={p >= 0 ? "text-green-700 dark:text-green-400" : "text-red-600"} title={`Margin: ${margin.toFixed(1)}%`}>
-                              {formatCurrency(p)}
-                            </span>
-                          );
-                        })()}
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex items-center gap-1 justify-end" onClick={(e) => e.stopPropagation()}>
-                          {/* Flagged tab: show dismiss options instead of standard actions */}
-                          {activeTab === "flagged" ? (
-                            <>
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                className="h-8 w-8 text-green-600"
-                                title="Enter sales"
-                                onClick={() => setSalesEvent(event)}
-                              >
-                                <DollarSign className="h-4 w-4" />
-                              </Button>
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                className="h-8 px-2 text-xs text-amber-700 hover:text-amber-900 hover:bg-amber-50"
-                                title="Dismiss: storm, cancellation, or no-show (excluded from forecasts)"
-                                onClick={() => handleDismiss(event.id, "disrupted")}
-                              >
-                                <CloudLightning className="h-3.5 w-3.5 mr-1" />
-                                Disrupted
-                              </Button>
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                className="h-8 px-2 text-xs text-pink-700 hover:text-pink-900 hover:bg-pink-50"
-                                title="Dismiss: charity or donated event (logs $0 intentionally)"
-                                onClick={() => handleDismiss(event.id, "charity")}
-                              >
-                                <Heart className="h-3.5 w-3.5 mr-1" />
-                                Charity
-                              </Button>
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                className="h-8 w-8"
-                                title="Edit event"
-                                onClick={() => setEditingEvent(event)}
-                              >
-                                <Pencil className="h-4 w-4" />
-                              </Button>
-                            </>
-                          ) : (
-                            <>
-                              {/* Unbooked events: show "Book It" button */}
-                              {!event.booked && event.event_date >= today && (
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  className="h-8 px-2 text-xs text-emerald-700 hover:text-emerald-900 hover:bg-emerald-50 dark:text-emerald-400 dark:hover:bg-emerald-950/30"
-                                  title="Mark as booked — moves to Upcoming"
-                                  disabled={bookingId === event.id}
-                                  onClick={() => handleQuickBook(event)}
-                                >
-                                  <BookCheck className="h-3.5 w-3.5 mr-1" />
-                                  {bookingId === event.id ? "Booking..." : "Book It"}
-                                </Button>
-                              )}
-                              {event.event_date <= today && !event.net_sales && (
-                                <Button
-                                  variant="ghost"
-                                  size="icon"
-                                  className="h-8 w-8 text-green-600"
-                                  title="Enter sales"
-                                  onClick={() => setSalesEvent(event)}
-                                >
-                                  <DollarSign className="h-4 w-4" />
-                                </Button>
-                              )}
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                className="h-8 w-8"
-                                title="Edit event"
-                                onClick={() => setEditingEvent(event)}
-                              >
-                                <Pencil className="h-4 w-4" />
-                              </Button>
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                className="h-8 w-8 text-muted-foreground hover:text-foreground"
-                                title="Duplicate event"
-                                onClick={() => handleDuplicate(event)}
-                              >
-                                <CopyPlus className="h-4 w-4" />
-                              </Button>
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                className="h-8 w-8 text-destructive"
-                                title="Delete event"
-                                onClick={() => handleDelete(event.id)}
-                              >
-                                <Trash2 className="h-4 w-4" />
-                              </Button>
-                            </>
-                          )}
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-              </div>
-              </>
-            )}
-          </CardContent>
-        </Card>
-      </>
-    );
-  }
 
   const shareText = buildShareText();
 
@@ -1971,7 +2046,36 @@ export function EventsClient({ initialEvents, userId = "", businessName = "", us
               </Button>
             )}
           </div>
-          <ListView />
+          <ListView
+            activeTab={activeTab}
+            setActiveTab={setActiveTab}
+            sortField={sortField}
+            setSortField={setSortField}
+            sortDirection={sortDirection}
+            setSortDirection={setSortDirection}
+            bookingId={bookingId}
+            setBookingId={setBookingId}
+            setEditingEvent={setEditingEvent}
+            setSalesEvent={setSalesEvent}
+            setDuplicatingEvent={setDuplicatingEvent}
+            initialEvents={initialEvents}
+            upcomingEvents={upcomingEvents}
+            unbookedEvents={unbookedEvents}
+            pastEvents={pastEvents}
+            pastUnbookedEvents={pastUnbookedEvents}
+            flaggedEvents={flaggedEvents}
+            cancelledEvents={cancelledEvents}
+            filtered={filtered}
+            sorted={sorted}
+            weatherMap={weatherMap}
+            today={today}
+            handleTabChange={handleTabChange}
+            handleSort={handleSort}
+            handleDuplicate={handleDuplicate}
+            handleDelete={handleDelete}
+            handleQuickBook={handleQuickBook}
+            handleDismiss={handleDismiss}
+          />
         </>
       )}
 
