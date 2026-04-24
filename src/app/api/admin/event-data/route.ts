@@ -53,25 +53,42 @@ export async function GET(req: NextRequest) {
   const userIds = profiles.map((p) => p.id);
   if (userIds.length === 0) return NextResponse.json({ events: [], total: 0, profiles: [] });
 
-  // Fetch ALL matching events (no range — we sort after enrichment then paginate)
-  let eventsQuery = service
-    .from("events")
-    .select("id, user_id, event_name, event_date, event_type, location, city, net_sales, fee_type, fee_rate, event_weather, anomaly_flag, event_tier, notes, booked, expected_attendance")
-    .in("user_id", userIds);
+  // Fetch ALL matching events. PostgREST's default row limit is 1000 —
+  // without explicit range or batching, larger result sets truncate
+  // silently and the admin "total events" number becomes a ceiling, not
+  // a count. We need everything in memory to apply the enrichment-
+  // dependent sort (business name, city come from the joined profiles
+  // map), so we page through in batches until exhaustion.
+  function buildEventsQuery() {
+    let q = service
+      .from("events")
+      .select("id, user_id, event_name, event_date, event_type, location, city, net_sales, fee_type, fee_rate, event_weather, anomaly_flag, event_tier, notes, booked, expected_attendance")
+      .in("user_id", userIds);
+    if (search) q = q.ilike("event_name", `%${search}%`);
+    if (filterEventType) q = q.eq("event_type", filterEventType);
+    if (filterBooked === "booked") q = q.eq("booked", true);
+    else if (filterBooked === "unbooked") q = q.eq("booked", false);
+    return q;
+  }
 
-  if (search) {
-    eventsQuery = eventsQuery.ilike("event_name", `%${search}%`);
+  type EventRow = Awaited<ReturnType<ReturnType<typeof buildEventsQuery>["throwOnError"]>>["data"][number];
+  const BATCH_SIZE = 1000;
+  const allEvents: EventRow[] = [];
+  let offset = 0;
+  while (true) {
+    const { data: batch, error: batchErr } = await buildEventsQuery()
+      .order("event_date", { ascending: false })
+      .range(offset, offset + BATCH_SIZE - 1);
+    if (batchErr) {
+      console.error("[admin/event-data] batch fetch failed:", batchErr);
+      return NextResponse.json({ error: batchErr.message }, { status: 500 });
+    }
+    if (!batch || batch.length === 0) break;
+    allEvents.push(...(batch as EventRow[]));
+    if (batch.length < BATCH_SIZE) break;
+    offset += BATCH_SIZE;
   }
-  if (filterEventType) {
-    eventsQuery = eventsQuery.eq("event_type", filterEventType);
-  }
-  if (filterBooked === "booked") {
-    eventsQuery = eventsQuery.eq("booked", true);
-  } else if (filterBooked === "unbooked") {
-    eventsQuery = eventsQuery.eq("booked", false);
-  }
-
-  const { data: events } = await eventsQuery;
+  const events = allEvents;
 
   // Enrich with profile data
   const enriched = (events ?? []).map((e) => ({
