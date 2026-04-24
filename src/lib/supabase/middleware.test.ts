@@ -122,14 +122,31 @@ describe("updateSession — impersonation mutation block (Commit 5b)", () => {
   });
 
   it("does NOT block when cookie signature is tampered", async () => {
-    // Swap one character in the signature segment — HMAC verify fails,
-    // verifyImpersonationCookie returns null, block does not fire. We
-    // assert by inspecting the response: a 403 from the block would
-    // carry x-impersonation-blocked. Anything else means the block
-    // didn't run. Any downstream Supabase failure is fine — that
-    // proves we got PAST the block.
+    // Swap a char in the MIDDLE of the sig segment — all 6 bits of a
+    // middle base64 char are meaningful, so flipping it guarantees the
+    // decoded HMAC bytes differ. We avoided the last char on purpose:
+    // in a 43-char base64url encoding of a 32-byte HMAC, the final
+    // char's low 2 bits are throwaway padding. Flipping 'a' (26 =
+    // 011010) ↔ 'b' (27 = 011011) only touches those padding bits, so
+    // the decoded sig is byte-identical and verification still
+    // succeeds — a ~3%-per-run flake, fixed here.
+    //
+    // HMAC verify fails on the tampered cookie, verifyImpersonationCookie
+    // returns null, block does not fire. Assert via response: a 403
+    // from the block would carry x-impersonation-blocked. Anything
+    // else means the block didn't run. Any downstream Supabase
+    // failure is fine — that proves we got PAST the block.
     const valid = makeSignedCookie();
-    const tampered = valid.slice(0, -1) + (valid.slice(-1) === "a" ? "b" : "a");
+    const dotIdx = valid.indexOf(".");
+    // Flip a char 2 positions into the sig segment so no matter what
+    // base64 alphabet boundary it lands on, the meaningful bits change.
+    const tamperIdx = dotIdx + 2;
+    const before = valid.slice(0, tamperIdx);
+    const target = valid[tamperIdx];
+    const after = valid.slice(tamperIdx + 1);
+    // Swap into an alphabet char that's guaranteed distinct (swap 'A' ↔ 'Z').
+    const swapped = target === "Z" ? "A" : "Z";
+    const tampered = before + swapped + after;
     const req = makeRequest({
       method: "POST",
       path: "/api/pos/square/sync",
