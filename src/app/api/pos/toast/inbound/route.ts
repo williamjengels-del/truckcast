@@ -255,6 +255,25 @@ export async function POST(request: Request) {
     }
 
     if (!matchedEvents || matchedEvents.length === 0) {
+      // $0 daily-summary emails from Toast are expected (empty vending
+      // days) and nothing about them is actionable — there's no payment
+      // to route. Record success and skip the inbox insert so the
+      // triage view doesn't fill up with rows that can only be
+      // dismissed. Threshold is strict-equality to $0 rather than a
+      // small-dollar cutoff because a $0.01 payment is still real
+      // signal (e.g. test charge that should get dismissed, but
+      // manually).
+      if (parsed.netSales === 0) {
+        console.log(`[toast/inbound] Zero-amount day for user ${userId} on ${parsed.date}; skipping inbox insert`);
+        await recordSyncAttempt(
+          supabase,
+          userId,
+          "success",
+          `Toast reported $0.00 on ${parsed.date}. No event update needed.`
+        );
+        return NextResponse.json({ ok: true, reason: "zero_amount", date: parsed.date }, { status: 200 });
+      }
+
       // Capture the payment into the unmatched inbox so the operator can
       // route it (e.g. catering deposit for a future event, remainder
       // payment for a past event). See migration 20260424000001 for the
