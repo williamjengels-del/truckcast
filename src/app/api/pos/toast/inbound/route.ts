@@ -52,6 +52,50 @@ async function findUserByToken(
   return match?.id ?? null;
 }
 
+/** Status values written to pos_connections.last_sync_status.
+ * Keep this set narrow + documented — the operator-facing UI reads
+ * these and the stale-sync diagnostic (scripts/diagnose-stale-pos-syncs.mjs)
+ * categorizes rows by them. If you add a new status, surface it there too. */
+type ToastSyncStatus =
+  | "success"          // net_sales updated on an event
+  | "no_match"         // Worker + parse succeeded but no booked event on that date
+  | "ambiguous_match"  // multiple booked events on that date; skipped to avoid miswrite
+  | "parse_failed"     // parseToastEmail threw (Toast email format changed, or non-Toast content forwarded)
+  | "db_error"         // Supabase query for events failed
+  | "update_failed"    // the net_sales update itself failed
+  | "pending_verify"   // gmail forwarding verification email arrived; URL surfaced to UI
+  | "internal_error";  // catch-all for unexpected exceptions
+
+/**
+ * Write to pos_connections.{last_sync_at, last_sync_status, last_sync_error}.
+ * Called from every branch that has a known userId — so the UI reflects
+ * what actually happened per inbound email, not just the last success.
+ *
+ * Silently swallows errors from this write itself — we don't want a
+ * logging-side failure to cascade into losing the email we're already
+ * trying to process. The parent handler still returns 200 either way.
+ */
+async function recordSyncAttempt(
+  supabase: ReturnType<typeof createServiceRoleClient>,
+  userId: string,
+  status: ToastSyncStatus,
+  error: string | null
+): Promise<void> {
+  try {
+    await supabase
+      .from("pos_connections")
+      .update({
+        last_sync_at: new Date().toISOString(),
+        last_sync_status: status,
+        last_sync_error: error,
+      })
+      .eq("user_id", userId)
+      .eq("provider", "toast");
+  } catch (e) {
+    console.warn(`[toast/inbound] recordSyncAttempt failed for ${userId}:`, e);
+  }
+}
+
 /**
  * Parse a raw MIME email string and return { subject, text }.
  * Falls back to treating the raw string as plain text if parsing fails.
@@ -110,6 +154,12 @@ async function extractEmailContent(
 
 
 export async function POST(request: Request) {
+  // Hoisted so the catch block can record `internal_error` against
+  // the right pos_connections row if we got far enough to identify
+  // the user before throwing.
+  let supabase: ReturnType<typeof createServiceRoleClient> | null = null;
+  let userId: string | null = null;
+
   try {
     const payload = await request.json() as {
       to?: string | string[];
@@ -163,8 +213,8 @@ export async function POST(request: Request) {
     }
 
     // Find user by token
-    const supabase = createServiceRoleClient();
-    const userId = await findUserByToken(supabase, token);
+    supabase = createServiceRoleClient();
+    userId = await findUserByToken(supabase, token);
     if (!userId) {
       console.warn(`[toast/inbound] No user found for token: ${token}`);
       return NextResponse.json({ ok: false, reason: "user_not_found" }, { status: 200 });
@@ -181,6 +231,12 @@ export async function POST(request: Request) {
       parsed = parseToastEmail(rawText);
     } catch (parseErr) {
       console.warn(`[toast/inbound] Parse failed for user ${userId}:`, parseErr);
+      await recordSyncAttempt(
+        supabase,
+        userId,
+        "parse_failed",
+        parseErr instanceof Error ? parseErr.message : String(parseErr)
+      );
       return NextResponse.json({ ok: false, reason: "parse_failed" }, { status: 200 });
     }
 
@@ -194,16 +250,29 @@ export async function POST(request: Request) {
 
     if (eventsError) {
       console.error(`[toast/inbound] DB error for user ${userId}:`, eventsError);
+      await recordSyncAttempt(supabase, userId, "db_error", eventsError.message);
       return NextResponse.json({ ok: false, reason: "db_error" }, { status: 200 });
     }
 
     if (!matchedEvents || matchedEvents.length === 0) {
       console.log(`[toast/inbound] No booked events for user ${userId} on ${parsed.date}`);
+      await recordSyncAttempt(
+        supabase,
+        userId,
+        "no_match",
+        `No booked event on ${parsed.date}. Toast reported $${parsed.netSales.toFixed(2)}.`
+      );
       return NextResponse.json({ ok: true, reason: "no_event_match", date: parsed.date }, { status: 200 });
     }
 
     if (matchedEvents.length > 1) {
       console.log(`[toast/inbound] Ambiguous: ${matchedEvents.length} events for user ${userId} on ${parsed.date}`);
+      await recordSyncAttempt(
+        supabase,
+        userId,
+        "ambiguous_match",
+        `${matchedEvents.length} booked events on ${parsed.date}; pick the right one manually and log sales.`
+      );
       return NextResponse.json({ ok: true, reason: "ambiguous_match" }, { status: 200 });
     }
 
@@ -217,18 +286,11 @@ export async function POST(request: Request) {
 
     if (updateError) {
       console.error(`[toast/inbound] Update failed for event ${event.id}:`, updateError);
+      await recordSyncAttempt(supabase, userId, "update_failed", updateError.message);
       return NextResponse.json({ ok: false, reason: "update_failed" }, { status: 200 });
     }
 
-    await supabase
-      .from("pos_connections")
-      .update({
-        last_sync_at: new Date().toISOString(),
-        last_sync_status: "success",
-        last_sync_error: null,
-      })
-      .eq("user_id", userId)
-      .eq("provider", "toast");
+    await recordSyncAttempt(supabase, userId, "success", null);
 
     await recalculateForUserWithClient(userId, supabase);
 
@@ -239,6 +301,18 @@ export async function POST(request: Request) {
     );
   } catch (err) {
     console.error("[toast/inbound] Unexpected error:", err);
+    // If we got far enough to know who this email belongs to, surface
+    // the error in the UI via pos_connections. If not (threw before
+    // user lookup), best we can do is console; the stale-sync
+    // diagnostic will catch the silence over time.
+    if (supabase && userId) {
+      await recordSyncAttempt(
+        supabase,
+        userId,
+        "internal_error",
+        err instanceof Error ? err.message : String(err)
+      );
+    }
     return NextResponse.json({ ok: false, reason: "internal_error" }, { status: 200 });
   }
 }
