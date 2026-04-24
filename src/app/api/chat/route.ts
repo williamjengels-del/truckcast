@@ -1,6 +1,18 @@
 import { NextRequest } from "next/server";
+import * as Sentry from "@sentry/nextjs";
 import Anthropic from "@anthropic-ai/sdk";
 import { createClient } from "@/lib/supabase/server";
+import { checkRateLimit } from "@/lib/rate-limit";
+
+// Per-user rate limit. Anthropic Claude Haiku pricing + our ~2kB system
+// prompt (event data) means a 100-msg/hr burst per user could materially
+// surprise a cost review. Starter-tier is already blocked below, so this
+// caps the Pro/Premium case at a rhythm that's generous for real
+// operator use (one question every few minutes) but refuses bot-grade
+// hammer patterns. Window + limit are intentionally tight — if we see
+// real users bumping against it, raise, don't replace.
+const CHAT_RATE_LIMIT = 20;
+const CHAT_RATE_WINDOW_MS = 60 * 60 * 1000; // 1 hour
 
 export async function POST(req: NextRequest) {
   try {
@@ -38,6 +50,21 @@ export async function POST(req: NextRequest) {
       return new Response(
         JSON.stringify({ error: "Pro or Premium subscription required" }),
         { status: 403, headers: { "Content-Type": "application/json" } }
+      );
+    }
+
+    // Per-user rate limit AFTER auth + tier gate so anonymous /
+    // starter-tier probes don't get to spend our limiter budget. Best-
+    // effort only — see src/lib/rate-limit.ts for the in-memory-vs-
+    // serverless caveat. Upgrade to Supabase-backed if we see real
+    // abuse.
+    const rateKey = `chat:${user.id}`;
+    if (!checkRateLimit(rateKey, CHAT_RATE_LIMIT, CHAT_RATE_WINDOW_MS)) {
+      return new Response(
+        JSON.stringify({
+          error: `Rate limit reached (${CHAT_RATE_LIMIT} messages per hour). Please slow down.`,
+        }),
+        { status: 429, headers: { "Content-Type": "application/json" } }
       );
     }
 
@@ -124,6 +151,13 @@ When answering:
     });
   } catch (err) {
     console.error("[chat] error:", err);
+    // Ship to Sentry so Anthropic API failures (rate limit, auth, 5xx)
+    // surface in the same observability channel as other webhook
+    // errors. Avoid serializing the full conversation to keep Sentry
+    // payloads small and PII-light.
+    Sentry.captureException(err, {
+      tags: { source: "chat_api" },
+    });
     return new Response(
       JSON.stringify({ error: err instanceof Error ? err.message : "Internal error" }),
       { status: 500, headers: { "Content-Type": "application/json" } }
