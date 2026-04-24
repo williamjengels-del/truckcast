@@ -11,6 +11,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import type { PosConnection, PosProvider, Profile } from "@/lib/database.types";
 import { POSSetupTrigger } from "@/components/pos-setup-guide";
+import { UnmatchedToastInbox } from "@/components/unmatched-toast-inbox";
 
 interface LocationSelection {
   id: string;
@@ -256,6 +257,19 @@ function PosSettingsContent() {
         onDisconnect={() => handleDisconnect("toast")}
         disconnecting={disconnecting === "toast"}
       />
+
+      {/*
+       * Unmatched Toast inbox.
+       *
+       * Toast reports daily sales, but VendCast only auto-syncs when the
+       * reported date matches a booked event. The mismatch case — most
+       * commonly catering deposits paid on date X for an event on date
+       * Y (Y > X) — lands here instead of getting silently dropped.
+       *
+       * Component self-renders as empty (returns null) when nothing is
+       * queued, so it doesn't clutter the tab in the common case.
+       */}
+      <UnmatchedToastInbox />
 
       {/* SumUp */}
       <PosProviderCard

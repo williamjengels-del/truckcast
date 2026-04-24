@@ -58,7 +58,7 @@ async function findUserByToken(
  * categorizes rows by them. If you add a new status, surface it there too. */
 type ToastSyncStatus =
   | "success"          // net_sales updated on an event
-  | "no_match"         // Worker + parse succeeded but no booked event on that date
+  | "queued_for_review" // no booked event on reported date; payment saved to unmatched_toast_payments inbox for operator to route (catering deposit / remainder payment pattern)
   | "ambiguous_match"  // multiple booked events on that date; skipped to avoid miswrite
   | "parse_failed"     // parseToastEmail threw (Toast email format changed, or non-Toast content forwarded)
   | "db_error"         // Supabase query for events failed
@@ -255,14 +255,35 @@ export async function POST(request: Request) {
     }
 
     if (!matchedEvents || matchedEvents.length === 0) {
-      console.log(`[toast/inbound] No booked events for user ${userId} on ${parsed.date}`);
+      // Capture the payment into the unmatched inbox so the operator can
+      // route it (e.g. catering deposit for a future event, remainder
+      // payment for a past event). See migration 20260424000001 for the
+      // full rationale.
+      const { error: insertError } = await supabase
+        .from("unmatched_toast_payments")
+        .insert({
+          user_id: userId,
+          source: "toast",
+          reported_date: parsed.date,
+          net_sales: parsed.netSales,
+          raw_subject: rawSubject,
+        });
+
+      if (insertError) {
+        // Fall back to pre-inbox behavior — log it and move on. Don't
+        // fail the webhook over an inbox insert problem.
+        console.error(`[toast/inbound] Inbox insert failed for user ${userId}:`, insertError);
+      } else {
+        console.log(`[toast/inbound] Queued for review: user ${userId}, ${parsed.date}, $${parsed.netSales}`);
+      }
+
       await recordSyncAttempt(
         supabase,
         userId,
-        "no_match",
-        `No booked event on ${parsed.date}. Toast reported $${parsed.netSales.toFixed(2)}.`
+        "queued_for_review",
+        `Toast reported $${parsed.netSales.toFixed(2)} on ${parsed.date} with no booked event. Queued for manual review in your integrations inbox.`
       );
-      return NextResponse.json({ ok: true, reason: "no_event_match", date: parsed.date }, { status: 200 });
+      return NextResponse.json({ ok: true, reason: "queued_for_review", date: parsed.date }, { status: 200 });
     }
 
     if (matchedEvents.length > 1) {
