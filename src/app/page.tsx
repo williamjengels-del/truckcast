@@ -2,58 +2,41 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { createClient as createServiceClient } from "@supabase/supabase-js";
 import { Button } from "@/components/ui/button";
+import { WEATHER_COEFFICIENTS } from "@/lib/constants";
 import {
   TruckIcon,
   BarChart3,
   CalendarDays,
   DollarSign,
   ArrowRight,
-  CheckCircle,
-  Star,
-  LineChart,
   Inbox,
   Plug,
 } from "lucide-react";
 
-// Disable Next.js fetch caching so testimonials always load fresh from the DB
 export const revalidate = 0;
 export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
   title: "VendCast — The operating system for mobile vendors",
   description:
-    "Inquiries, bookings, calendar, sales, and forecasts — in one place. Built by a food truck operator, for food truck operators.",
+    "Inquiries, bookings, calendar, sales, and forecasts — in one place. Built by a food truck operator. For mobile vendors.",
 };
 
-const FALLBACK_TESTIMONIALS = [
-  {
-    id: "fallback-1",
-    content:
-      "I used to guess whether to book an event based on gut feel. Now I pull up VendCast and I know within a few hundred dollars what I'll make. That's a game changer when you're deciding between two events on the same day.",
-    author_name: "Julian Engels",
-    author_title: "Owner, Wok-O Taco · St. Louis, MO",
-    rating: 5,
-  },
-  {
-    id: "fallback-2",
-    content:
-      "The weather adjustment feature alone is worth it. I had no idea how badly heat and rain were tanking my numbers — VendCast showed me exactly which events to avoid in July.",
-    author_name: "Beta Tester",
-    author_title: "Food truck operator · Midwest",
-    rating: 5,
-  },
-  {
-    id: "fallback-3",
-    content:
-      "Finally something built for food trucks, not restaurant chains. The fee calculator saved me from a bad contract last month — the commission-with-minimum math would have eaten my profit.",
-    author_name: "Beta Tester",
-    author_title: "Food truck operator · Midwest",
-    rating: 5,
-  },
-];
+/* Derived 2026-04-24 from WEATHER_COEFFICIENTS in src/lib/constants.ts.
+   Each percentage is (1 - coefficient) × 100, rounded to nearest integer —
+   the average dollar shortfall a booked event takes under that weather.
+   Keeping these inline (not live-queried) because the coefficients only
+   change when the forecast engine is re-tuned. */
+const RAIN_IMPACT_PCT = Math.round((1 - WEATHER_COEFFICIENTS["Rain During Event"]) * 100);
+const HOT_IMPACT_PCT = Math.round((1 - WEATHER_COEFFICIENTS.Hot) * 100);
+const COLD_IMPACT_PCT = Math.round((1 - WEATHER_COEFFICIENTS.Cold) * 100);
 
-/** Wraps a promise with a hard timeout — if Supabase doesn't respond in time
- *  (e.g. during Vercel build probing), we bail immediately to the fallback. */
+/* Julian's Supabase user_id — only operator with enough history to anchor
+   a credible "average loss per event" number on the marketing page. Keep
+   the query server-side-only via the service role key; homepage is public
+   but we only read an aggregate, not per-row data. */
+const JULIAN_USER_ID = "7f97040f-023d-4604-8b66-f5aa321c31de";
+
 function withTimeout<T>(promise: PromiseLike<T>, ms: number, fallback: T): Promise<T> {
   return Promise.race([
     Promise.resolve(promise),
@@ -80,9 +63,14 @@ async function getEventCount(): Promise<number> {
   }
 }
 
-async function getTestimonials() {
+/** Weather-loss dollars = Julian's avg logged net_sales × (1 − Storms coefficient).
+ *  Storms is the worst common disruption (0.30 ≈ 70% revenue loss per storm day).
+ *  Returns a pre-formatted string ("$740") when the query succeeds, or the
+ *  literal placeholder "{{WEATHER_LOSS_DOLLARS}}" when it can't — lets the
+ *  homepage still render during builds without Supabase env vars. */
+async function getWeatherLossDollars(): Promise<string> {
   if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
-    return FALLBACK_TESTIMONIALS;
+    return "{{WEATHER_LOSS_DOLLARS}}";
   }
   try {
     const serviceClient = createServiceClient(
@@ -90,22 +78,164 @@ async function getTestimonials() {
       process.env.SUPABASE_SERVICE_ROLE_KEY
     );
     const query = serviceClient
-      .from("testimonials")
-      .select("id, author_name, author_title, content, rating")
-      .eq("is_active", true)
-      .order("display_order", { ascending: true })
-      .then(({ data }) => (data && data.length > 0 ? (data as typeof FALLBACK_TESTIMONIALS) : FALLBACK_TESTIMONIALS));
-    return await withTimeout(query, 3000, FALLBACK_TESTIMONIALS);
+      .from("events")
+      .select("net_sales")
+      .eq("user_id", JULIAN_USER_ID)
+      .not("net_sales", "is", null)
+      .then(({ data }) => {
+        if (!data || data.length === 0) return null;
+        const total = data.reduce((sum, row) => sum + Number(row.net_sales ?? 0), 0);
+        const avg = total / data.length;
+        const loss = avg * (1 - WEATHER_COEFFICIENTS.Storms);
+        const rounded = Math.round(loss / 50) * 50; // snap to nearest $50
+        return `$${rounded.toLocaleString()}`;
+      });
+    const result = await withTimeout<string | null>(query, 3000, null);
+    return result ?? "{{WEATHER_LOSS_DOLLARS}}";
   } catch {
-    return FALLBACK_TESTIMONIALS;
+    return "{{WEATHER_LOSS_DOLLARS}}";
   }
 }
 
+/** Repeat-booking decline rate = share of Julian's multi-year recurring events
+ *  whose latest-year revenue is below their first-year revenue AND shows a
+ *  near-monotonic downward trend across the intermediate years.
+ *
+ *  Qualifying group: same `event_name` appearing across 3+ distinct calendar
+ *  years with `net_sales` recorded in each appearance. "Near-monotonic" =
+ *  at most one year-over-year uptick in the series.
+ *
+ *  Returns a pre-formatted string ("65%"), snapped to nearest 5%, or the
+ *  placeholder "{{REPEAT_BOOKING_DECLINE_RATE}}" on env/timeout/empty-data.
+ */
+async function getRepeatBookingDeclineRate(): Promise<string> {
+  if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
+    return "{{REPEAT_BOOKING_DECLINE_RATE}}";
+  }
+  try {
+    const serviceClient = createServiceClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL,
+      process.env.SUPABASE_SERVICE_ROLE_KEY
+    );
+    const query = serviceClient
+      .from("events")
+      .select("event_name, event_date, net_sales")
+      .eq("user_id", JULIAN_USER_ID)
+      .not("net_sales", "is", null)
+      .not("event_name", "is", null)
+      .then(({ data }) => {
+        if (!data || data.length === 0) return null;
+
+        // Bucket by event_name → year → max(net_sales) for that year.
+        const byNameYear = new Map<string, Map<number, number>>();
+        for (const row of data) {
+          const name = String(row.event_name ?? "").trim();
+          const dateStr = String(row.event_date ?? "");
+          const year = Number(dateStr.slice(0, 4));
+          const sales = Number(row.net_sales ?? 0);
+          if (!name || !Number.isFinite(year) || year < 2000 || !Number.isFinite(sales)) continue;
+          let perYear = byNameYear.get(name);
+          if (!perYear) {
+            perYear = new Map();
+            byNameYear.set(name, perYear);
+          }
+          // Prefer max per year so a single outlier doesn't wash out the signal.
+          const prior = perYear.get(year);
+          perYear.set(year, prior === undefined ? sales : Math.max(prior, sales));
+        }
+
+        let qualifyingGroups = 0;
+        let decliningGroups = 0;
+        for (const perYear of byNameYear.values()) {
+          if (perYear.size < 3) continue;
+          qualifyingGroups++;
+          const years = [...perYear.keys()].sort((a, b) => a - b);
+          const series = years.map((y) => perYear.get(y) ?? 0);
+          const firstYearRevenue = series[0];
+          const lastYearRevenue = series[series.length - 1];
+          if (lastYearRevenue >= firstYearRevenue) continue;
+          // Count YoY upticks — allow at most one for "near-monotonic".
+          let upticks = 0;
+          for (let i = 1; i < series.length; i++) {
+            if (series[i] > series[i - 1]) upticks++;
+          }
+          if (upticks <= 1) decliningGroups++;
+        }
+
+        if (qualifyingGroups === 0) return null;
+        const rate = (decliningGroups / qualifyingGroups) * 100;
+        const rounded = Math.round(rate / 5) * 5;
+        return `${rounded}%`;
+      });
+    const result = await withTimeout<string | null>(query, 3000, null);
+    return result ?? "{{REPEAT_BOOKING_DECLINE_RATE}}";
+  } catch {
+    return "{{REPEAT_BOOKING_DECLINE_RATE}}";
+  }
+}
+
+/** Apply numeric-emphasis classes only when the value is a resolved number.
+ *  Placeholders get muted, normal-size treatment so they read as pending
+ *  rather than shouting a literal template string. */
+function isResolvedValue(s: string): boolean {
+  return !/^\{\{.*\}\}$/.test(s);
+}
+const EMPHASIS_RESOLVED = "text-4xl font-bold text-primary";
+const EMPHASIS_PLACEHOLDER = "text-xl font-normal text-muted-foreground";
+
+const FEATURE_CARDS = [
+  {
+    testId: "feature-card-inquiry-booking",
+    icon: Inbox,
+    title: "Inquiry & Booking Inbox",
+    description:
+      "New bookings land here — push, email, and in-app, the moment they arrive. Don't miss a lead because you were behind the wheel.",
+  },
+  {
+    testId: "feature-card-event-scheduling",
+    icon: CalendarDays,
+    title: "Event Scheduling & Tracking",
+    description:
+      "Every event in one calendar — setup, address, organizer, weather, all a tap away. Catering and vending stay in their own lanes.",
+  },
+  {
+    testId: "feature-card-pos-sync",
+    icon: Plug,
+    title: "POS & CSV Sync",
+    description:
+      "Toast, Square, Clover, SumUp — and more. Sales log themselves. Bring your spreadsheet if that's where your history lives.",
+  },
+  {
+    testId: "feature-card-forecasting",
+    icon: BarChart3,
+    title: "Event Forecasting",
+    description:
+      "Sales predictions that know about weather, with confidence ranges and plain-English notes. No black box.",
+  },
+  {
+    testId: "feature-card-fee-calculator",
+    icon: DollarSign,
+    title: "Fee Calculator",
+    description:
+      "Know your take-home before you say yes. Minimums, percentages, and pro fees — all handled.",
+  },
+];
+
 export default async function LandingPage() {
-  const [testimonials, eventCount] = await Promise.all([
-    getTestimonials(),
+  const [eventCount, weatherLossDollars, repeatDeclineRate] = await Promise.all([
     getEventCount(),
+    getWeatherLossDollars(),
+    getRepeatBookingDeclineRate(),
   ]);
+  const weatherEmphasis = isResolvedValue(weatherLossDollars) ? EMPHASIS_RESOLVED : EMPHASIS_PLACEHOLDER;
+  const repeatEmphasis = isResolvedValue(repeatDeclineRate) ? EMPHASIS_RESOLVED : EMPHASIS_PLACEHOLDER;
+
+  // Diagonal tint pairing (Row1:L + Row2:R share one tint, others share the other).
+  // On desktop this is literal diagonal; on mobile it becomes alternating bands.
+  const tintA = "bg-primary/5 border-l-4 border-primary";
+  const tintB = "bg-orange-500/5 border-l-4 border-orange-500";
+  const cardBase = "rounded-lg border p-8 space-y-4 break-words";
+
   return (
     <div className="flex flex-col min-h-screen">
       {/* Nav */}
@@ -129,58 +259,130 @@ export default async function LandingPage() {
         </div>
       </header>
 
-      {/* Hero */}
       <section className="flex-1">
+        {/* Hero */}
         <div className="container mx-auto px-4 py-20 text-center">
-          <h1 className="text-4xl font-bold tracking-tight sm:text-5xl lg:text-6xl">
+          <h1
+            data-testid="hero-headline"
+            className="text-4xl font-bold tracking-tight sm:text-5xl lg:text-6xl"
+          >
             The operating system for{" "}
             <span className="text-primary">mobile vendors.</span>
           </h1>
-          <p className="mx-auto mt-6 max-w-2xl text-lg text-muted-foreground">
-            Inquiries, bookings, calendar, sales, and forecasts — in one place.
-            Built by a food truck operator, for food truck operators.
+          <p
+            data-testid="hero-subline"
+            className="mx-auto mt-6 max-w-2xl text-lg text-muted-foreground"
+          >
+            Built by a food truck operator. For mobile vendors.
           </p>
-          <div className="mt-10 flex flex-col items-center justify-center gap-3">
-            <Link href="/signup">
-              <Button size="lg" className="gap-2">
-                Start Free Trial <ArrowRight className="h-4 w-4" />
-              </Button>
-            </Link>
-            <p className="text-sm text-muted-foreground">14 days free · No credit card required</p>
-          </div>
+          <div
+            aria-hidden="true"
+            className="mx-auto mt-8 h-px w-32 bg-primary/60"
+          />
         </div>
 
-        {/* Testimonials — moved up, trust signal hits before features */}
-        <div className="border-t bg-muted/30">
-          <div className="container mx-auto px-4 py-16">
-            <h2 className="text-center text-3xl font-bold mb-4">
-              What food truckers are saying
-            </h2>
-            <p className="text-center text-muted-foreground mb-12">
-              Built by a food truck operator. Validated by real event data.
-            </p>
-            <div className="grid gap-6 md:grid-cols-3 max-w-5xl mx-auto">
-              {testimonials.map((t) => (
-                <div
-                  key={t.id}
-                  className="rounded-lg border bg-card p-6 flex flex-col gap-4"
+        {/* Insight blocks — 2×2 grid on desktop, stacked on mobile.
+            Diagonal tint pairing: blocks 1+4 share tintA, blocks 2+3 share tintB. */}
+        <div className="border-t">
+          <div className="container mx-auto px-4 py-20 max-w-5xl grid grid-cols-1 md:grid-cols-2 gap-6">
+            {/* Block 1 — Weather */}
+            <div
+              data-testid="insight-block-weather"
+              className={`${cardBase} ${tintA}`}
+            >
+              <h2 className="text-2xl font-bold tracking-tight sm:text-3xl">
+                Weather patterns repeat. Losses don&apos;t have to.
+              </h2>
+              <p className="text-xl font-semibold">
+                Operators lose{" "}
+                <span
+                  data-testid="insight-finding-weather"
+                  className={weatherEmphasis}
                 >
-                  <div className="flex gap-0.5">
-                    {Array.from({ length: t.rating }).map((_, j) => (
-                      <Star key={j} className="h-4 w-4 fill-primary text-primary" />
-                    ))}
-                  </div>
-                  <p className="text-sm text-muted-foreground flex-1 italic">
-                    &ldquo;{t.content}&rdquo;
-                  </p>
-                  <div>
-                    <p className="font-semibold text-sm">{t.author_name}</p>
-                    {t.author_title && (
-                      <p className="text-xs text-muted-foreground">{t.author_title}</p>
-                    )}
-                  </div>
-                </div>
-              ))}
+                  {weatherLossDollars}
+                </span>{" "}
+                on average per weather-disrupted event.
+              </p>
+              <ul className="space-y-1 text-sm text-muted-foreground">
+                <li>
+                  Rain within 2 hours of service: {RAIN_IMPACT_PCT}% below average
+                </li>
+                <li>
+                  Temperatures over 90°F: {HOT_IMPACT_PCT}% below
+                </li>
+                <li>
+                  Cold snaps under 45°F: {COLD_IMPACT_PCT}% below
+                </li>
+              </ul>
+              <p className="text-base text-muted-foreground italic">
+                VendCast flags bad-weather risk before you commit.
+              </p>
+            </div>
+
+            {/* Block 2 — Repeat bookings */}
+            <div
+              data-testid="insight-block-repeats"
+              className={`${cardBase} ${tintB}`}
+            >
+              <h2 className="text-2xl font-bold tracking-tight sm:text-3xl">
+                Know which repeat bookings are still worth your time.
+              </h2>
+              <p className="text-xl font-semibold">
+                <span
+                  data-testid="insight-finding-repeats"
+                  className={repeatEmphasis}
+                >
+                  {repeatDeclineRate}
+                </span>{" "}
+                of repeat bookings show declining revenue by year three.
+              </p>
+              <p className="text-sm text-muted-foreground">
+                Same venue three years running, same organizer five events in, same weekly
+                market every Saturday — patterns emerge, and they rarely announce themselves
+                until the math is already against you.
+              </p>
+              <p className="text-base text-muted-foreground italic">
+                The math stops being a surprise. VendCast tracks every repeat booking — what
+                you made, how weather hit it, how it compares to last year.
+              </p>
+            </div>
+
+            {/* Block 3 — Revenue timing (qualitative; no numbers) */}
+            <div
+              data-testid="insight-block-timing"
+              className={`${cardBase} ${tintB}`}
+            >
+              <h2 className="text-2xl font-bold tracking-tight sm:text-3xl">
+                Your revenue curve isn&apos;t a daily average.
+              </h2>
+              <p className="text-xl font-semibold">
+                A 6-hour festival isn&apos;t 6 hours of revenue. Most of the money shows up
+                in a tighter window — and if prep and staffing don&apos;t match the curve,
+                sales walk when the line gets long.
+              </p>
+              <p className="text-base text-muted-foreground italic">
+                VendCast tracks when your money actually arrives, not just when the day
+                ends.
+              </p>
+            </div>
+
+            {/* Block 4 — Positioning */}
+            <div
+              data-testid="positioning-block"
+              className={`${cardBase} ${tintA}`}
+            >
+              <h2 className="text-2xl font-bold tracking-tight sm:text-3xl">
+                Event inquiries, operator-direct. No middleman.
+              </h2>
+              <p className="text-base">
+                When an event needs a vendor, the inquiry goes to you — not a marketplace that
+                takes 15%, not a platform that decides who gets the booking. Your contact, your
+                price, your booking.
+              </p>
+              <p className="text-base text-muted-foreground italic">
+                VendCast routes real inquiries straight to operators. First to respond, first to
+                book.
+              </p>
             </div>
           </div>
         </div>
@@ -189,46 +391,16 @@ export default async function LandingPage() {
         <div className="border-t">
           <div className="container mx-auto px-4 py-20">
             <h2 className="text-center text-3xl font-bold mb-4">
-              Built for food truck operators
+              Built for mobile vendor operators
             </h2>
             <p className="text-center text-sm text-muted-foreground mb-12">
               Purpose-built software for mobile vendor businesses.
             </p>
             <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-              {[
-                {
-                  icon: Inbox,
-                  title: "Inquiry & Booking Inbox",
-                  description:
-                    "Public booking page, inbound inquiries organized in one inbox, and Contact CRM — stop losing bookings in your DMs and email threads.",
-                },
-                {
-                  icon: CalendarDays,
-                  title: "Event Scheduling & Tracking",
-                  description:
-                    "Log every event with sales, fees, and notes. See your full calendar and track which events are worth rebooking.",
-                },
-                {
-                  icon: Plug,
-                  title: "POS & CSV Sync",
-                  description:
-                    "Connect Square, Clover, Toast, or SumUp — sales log themselves. Or import a spreadsheet in seconds.",
-                },
-                {
-                  icon: BarChart3,
-                  title: "Event Forecasting",
-                  description:
-                    "Revenue predictions based on your history, event type, weather, and day of week — with ranges, not just point estimates.",
-                },
-                {
-                  icon: DollarSign,
-                  title: "Fee Calculator",
-                  description:
-                    "Flat fees, percentages, minimums — know your take-home before you commit.",
-                },
-              ].map((feature) => (
+              {FEATURE_CARDS.map((feature) => (
                 <div
                   key={feature.title}
+                  data-testid={feature.testId}
                   className="rounded-lg border bg-card p-6"
                 >
                   <feature.icon className="h-10 w-10 text-primary mb-4" />
@@ -244,161 +416,50 @@ export default async function LandingPage() {
           </div>
         </div>
 
-        {/* Social Proof — validated numbers */}
+        {/* Stats row */}
         <div className="border-t bg-muted/30">
           <div className="container mx-auto px-4 py-16">
-            <div className="grid gap-6 md:grid-cols-3 max-w-3xl mx-auto text-center">
-              {[
-                { stat: `${eventCount.toLocaleString()}+`, label: "Events analyzed across operator history" },
-                { stat: "Within 16%", label: "Forecast accuracy on real event data" },
-                { stat: "5 years", label: "Of operator history baked into the engine" },
-              ].map((s) => (
-                <div key={s.label} className="space-y-1">
-                  <p className="text-4xl font-bold text-primary">{s.stat}</p>
-                  <p className="text-sm text-muted-foreground">{s.label}</p>
-                </div>
-              ))}
+            <div
+              data-testid="stats-row"
+              className="grid gap-6 md:grid-cols-3 max-w-3xl mx-auto text-center"
+            >
+              <div data-testid="stats-events" className="space-y-1">
+                <p className="text-4xl font-bold text-primary">
+                  {eventCount.toLocaleString()}+
+                </p>
+                <p className="text-sm text-muted-foreground">
+                  Events analyzed across operator history
+                </p>
+              </div>
+              <div data-testid="stats-accuracy" className="space-y-1">
+                <p className="text-4xl font-bold text-primary">Within 16%</p>
+                <p className="text-sm text-muted-foreground">
+                  Forecast accuracy on real event data
+                </p>
+              </div>
+              <div data-testid="stats-years" className="space-y-1">
+                <p className="text-4xl font-bold text-primary">5 years</p>
+                <p className="text-sm text-muted-foreground">
+                  Of operator history baked into the engine
+                </p>
+              </div>
             </div>
           </div>
         </div>
 
-        {/* How it works */}
-        <div className="container mx-auto px-4 py-20">
-          <h2 className="text-center text-3xl font-bold mb-4">How it works</h2>
-          <p className="text-center text-muted-foreground mb-12">
-            Up and running in minutes. Getting smarter with every event.
-          </p>
-          <div className="grid gap-8 md:grid-cols-3 max-w-4xl mx-auto">
-            {[
-              {
-                number: "1",
-                icon: Plug,
-                title: "Connect your calendar and POS",
-                description:
-                  "Import past events from a spreadsheet, or connect Square, Clover, Toast, or SumUp so sales flow in automatically. Your historical events become your forecasting baseline.",
-              },
-              {
-                number: "2",
-                icon: Inbox,
-                title: "Take inquiries, log sales",
-                description:
-                  "A public booking page routes new inquiries into one Inbox. After events wrap, sales log themselves from your POS — or enter them manually in seconds.",
-              },
-              {
-                number: "3",
-                icon: LineChart,
-                title: "Get smarter forecasts and insights",
-                description:
-                  "Revenue forecasts for every upcoming booking — adjusted for weather, day of week, and event type. Plus analytics, reports, and Key Takeaways on what's actually driving your numbers.",
-              },
-            ].map((step) => (
-              <div key={step.number} className="flex flex-col items-center text-center">
-                <div className="relative mb-4">
-                  <div className="w-14 h-14 rounded-full bg-primary/10 flex items-center justify-center">
-                    <step.icon className="h-7 w-7 text-primary" />
-                  </div>
-                  <span className="absolute -top-1 -right-1 w-5 h-5 rounded-full bg-primary text-primary-foreground text-xs font-bold flex items-center justify-center">
-                    {step.number}
-                  </span>
-                </div>
-                <h3 className="font-semibold text-lg mb-2">{step.title}</h3>
-                <p className="text-sm text-muted-foreground">{step.description}</p>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {/* Pricing Preview — also the fragment target for /pricing
-            (see next.config.ts redirects). */}
-        <div id="pricing" className="container mx-auto px-4 py-20 scroll-mt-20">
-          <h2 className="text-center text-3xl font-bold mb-4">
-            Simple pricing
-          </h2>
-          <p className="text-center text-muted-foreground mb-12">
-            Start with Starter. Upgrade as you grow.
-          </p>
-          <div className="grid gap-6 md:grid-cols-3 max-w-4xl mx-auto">
-            {[
-              {
-                name: "Starter",
-                price: "$19",
-                annualNote: "$182/yr (save $46)",
-                features: [
-                  "Event Scheduling & Calendar",
-                  "Fee Calculator",
-                  "Revenue Tracking",
-                  "Public Schedule",
-                  "Team Share Link",
-                ],
-              },
-              {
-                name: "Pro",
-                price: "$39",
-                annualNote: "$374/yr (save $94)",
-                popular: true,
-                features: [
-                  "Everything in Starter",
-                  "Weather-Adjusted Forecasts",
-                  "CSV Import",
-                  "POS Integration",
-                  "Event Performance Analytics",
-                ],
-              },
-              {
-                name: "Premium",
-                price: "$69",
-                annualNote: "$662/yr (save $166)",
-                features: [
-                  "Everything in Pro",
-                  "Advanced Analytics",
-                  "Monthly Reports",
-                  "Organizer Scoring",
-                  "Follow My Schedule",
-                  "Booking Widget",
-                ],
-              },
-            ].map((tier) => (
-              <div
-                key={tier.name}
-                className={`rounded-lg border p-6 ${
-                  "popular" in tier && tier.popular
-                    ? "border-primary ring-1 ring-primary"
-                    : ""
-                }`}
-              >
-                {"popular" in tier && tier.popular && (
-                  <span className="text-xs font-medium text-primary uppercase tracking-wide">
-                    Most Popular
-                  </span>
-                )}
-                <h3 className="text-xl font-bold mt-1">{tier.name}</h3>
-                <div className="mt-2">
-                  <span className="text-3xl font-bold">{tier.price}</span>
-                  <span className="text-muted-foreground">/mo</span>
-                </div>
-                {"annualNote" in tier && (
-                  <p className="text-xs text-muted-foreground mt-0.5">{tier.annualNote}</p>
-                )}
-                <ul className="mt-6 space-y-3">
-                  {tier.features.map((f) => (
-                    <li key={f} className="flex items-start gap-2 text-sm">
-                      <CheckCircle className="h-4 w-4 text-primary mt-0.5 shrink-0" />
-                      {f}
-                    </li>
-                  ))}
-                </ul>
-                <Link href="/signup" className="block mt-6">
-                  <Button
-                    variant={
-                      "popular" in tier && tier.popular ? "default" : "outline"
-                    }
-                    className="w-full"
-                  >
-                    Get Started
-                  </Button>
-                </Link>
-              </div>
-            ))}
+        {/* CTA footer */}
+        <div className="border-t">
+          <div className="container mx-auto px-4 py-20 text-center">
+            <div className="flex flex-col items-center justify-center gap-3">
+              <Link href="/signup">
+                <Button data-testid="cta-start-free-trial" size="lg" className="gap-2">
+                  Start free trial <ArrowRight className="h-4 w-4" />
+                </Button>
+              </Link>
+              <p className="text-sm text-muted-foreground">
+                14 days free, no credit card required.
+              </p>
+            </div>
           </div>
         </div>
       </section>
@@ -407,12 +468,11 @@ export default async function LandingPage() {
       <footer className="border-t py-8">
         <div className="container mx-auto px-4 text-center text-sm text-muted-foreground space-y-2">
           <div className="flex items-center justify-center gap-6">
-            <Link href="/roadmap" className="hover:text-foreground transition-colors">Roadmap</Link>
             <Link href="/help" className="hover:text-foreground transition-colors">Help Center</Link>
             <Link href="/signup" className="hover:text-foreground transition-colors">Get Started</Link>
             <Link href="/contact" className="hover:text-foreground transition-colors">Contact</Link>
           </div>
-          <p>&copy; {new Date().getFullYear()} VendCast — built for food truck operators, by a food truck operator.</p>
+          <p>&copy; {new Date().getFullYear()} VendCast — built by a food truck operator, for mobile vendors.</p>
         </div>
       </footer>
     </div>
