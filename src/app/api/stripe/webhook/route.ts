@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import * as Sentry from "@sentry/nextjs";
 import { stripe } from "@/lib/stripe";
 import { createClient } from "@supabase/supabase-js";
 import type Stripe from "stripe";
@@ -110,6 +111,94 @@ export async function POST(request: Request) {
           })
           .eq("id", profiles[0].id);
       }
+      break;
+    }
+
+    // Renewal settled. Record the timestamp + clear any prior-cycle
+    // failure reason so the operator's profile reflects the currently-
+    // unresolved state only (not a stale "payment_failed" that's since
+    // recovered).
+    case "invoice.payment_succeeded": {
+      const invoice = event.data.object as Stripe.Invoice;
+      const customerId =
+        typeof invoice.customer === "string"
+          ? invoice.customer
+          : invoice.customer?.id;
+      if (!customerId) break;
+
+      const { data: profiles } = await supabase
+        .from("profiles")
+        .select("id")
+        .eq("stripe_customer_id", customerId)
+        .limit(1);
+
+      if (profiles && profiles.length > 0) {
+        await supabase
+          .from("profiles")
+          .update({
+            last_payment_at: new Date().toISOString(),
+            last_payment_status: "paid",
+            last_payment_failure_reason: null,
+          })
+          .eq("id", profiles[0].id);
+      }
+      break;
+    }
+
+    // Renewal failed. Record the failure + the Stripe-reported reason so
+    // dunning UI / admin triage can surface "why" without re-querying
+    // Stripe. Also capture to Sentry so we see real-time payment
+    // failures in the same place we see code errors — dunning isn't
+    // silent anymore.
+    case "invoice.payment_failed": {
+      const invoice = event.data.object as Stripe.Invoice;
+      const customerId =
+        typeof invoice.customer === "string"
+          ? invoice.customer
+          : invoice.customer?.id;
+      if (!customerId) break;
+
+      // Payment-error message lives on the invoice's last payment
+      // attempt, which the Stripe SDK surfaces as last_payment_error on
+      // the embedded charge. Fall back to the invoice status if the
+      // SDK shape is missing the field.
+      type InvoiceWithCharge = Stripe.Invoice & {
+        charge?: { failure_message?: string | null } | string | null;
+      };
+      const invoiceWithCharge = invoice as InvoiceWithCharge;
+      const chargeRef = invoiceWithCharge.charge;
+      const failureReason =
+        (typeof chargeRef === "object" && chargeRef?.failure_message) ||
+        invoice.status ||
+        "unknown";
+
+      const { data: profiles } = await supabase
+        .from("profiles")
+        .select("id")
+        .eq("stripe_customer_id", customerId)
+        .limit(1);
+
+      if (profiles && profiles.length > 0) {
+        await supabase
+          .from("profiles")
+          .update({
+            last_payment_status: "payment_failed",
+            last_payment_failure_reason: String(failureReason),
+          })
+          .eq("id", profiles[0].id);
+      }
+
+      Sentry.captureMessage("Stripe invoice.payment_failed", {
+        level: "warning",
+        tags: { source: "stripe_webhook", event_type: event.type },
+        extra: {
+          stripe_customer_id: customerId,
+          invoice_id: invoice.id,
+          amount_due: invoice.amount_due,
+          failure_reason: failureReason,
+          attempt_count: invoice.attempt_count,
+        },
+      });
       break;
     }
   }
