@@ -167,7 +167,11 @@ export function EventsClient({ initialEvents, userId = "", businessName = "", us
   const router = useRouter();
   const searchParams = useSearchParams();
 
-  const today = new Date().toISOString().split("T")[0];
+  // Memoized once per mount. Stable for the tab session; worst case a
+  // user leaves the page open past midnight and some events don't
+  // re-classify to "past" until next navigation — acceptable tradeoff
+  // for not re-computing on every keystroke.
+  const today = useMemo(() => new Date().toISOString().split("T")[0], []);
 
   // Load view mode from localStorage (default: "split").
   // Force-fallback split → list at <sm: split needs desktop width to be
@@ -225,13 +229,17 @@ export function EventsClient({ initialEvents, userId = "", businessName = "", us
   }
 
   // Upcoming events within 14 days that have a city
-  const upcomingWith14DaysAndCity = initialEvents.filter((e) => {
-    if (e.event_date < today) return false;
-    const diffDays = Math.ceil(
-      (new Date(e.event_date + "T00:00:00").getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24)
-    );
-    return diffDays <= 14 && !!(e.city || e.location);
-  });
+  const upcomingWith14DaysAndCity = useMemo(
+    () =>
+      initialEvents.filter((e) => {
+        if (e.event_date < today) return false;
+        const diffDays = Math.ceil(
+          (new Date(e.event_date + "T00:00:00").getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24)
+        );
+        return diffDays <= 14 && !!(e.city || e.location);
+      }),
+    [initialEvents, today]
+  );
 
   // Fetch weather for upcoming events within 14 days
   const fetchWeatherForEvents = useCallback(async () => {
@@ -332,14 +340,28 @@ export function EventsClient({ initialEvents, userId = "", businessName = "", us
     fetchWeatherForEvents();
   }, [fetchWeatherForEvents]);
 
-  // Get unique years for the year filter
-  const years = [
-    ...new Set(
-      initialEvents.map((e) =>
-        new Date(e.event_date + "T00:00:00").getFullYear()
-      )
-    ),
-  ].sort((a, b) => b - a);
+  // ── Memoization strategy ──────────────────────────────────────────
+  // Before this refactor: all the filter/sort operations below ran on
+  // every render — including every keystroke in the search box. With
+  // 907+ events the render was heavy enough to cause React concurrent-
+  // rendering to drop input focus after the first keystroke, making
+  // search unusable (v9 brief 2026-04-21).
+  //
+  // Each derived collection now memoizes against its actual inputs.
+  // `search` only flows into `filtered` — every other memo is stable
+  // across keystrokes, so typing now re-renders cheaply.
+
+  const years = useMemo(
+    () =>
+      [
+        ...new Set(
+          initialEvents.map((e) =>
+            new Date(e.event_date + "T00:00:00").getFullYear()
+          )
+        ),
+      ].sort((a, b) => b - a),
+    [initialEvents]
+  );
 
   // Split into all / upcoming (booked) / unbooked (future) / past / past_unbooked / flagged / cancelled.
   //
@@ -348,46 +370,80 @@ export function EventsClient({ initialEvents, userId = "", businessName = "", us
   // for upcoming-focused views, where the operator wants soonest at
   // the top (what's this week, next week, next month) rather than
   // the furthest-future date first. Re-sort upcoming + unbooked asc.
-  const cancelledEvents = initialEvents.filter((e) => !!e.cancellation_reason);
-  const upcomingEvents = initialEvents
-    .filter((e) => e.event_date >= today && e.booked && !e.cancellation_reason)
-    .sort((a, b) => a.event_date.localeCompare(b.event_date));
-  const unbookedEvents = initialEvents
-    .filter((e) => e.event_date >= today && !e.booked && !e.cancellation_reason)
-    .sort((a, b) => a.event_date.localeCompare(b.event_date));
-  const pastEvents = initialEvents.filter((e) => e.event_date < today && e.booked && !e.cancellation_reason);
-  const pastUnbookedEvents = initialEvents.filter((e) => e.event_date < today && !e.booked && !e.cancellation_reason);
-  const flaggedEvents = initialEvents.filter(
-    (e) =>
-      e.event_date < today &&
-      e.booked &&
-      !e.cancellation_reason &&                                   // cancelled events don't need sales logged
-      e.net_sales === null &&                                    // null only — $0 intentional (charity) is cleared by dismiss
-      !(e.event_mode === "catering" && e.invoice_revenue > 0) && // catering with invoice = not missing
-      e.anomaly_flag !== "disrupted" &&                          // disrupted = already dismissed
-      e.fee_type !== "pre_settled"                               // pre-settled = guaranteed payment, no sales entry needed
+  const cancelledEvents = useMemo(
+    () => initialEvents.filter((e) => !!e.cancellation_reason),
+    [initialEvents]
+  );
+  const upcomingEvents = useMemo(
+    () =>
+      initialEvents
+        .filter((e) => e.event_date >= today && e.booked && !e.cancellation_reason)
+        .sort((a, b) => a.event_date.localeCompare(b.event_date)),
+    [initialEvents, today]
+  );
+  const unbookedEvents = useMemo(
+    () =>
+      initialEvents
+        .filter((e) => e.event_date >= today && !e.booked && !e.cancellation_reason)
+        .sort((a, b) => a.event_date.localeCompare(b.event_date)),
+    [initialEvents, today]
+  );
+  const pastEvents = useMemo(
+    () =>
+      initialEvents.filter(
+        (e) => e.event_date < today && e.booked && !e.cancellation_reason
+      ),
+    [initialEvents, today]
+  );
+  const pastUnbookedEvents = useMemo(
+    () =>
+      initialEvents.filter(
+        (e) => e.event_date < today && !e.booked && !e.cancellation_reason
+      ),
+    [initialEvents, today]
+  );
+  const flaggedEvents = useMemo(
+    () =>
+      initialEvents.filter(
+        (e) =>
+          e.event_date < today &&
+          e.booked &&
+          !e.cancellation_reason &&                                   // cancelled events don't need sales logged
+          e.net_sales === null &&                                    // null only — $0 intentional (charity) is cleared by dismiss
+          !(e.event_mode === "catering" && e.invoice_revenue > 0) && // catering with invoice = not missing
+          e.anomaly_flag !== "disrupted" &&                          // disrupted = already dismissed
+          e.fee_type !== "pre_settled"                               // pre-settled = guaranteed payment, no sales entry needed
+      ),
+    [initialEvents, today]
   );
 
-  const activeEvents =
-    activeTab === "all" ? initialEvents :
-    activeTab === "upcoming" ? upcomingEvents :
-    activeTab === "unbooked" ? unbookedEvents :
-    activeTab === "past_unbooked" ? pastUnbookedEvents :
-    activeTab === "flagged" ? flaggedEvents :
-    activeTab === "cancelled" ? cancelledEvents :
-    pastEvents;
+  const activeEvents = useMemo(
+    () =>
+      activeTab === "all" ? initialEvents :
+      activeTab === "upcoming" ? upcomingEvents :
+      activeTab === "unbooked" ? unbookedEvents :
+      activeTab === "past_unbooked" ? pastUnbookedEvents :
+      activeTab === "flagged" ? flaggedEvents :
+      activeTab === "cancelled" ? cancelledEvents :
+      pastEvents,
+    [activeTab, initialEvents, upcomingEvents, unbookedEvents, pastUnbookedEvents, flaggedEvents, cancelledEvents, pastEvents]
+  );
 
-  const filtered = activeEvents.filter((e) => {
-    const matchesSearch = e.event_name
-      .toLowerCase()
-      .includes(search.toLowerCase());
-    const matchesYear =
-      yearFilter === "all" ||
-      new Date(e.event_date + "T00:00:00").getFullYear().toString() === yearFilter;
-    const matchesMode =
-      modeFilter === "all" || (e.event_mode ?? "food_truck") === modeFilter;
-    return matchesSearch && matchesYear && matchesMode;
-  });
+  const filtered = useMemo(
+    () =>
+      activeEvents.filter((e) => {
+        const matchesSearch = e.event_name
+          .toLowerCase()
+          .includes(search.toLowerCase());
+        const matchesYear =
+          yearFilter === "all" ||
+          new Date(e.event_date + "T00:00:00").getFullYear().toString() === yearFilter;
+        const matchesMode =
+          modeFilter === "all" || (e.event_mode ?? "food_truck") === modeFilter;
+        return matchesSearch && matchesYear && matchesMode;
+      }),
+    [activeEvents, search, yearFilter, modeFilter]
+  );
 
   // Sort: upcoming/unbooked = ascending (soonest first), all/past/flagged = descending (most recent first)
   const tabDefaultSort: SortDirection = (activeTab === "past" || activeTab === "past_unbooked" || activeTab === "flagged" || activeTab === "all" || activeTab === "cancelled") ? "desc" : "asc";
