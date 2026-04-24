@@ -20,13 +20,14 @@ const nextConfig: NextConfig = {
         permanent: true,
       },
 
-      // Marketing: /pricing → homepage pricing preview anchor.
-      // Temporary redirect (307) because a standalone /pricing page is
-      // planned — we don't want search engines to permanently cache a
-      // fragment redirect. When the real page ships, remove this rule.
+      // Marketing: /pricing → homepage root. The 2026-04-24 rebuild
+      // removed the on-page pricing section, so the former `#pricing`
+      // anchor no longer exists. Temporary 307 until a real /pricing
+      // page ships (queued in v10). When the real page lands, remove
+      // this rule.
       {
         source: "/pricing",
-        destination: "/#pricing",
+        destination: "/",
         permanent: false,
       },
 

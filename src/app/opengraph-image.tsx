@@ -1,7 +1,7 @@
 import { ImageResponse } from "next/og";
 
 export const runtime = "edge";
-export const alt = "VendCast — Event Forecasting for Food Trucks";
+export const alt = "VendCast — Event Forecasting for Food Trucks & Mobile Vendors";
 export const size = { width: 1200, height: 630 };
 export const contentType = "image/png";
 
@@ -106,7 +106,7 @@ export default function OgImage() {
             marginBottom: 48,
           }}
         >
-          Event forecasting, POS sync, and performance analytics — built for food truck operators.
+          Event forecasting, POS sync, and performance analytics — built for food trucks & mobile vendors.
         </div>
 
         {/* Pill badges */}

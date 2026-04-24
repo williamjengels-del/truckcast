@@ -17,9 +17,9 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "VendCast — Event Forecasting for Food Trucks",
+  title: "VendCast — Event Forecasting for Food Trucks & Mobile Vendors",
   description:
-    "Forecast event revenue, track performance, and optimize booking decisions for your food truck business. A VendCast product.",
+    "Forecast event revenue, track performance, and optimize booking decisions for food trucks and mobile vendors. A VendCast product.",
   metadataBase: new URL("https://vendcast.co"),
   manifest: "/manifest.json",
   appleWebApp: {
@@ -40,15 +40,15 @@ export const metadata: Metadata = {
     type: "website",
     siteName: "VendCast",
     url: "https://vendcast.co",
-    title: "VendCast — Event Forecasting for Food Trucks",
+    title: "VendCast — Event Forecasting for Food Trucks & Mobile Vendors",
     description:
-      "Forecast event revenue, track performance, and optimize booking decisions for your food truck business.",
+      "Forecast event revenue, track performance, and optimize booking decisions for food trucks and mobile vendors.",
   },
   twitter: {
     card: "summary_large_image",
-    title: "VendCast — Event Forecasting for Food Trucks",
+    title: "VendCast — Event Forecasting for Food Trucks & Mobile Vendors",
     description:
-      "Forecast event revenue, track performance, and optimize booking decisions for your food truck business.",
+      "Forecast event revenue, track performance, and optimize booking decisions for food trucks and mobile vendors.",
   },
   alternates: {
     canonical: "https://vendcast.co",
