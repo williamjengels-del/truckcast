@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useMemo, useCallback, useRef } from "react";
+import React, { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -119,6 +119,129 @@ function getWeatherIconSmall(code: number): React.ReactNode {
   if (code <= 86) return <CloudSnow className="h-3 w-3 text-blue-300" />;
   return <Zap className="h-3 w-3 text-yellow-600" />;
 }
+
+// Pure formatter — hoisted so the module-scope components below can
+// use it without needing an EventsClient closure.
+function formatCurrency(val: number | null) {
+  if (val === null || val === undefined) return "—";
+  return `$${val.toLocaleString("en-US", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })}`;
+}
+
+// ─── Row-level components: hoisted + memoized ─────────────────────────
+// These were previously defined inside EventsClient. That created a
+// fresh function reference on every render, which React treated as a
+// new component type → every instance unmounted + remounted on every
+// keystroke. With 907+ events rendering up to 900+ instances of these,
+// the reconciliation churn was heavy enough to drop focus from
+// sibling inputs (the "events search one letter then loses focus" bug
+// originally reported v9 brief 2026-04-21).
+//
+// Hoisting makes the component reference stable. React.memo ensures
+// rows whose props haven't changed skip re-rendering entirely during
+// search typing — `event`, `weatherMap`, and `today` are all stable
+// references across keystrokes, so rows render zero times per letter
+// typed.
+
+const WeatherBadge = React.memo(function WeatherBadge({
+  event,
+  weatherMap,
+}: {
+  event: Event;
+  weatherMap: Map<string, WeatherForecast>;
+}) {
+  const wx = weatherMap.get(event.id);
+  if (!wx) return null;
+  const { icon, label } = getWeatherInfo(wx.wmoCode);
+  return (
+    <span
+      className="inline-flex items-center gap-1 text-xs text-muted-foreground ml-1"
+      title={`${label} · ${wx.tempHigh}°/${wx.tempLow}°F`}
+    >
+      {icon}
+      <span>{wx.tempHigh}°/{wx.tempLow}°</span>
+    </span>
+  );
+});
+
+// Shows a qualitative indicator when weather is meaningfully adjusting
+// an upcoming event's forecast. Uses stored event_weather + known
+// coefficients to infer direction and magnitude.
+const WeatherForecastImpact = React.memo(function WeatherForecastImpact({
+  event,
+  today,
+}: {
+  event: Event;
+  today: string;
+}) {
+  if (!event.event_weather || !event.forecast_sales || event.forecast_sales <= 0) return null;
+  if (event.event_date < today) return null; // only for upcoming events
+
+  const coeff = WEATHER_COEFFICIENTS[event.event_weather];
+  if (coeff === undefined || coeff === null) return null;
+
+  // Only show when there's a meaningful deviation (coeff differs from Clear=1.0 by >5%)
+  const deviation = Math.abs(coeff - 1.0);
+  if (deviation < 0.05) return null;
+
+  // Base forecast without weather would be forecast_sales / coeff
+  const baseForecast = event.forecast_sales / coeff;
+  const dollarImpact = Math.round(event.forecast_sales - baseForecast);
+  const absImpact = Math.abs(dollarImpact);
+
+  // Only show when impact is meaningful: at least $50 AND at least 5% of the forecast
+  if (absImpact < 50 || absImpact < event.forecast_sales * 0.05) return null;
+
+  const isNegative = dollarImpact < 0;
+  const sign = isNegative ? "-" : "+";
+  const color = isNegative ? "text-red-600 dark:text-red-400" : "text-green-600 dark:text-green-400";
+  const arrow = isNegative ? "↓" : "↑";
+
+  return (
+    <span
+      className={`inline-flex items-center gap-0.5 text-xs ${color} ml-1`}
+      title={`Weather (${event.event_weather}) adjusting forecast by ${sign}$${absImpact.toLocaleString()} — coefficient: ${coeff}`}
+    >
+      {arrow} {sign}${absImpact.toLocaleString()} weather
+    </span>
+  );
+});
+
+const ForecastVsActual = React.memo(function ForecastVsActual({
+  event,
+  today,
+}: {
+  event: Event;
+  today: string;
+}) {
+  if (
+    event.event_date >= today ||
+    event.net_sales === null ||
+    event.forecast_sales === null ||
+    event.forecast_sales <= 0
+  ) {
+    return null;
+  }
+
+  const actual = event.net_sales;
+  const forecast = event.forecast_sales;
+  const diff = actual - forecast;
+  const pct = forecast > 0 ? Math.round((diff / forecast) * 100) : 0;
+  const isPositive = diff >= 0;
+
+  return (
+    <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs">
+      <span className="text-muted-foreground">
+        Forecast: <span className="font-medium text-foreground">{formatCurrency(forecast)}</span>
+      </span>
+      <span className={`font-medium ${isPositive ? "text-green-600" : "text-red-600"}`}>
+        {isPositive ? "+" : ""}{formatCurrency(diff)} ({isPositive ? "+" : ""}{pct}%)
+      </span>
+    </div>
+  );
+});
 
 export function EventsClient({ initialEvents, userId = "", businessName = "", userCity = "", userState = "" }: EventsClientProps) {
   // Distinct state codes used by this operator's events — floats to
@@ -700,14 +823,6 @@ export function EventsClient({ initialEvents, userId = "", businessName = "", us
     URL.revokeObjectURL(url);
   }
 
-  function formatCurrency(val: number | null) {
-    if (val === null || val === undefined) return "—";
-    return `$${val.toLocaleString("en-US", {
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2,
-    })}`;
-  }
-
   function formatDate(dateStr: string) {
     return new Date(dateStr + "T00:00:00").toLocaleDateString("en-US", {
       weekday: "short",
@@ -1122,7 +1237,7 @@ export function EventsClient({ initialEvents, userId = "", businessName = "", us
                     <div className="mt-1 flex items-center flex-wrap gap-x-2 text-xs text-muted-foreground">
                       <span>Forecast:</span>
                       <ForecastInline event={event} />
-                      <WeatherForecastImpact event={event} />
+                      <WeatherForecastImpact event={event} today={today} />
                     </div>
                   )}
                 </div>
@@ -1139,88 +1254,6 @@ export function EventsClient({ initialEvents, userId = "", businessName = "", us
     return (
       <div className="space-y-4">
         <CalendarGrid />
-      </div>
-    );
-  }
-
-  // ---- WEATHER BADGE ----
-  function WeatherBadge({ event }: { event: Event }) {
-    const wx = weatherMap.get(event.id);
-    if (!wx) return null;
-    const { icon, label } = getWeatherInfo(wx.wmoCode);
-    return (
-      <span
-        className="inline-flex items-center gap-1 text-xs text-muted-foreground ml-1"
-        title={`${label} · ${wx.tempHigh}°/${wx.tempLow}°F`}
-      >
-        {icon}
-        <span>{wx.tempHigh}°/{wx.tempLow}°</span>
-      </span>
-    );
-  }
-
-  // ---- WEATHER IMPACT ON FORECAST ----
-  // Shows a qualitative indicator when weather is meaningfully adjusting an upcoming event's forecast.
-  // Uses stored event_weather + known coefficients to infer direction and magnitude.
-  function WeatherForecastImpact({ event }: { event: Event }) {
-    if (!event.event_weather || !event.forecast_sales || event.forecast_sales <= 0) return null;
-    if (event.event_date < today) return null; // only for upcoming events
-
-    const coeff = WEATHER_COEFFICIENTS[event.event_weather];
-    if (coeff === undefined || coeff === null) return null;
-
-    // Only show when there's a meaningful deviation (coeff differs from Clear=1.0 by >5%)
-    const deviation = Math.abs(coeff - 1.0);
-    if (deviation < 0.05) return null;
-
-    // Base forecast without weather would be forecast_sales / coeff
-    const baseForecast = event.forecast_sales / coeff;
-    const dollarImpact = Math.round(event.forecast_sales - baseForecast);
-    const absImpact = Math.abs(dollarImpact);
-
-    // Only show when impact is meaningful: at least $50 AND at least 5% of the forecast
-    if (absImpact < 50 || absImpact < event.forecast_sales * 0.05) return null;
-
-    const isNegative = dollarImpact < 0;
-    const sign = isNegative ? "-" : "+";
-    const color = isNegative ? "text-red-600 dark:text-red-400" : "text-green-600 dark:text-green-400";
-    const arrow = isNegative ? "↓" : "↑";
-
-    return (
-      <span
-        className={`inline-flex items-center gap-0.5 text-xs ${color} ml-1`}
-        title={`Weather (${event.event_weather}) adjusting forecast by ${sign}$${absImpact.toLocaleString()} — coefficient: ${coeff}`}
-      >
-        {arrow} {sign}${absImpact.toLocaleString()} weather
-      </span>
-    );
-  }
-
-  // ---- FORECAST VS ACTUAL ----
-  function ForecastVsActual({ event }: { event: Event }) {
-    if (
-      event.event_date >= today ||
-      event.net_sales === null ||
-      event.forecast_sales === null ||
-      event.forecast_sales <= 0
-    ) {
-      return null;
-    }
-
-    const actual = event.net_sales;
-    const forecast = event.forecast_sales;
-    const diff = actual - forecast;
-    const pct = forecast > 0 ? Math.round((diff / forecast) * 100) : 0;
-    const isPositive = diff >= 0;
-
-    return (
-      <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs">
-        <span className="text-muted-foreground">
-          Forecast: <span className="font-medium text-foreground">{formatCurrency(forecast)}</span>
-        </span>
-        <span className={`font-medium ${isPositive ? "text-green-600" : "text-red-600"}`}>
-          {isPositive ? "+" : ""}{formatCurrency(diff)} ({isPositive ? "+" : ""}{pct}%)
-        </span>
       </div>
     );
   }
@@ -1454,7 +1487,7 @@ export function EventsClient({ initialEvents, userId = "", businessName = "", us
                             {!event.booked && !event.cancellation_reason && (
                               <Badge variant="outline" className="text-[10px]">Unbooked</Badge>
                             )}
-                            {event.event_date >= today && weatherMap.has(event.id) && <WeatherBadge event={event} />}
+                            {event.event_date >= today && weatherMap.has(event.id) && <WeatherBadge event={event} weatherMap={weatherMap} />}
                           </div>
                           <div className="font-medium text-sm mt-1 truncate">{event.event_name}</div>
                           {(event.event_type || event.location || event.city) && (
@@ -1462,7 +1495,7 @@ export function EventsClient({ initialEvents, userId = "", businessName = "", us
                               {[event.event_type, event.location ?? event.city].filter(Boolean).join(" · ")}
                             </div>
                           )}
-                          <ForecastVsActual event={event} />
+                          <ForecastVsActual event={event} today={today} />
                         </div>
                         <div className="text-right shrink-0">
                           <div className="text-sm font-semibold tabular-nums">
@@ -1621,13 +1654,13 @@ export function EventsClient({ initialEvents, userId = "", businessName = "", us
                         )}
                         {/* Weather badge for upcoming events within 14 days */}
                         {event.event_date >= today && weatherMap.has(event.id) && (
-                          <WeatherBadge event={event} />
+                          <WeatherBadge event={event} weatherMap={weatherMap} />
                         )}
                       </TableCell>
                       <TableCell className="font-medium">
                         <div>{event.event_name}</div>
                         {/* Forecast vs Actual for past events */}
-                        <ForecastVsActual event={event} />
+                        <ForecastVsActual event={event} today={today} />
                       </TableCell>
                       <TableCell className="hidden md:table-cell text-sm text-muted-foreground pl-6 pr-4">
                         {event.event_type ?? "—"}
@@ -1651,7 +1684,7 @@ export function EventsClient({ initialEvents, userId = "", businessName = "", us
                       <TableCell className="hidden lg:table-cell text-right text-sm text-muted-foreground">
                         <ForecastInline event={event} />
                         {event.event_date >= today && (
-                          <WeatherForecastImpact event={event} />
+                          <WeatherForecastImpact event={event} today={today} />
                         )}
                       </TableCell>
                       <TableCell className="hidden xl:table-cell text-right text-sm font-medium">
