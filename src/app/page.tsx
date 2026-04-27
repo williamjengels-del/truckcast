@@ -1,10 +1,10 @@
 import type { Metadata } from "next";
+import Image from "next/image";
 import Link from "next/link";
 import { createClient as createServiceClient } from "@supabase/supabase-js";
 import { Button } from "@/components/ui/button";
 import { WEATHER_COEFFICIENTS } from "@/lib/constants";
 import {
-  TruckIcon,
   BarChart3,
   CalendarDays,
   DollarSign,
@@ -244,10 +244,16 @@ export default async function LandingPage() {
       {/* Nav */}
       <header className="border-b">
         <div className="container mx-auto flex h-16 items-center justify-between px-4">
-          <div className="flex items-center gap-2">
-            <TruckIcon className="h-7 w-7 text-primary" />
-            <span className="text-xl font-bold">VendCast</span>
-          </div>
+          <Link href="/" className="flex items-center" aria-label="VendCast home">
+            <Image
+              src="/vendcast-logo.jpg"
+              alt="VendCast"
+              width={400}
+              height={140}
+              priority
+              className="h-10 w-auto"
+            />
+          </Link>
           <div className="flex items-center gap-3">
             <Link href="/roadmap" className="hidden sm:block text-sm text-muted-foreground hover:text-foreground transition-colors">
               Roadmap
@@ -265,9 +271,11 @@ export default async function LandingPage() {
       <section className="flex-1">
         {/* Hero — full-bleed teal band per Brad's Figma. White text on
             brand-teal background; accent divider becomes white-on-teal
-            instead of teal-on-white. Phase 1.5 of the brand rollout. */}
+            instead of teal-on-white. Padding tightened (py-20 → py-12)
+            per Brad's note that the band may feel oversized for a
+            text-only hero. */}
         <div className="bg-brand-teal text-white">
-          <div className="container mx-auto px-4 py-20 text-center">
+          <div className="container mx-auto px-4 py-12 text-center">
             <h1
               data-testid="hero-headline"
               className="text-4xl font-bold tracking-tight sm:text-5xl lg:text-6xl"
