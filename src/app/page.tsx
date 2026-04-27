@@ -232,8 +232,11 @@ export default async function LandingPage() {
 
   // Diagonal tint pairing (Row1:L + Row2:R share one tint, others share the other).
   // On desktop this is literal diagonal; on mobile it becomes alternating bands.
-  const tintA = "bg-primary/5 border-l-4 border-primary";
-  const tintB = "bg-orange-500/5 border-l-4 border-orange-500";
+  // Tokens come from globals.css → @theme inline (--color-brand-teal +
+  // --color-brand-orange) sourced from Brad's Figma export. See
+  // docs/design-tokens.md.
+  const tintA = "bg-brand-teal/5 border-l-4 border-brand-teal";
+  const tintB = "bg-brand-orange/5 border-l-4 border-brand-orange";
   const cardBase = "rounded-lg border p-8 space-y-4 break-words";
 
   return (
@@ -277,7 +280,7 @@ export default async function LandingPage() {
           </p>
           <div
             aria-hidden="true"
-            className="mx-auto mt-8 h-px w-32 bg-primary/60"
+            className="mx-auto mt-8 h-px w-32 bg-brand-teal/60"
           />
         </div>
 

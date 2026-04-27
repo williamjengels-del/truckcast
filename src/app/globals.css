@@ -39,6 +39,12 @@
   --color-popover: var(--popover);
   --color-card-foreground: var(--card-foreground);
   --color-card: var(--card);
+  /* Brad's named brand tokens — exposed as Tailwind utilities so we can
+     write `bg-brand-teal`, `text-brand-orange`, `border-brand-teal/40`,
+     etc. anywhere in JSX without literal hex values. Single source of
+     truth lives in :root + .dark below. */
+  --color-brand-teal: var(--vendcast-teal);
+  --color-brand-orange: var(--vendcast-orange);
   --radius-sm: calc(var(--radius) * 0.6);
   --radius-md: calc(var(--radius) * 0.8);
   --radius-lg: var(--radius);
@@ -48,41 +54,57 @@
   --radius-4xl: calc(var(--radius) * 2.6);
 }
 
+/* Token values — verbatim from Brad's Figma Make HTML preview, captured
+   2026-04-27. See docs/design-tokens.md for the full reference + diff
+   from our pre-Brad tokens. Brand tokens (--vendcast-teal,
+   --vendcast-orange) are the named values for hero bands, callouts,
+   and accent stripes; semantic role tokens (--primary, --muted, etc.)
+   stay role-based and are what most components consume. */
 :root {
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.145 0 0);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.145 0 0);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.145 0 0);
-  --primary: oklch(0.205 0 0);
-  --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.97 0 0);
-  --secondary-foreground: oklch(0.205 0 0);
-  --muted: oklch(0.97 0 0);
-  --muted-foreground: oklch(0.556 0 0);
-  --accent: oklch(0.97 0 0);
-  --accent-foreground: oklch(0.205 0 0);
-  --destructive: oklch(0.577 0.245 27.325);
-  --border: oklch(0.922 0 0);
-  --input: oklch(0.922 0 0);
-  --ring: oklch(0.708 0 0);
-  --chart-1: oklch(0.87 0 0);
-  --chart-2: oklch(0.556 0 0);
-  --chart-3: oklch(0.439 0 0);
-  --chart-4: oklch(0.371 0 0);
-  --chart-5: oklch(0.269 0 0);
+  --background: #fff;
+  --foreground: oklch(14.5% 0 0);
+  --card: #fff;
+  --card-foreground: oklch(14.5% 0 0);
+  --popover: oklch(100% 0 0);
+  --popover-foreground: oklch(14.5% 0 0);
+  --primary: #030213;
+  --primary-foreground: oklch(100% 0 0);
+  --secondary: oklch(95% 0.0058 264.53);
+  --secondary-foreground: #030213;
+  --muted: #ececf0;
+  --muted-foreground: #717182;
+  --accent: #e9ebef;
+  --accent-foreground: #030213;
+  --destructive: #d4183d;
+  --destructive-foreground: #fff;
+  --border: #0000001a;
+  --input: transparent;
+  --input-background: #f3f3f5;
+  --switch-background: #cbced4;
+  --ring: oklch(70.8% 0 0);
+  --chart-1: oklch(64.6% 0.222 41.116);
+  --chart-2: oklch(60% 0.118 184.704);
+  --chart-3: oklch(39.8% 0.07 227.392);
+  --chart-4: oklch(82.8% 0.189 84.429);
+  --chart-5: oklch(76.9% 0.188 70.08);
   --radius: 0.625rem;
-  --sidebar: oklch(0.985 0 0);
-  --sidebar-foreground: oklch(0.145 0 0);
-  --sidebar-primary: oklch(0.205 0 0);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.97 0 0);
-  --sidebar-accent-foreground: oklch(0.205 0 0);
-  --sidebar-border: oklch(0.922 0 0);
-  --sidebar-ring: oklch(0.708 0 0);
+  --sidebar: oklch(98.5% 0 0);
+  --sidebar-foreground: oklch(14.5% 0 0);
+  --sidebar-primary: #030213;
+  --sidebar-primary-foreground: oklch(98.5% 0 0);
+  --sidebar-accent: oklch(97% 0 0);
+  --sidebar-accent-foreground: oklch(20.5% 0 0);
+  --sidebar-border: oklch(92.2% 0 0);
+  --sidebar-ring: oklch(70.8% 0 0);
+  /* Brand colors — see @theme inline above for the Tailwind
+     utility-class mapping (bg-brand-teal, text-brand-orange). */
+  --vendcast-teal: #0d4f5c;
+  --vendcast-orange: #e8621a;
 }
 
+/* Dark mode — Brad's Figma export didn't include a dark scheme. Keep
+   our existing dark values for app surfaces (dashboards) and inherit
+   the brand tokens unchanged so accents stay on-brand in both modes. */
 .dark {
   --background: oklch(0.145 0 0);
   --foreground: oklch(0.985 0 0);
@@ -115,6 +137,10 @@
   --sidebar-accent-foreground: oklch(0.985 0 0);
   --sidebar-border: oklch(1 0 0 / 10%);
   --sidebar-ring: oklch(0.556 0 0);
+  /* Brand tokens are unchanged in dark mode — the deep teal still works
+     against a near-black background, and the saturated orange pops. */
+  --vendcast-teal: #0d4f5c;
+  --vendcast-orange: #e8621a;
 }
 
 @layer base {
