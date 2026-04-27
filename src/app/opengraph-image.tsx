@@ -106,7 +106,7 @@ export default function OgImage() {
             marginBottom: 48,
           }}
         >
-          Event forecasting, POS sync, and performance analytics — built for food trucks & mobile vendors.
+          Bookings, event scheduling, POS sync, and forecasts — built for food trucks & mobile vendors.
         </div>
 
         {/* Pill badges */}

@@ -263,25 +263,29 @@ export default async function LandingPage() {
       </header>
 
       <section className="flex-1">
-        {/* Hero */}
-        <div className="container mx-auto px-4 py-20 text-center">
-          <h1
-            data-testid="hero-headline"
-            className="text-4xl font-bold tracking-tight sm:text-5xl lg:text-6xl"
-          >
-            The operating system for{" "}
-            <span className="text-primary">mobile vendors.</span>
-          </h1>
-          <p
-            data-testid="hero-subline"
-            className="mx-auto mt-6 max-w-2xl text-lg text-muted-foreground"
-          >
-            Built by a food truck operator. For mobile vendors.
-          </p>
-          <div
-            aria-hidden="true"
-            className="mx-auto mt-8 h-px w-32 bg-brand-teal/60"
-          />
+        {/* Hero — full-bleed teal band per Brad's Figma. White text on
+            brand-teal background; accent divider becomes white-on-teal
+            instead of teal-on-white. Phase 1.5 of the brand rollout. */}
+        <div className="bg-brand-teal text-white">
+          <div className="container mx-auto px-4 py-20 text-center">
+            <h1
+              data-testid="hero-headline"
+              className="text-4xl font-bold tracking-tight sm:text-5xl lg:text-6xl"
+            >
+              The operating system for{" "}
+              <span className="text-white">mobile vendors.</span>
+            </h1>
+            <p
+              data-testid="hero-subline"
+              className="mx-auto mt-6 max-w-2xl text-lg text-white/85"
+            >
+              Built by a food truck operator. For mobile vendors.
+            </p>
+            <div
+              aria-hidden="true"
+              className="mx-auto mt-8 h-px w-32 bg-white/40"
+            />
+          </div>
         </div>
 
         {/* Insight blocks — 2×2 grid on desktop, stacked on mobile.
