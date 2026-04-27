@@ -176,11 +176,13 @@ async function getRepeatBookingDeclineRate(): Promise<string> {
 
 /** Apply numeric-emphasis classes only when the value is a resolved number.
  *  Placeholders get muted, normal-size treatment so they read as pending
- *  rather than shouting a literal template string. */
+ *  rather than shouting a literal template string. Resolved values use
+ *  brand-teal so the homepage's data anchors carry brand presence into
+ *  the body content, not just the hero band. */
 function isResolvedValue(s: string): boolean {
   return !/^\{\{.*\}\}$/.test(s);
 }
-const EMPHASIS_RESOLVED = "text-4xl font-bold text-primary";
+const EMPHASIS_RESOLVED = "text-4xl font-bold text-brand-teal";
 const EMPHASIS_PLACEHOLDER = "text-xl font-normal text-muted-foreground";
 
 const FEATURE_CARDS = [
