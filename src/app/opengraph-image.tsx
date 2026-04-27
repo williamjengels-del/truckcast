@@ -10,7 +10,7 @@ export default function OgImage() {
     (
       <div
         style={{
-          background: "linear-gradient(135deg, #0f172a 0%, #1e293b 60%, #0f172a 100%)",
+          background: "linear-gradient(135deg, #062a30 0%, #0d4f5c 60%, #062a30 100%)",
           width: "100%",
           height: "100%",
           display: "flex",
@@ -28,7 +28,7 @@ export default function OgImage() {
             position: "absolute",
             inset: 0,
             backgroundImage:
-              "linear-gradient(rgba(99,102,241,0.07) 1px, transparent 1px), linear-gradient(90deg, rgba(99,102,241,0.07) 1px, transparent 1px)",
+              "linear-gradient(rgba(232,98,26,0.06) 1px, transparent 1px), linear-gradient(90deg, rgba(232,98,26,0.06) 1px, transparent 1px)",
             backgroundSize: "60px 60px",
           }}
         />
@@ -42,7 +42,7 @@ export default function OgImage() {
             transform: "translate(-50%, -50%)",
             width: 700,
             height: 400,
-            background: "radial-gradient(ellipse, rgba(99,102,241,0.18) 0%, transparent 70%)",
+            background: "radial-gradient(ellipse, rgba(232,98,26,0.22) 0%, transparent 70%)",
             borderRadius: "50%",
           }}
         />
@@ -53,7 +53,7 @@ export default function OgImage() {
             style={{
               width: 56,
               height: 56,
-              background: "#6366f1",
+              background: "#e8621a",
               borderRadius: 14,
               display: "flex",
               alignItems: "center",
@@ -91,7 +91,7 @@ export default function OgImage() {
           }}
         >
           Know what your next event{" "}
-          <span style={{ color: "#818cf8" }}>will make</span>
+          <span style={{ color: "#f5a877" }}>will make</span>
           {" "}before you book it.
         </div>
 
@@ -115,12 +115,12 @@ export default function OgImage() {
             <div
               key={label}
               style={{
-                background: "rgba(99,102,241,0.15)",
-                border: "1px solid rgba(99,102,241,0.4)",
+                background: "rgba(232,98,26,0.15)",
+                border: "1px solid rgba(232,98,26,0.45)",
                 borderRadius: 999,
                 padding: "10px 22px",
                 fontSize: 16,
-                color: "#c7d2fe",
+                color: "#f8c69b",
                 fontWeight: 600,
               }}
             >
