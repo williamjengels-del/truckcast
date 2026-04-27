@@ -74,6 +74,21 @@ export async function POST(request: Request) {
       };
       const tier = priceToTier[priceId ?? ""] ?? "starter";
 
+      // Stripe flips subscription.status to 'past_due' after its
+      // configured number of invoice retry attempts exhaust. We mirror
+      // that onto profiles.last_payment_status so the dunning UI + admin
+      // triage pick it up even though payment_failed already fired on
+      // the individual invoice attempts. When the card gets updated and
+      // Stripe retries successfully, invoice.payment_succeeded fires
+      // and flips status back to 'paid' — we don't need to undo here.
+      const update: Record<string, unknown> = {
+        subscription_tier: tier,
+        stripe_subscription_id: subscription.id,
+      };
+      if (subscription.status === "past_due") {
+        update.last_payment_status = "past_due";
+      }
+
       const { data: profiles } = await supabase
         .from("profiles")
         .select("id")
@@ -83,11 +98,20 @@ export async function POST(request: Request) {
       if (profiles && profiles.length > 0) {
         await supabase
           .from("profiles")
-          .update({
-            subscription_tier: tier,
-            stripe_subscription_id: subscription.id,
-          })
+          .update(update)
           .eq("id", profiles[0].id);
+      }
+
+      if (subscription.status === "past_due") {
+        Sentry.captureMessage("Stripe subscription transitioned to past_due", {
+          level: "warning",
+          tags: { source: "stripe_webhook", event_type: event.type },
+          extra: {
+            stripe_customer_id: customerId,
+            subscription_id: subscription.id,
+            status: subscription.status,
+          },
+        });
       }
       break;
     }
