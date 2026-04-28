@@ -38,6 +38,7 @@ export type AdminAction =
   | "user.impersonate_end"     // Commit 5
   | "user.event_edit"          // Commit 9
   | "user.event_anomaly_flag"  // Commit 9
+  | "user.mfa_reset"           // 2026-04-29 — admin reset of locked-out 2FA
   // testimonial.*
   | "testimonial.create"
   | "testimonial.update"

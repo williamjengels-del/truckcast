@@ -10,6 +10,7 @@ import { buttonVariants } from "@/components/ui/button-variants";
 import { ChevronLeft, Upload } from "lucide-react";
 import { ImpersonateButton } from "./impersonate-button";
 import { ResetTrialButton } from "./reset-trial-button";
+import { MfaResetButton } from "./mfa-reset-button";
 import { EventsAdminTable } from "./events-admin-table";
 import type { Event } from "@/lib/database.types";
 import { formatDate, formatTimestamp } from "@/lib/format-time";
@@ -334,6 +335,10 @@ export default async function UserDetailPage({ params }: PageProps) {
             hasSubscription={!!profile.stripe_subscription_id}
             tier={profile.subscription_tier}
             currentExtendedUntil={profile.trial_extended_until}
+          />
+          <MfaResetButton
+            userId={profile.id}
+            targetLabel={profile.business_name ?? email ?? "this user"}
           />
           <p className="text-xs text-muted-foreground">
             For tier changes and trial extensions by custom day counts, use the
