@@ -248,6 +248,9 @@ export default async function LandingPage() {
             />
           </Link>
           <div className="flex items-center gap-3">
+            <Link href="/pricing" className="hidden sm:block text-sm text-muted-foreground hover:text-foreground transition-colors">
+              Pricing
+            </Link>
             <Link href="/roadmap" className="hidden sm:block text-sm text-muted-foreground hover:text-foreground transition-colors">
               Roadmap
             </Link>
@@ -494,10 +497,12 @@ export default async function LandingPage() {
       {/* Footer */}
       <footer className="border-t py-8">
         <div className="container mx-auto px-4 text-center text-sm text-muted-foreground space-y-2">
-          <div className="flex items-center justify-center gap-6">
+          <div className="flex flex-wrap items-center justify-center gap-x-6 gap-y-2">
+            <Link href="/pricing" className="hover:text-foreground transition-colors">Pricing</Link>
+            <Link href="/roadmap" className="hover:text-foreground transition-colors">Roadmap</Link>
             <Link href="/help" className="hover:text-foreground transition-colors">Help Center</Link>
-            <Link href="/signup" className="hover:text-foreground transition-colors">Get Started</Link>
             <Link href="/contact" className="hover:text-foreground transition-colors">Contact</Link>
+            <Link href="/signup" className="hover:text-foreground transition-colors">Get Started</Link>
           </div>
           <p>&copy; {new Date().getFullYear()} VendCast — built by a food truck operator, for mobile vendors.</p>
         </div>
