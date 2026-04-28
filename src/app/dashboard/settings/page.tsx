@@ -14,6 +14,7 @@ import { InstallSettingsCard } from "@/components/install-settings-card";
 import { PushNotificationsCard } from "@/components/push-notifications-card";
 import { DangerZoneCard } from "./danger-zone-card";
 import type { Profile } from "@/lib/database.types";
+import { PRICING_PLANS } from "@/lib/pricing-plans";
 
 const US_TIMEZONES = [
   "America/New_York",
@@ -359,32 +360,11 @@ function PlanCards({ profile }: { profile: Profile | null }) {
     }
   }
 
-  const plans = [
-    {
-      tier: "starter",
-      label: "Starter",
-      monthly: "$19/mo",
-      annual: "$182/yr",
-      annualSave: "save $46",
-      features: ["Event Scheduling & Calendar", "Fee Calculator", "Revenue Tracking", "Public Schedule", "Team Share Link"],
-    },
-    {
-      tier: "pro",
-      label: "Pro",
-      monthly: "$39/mo",
-      annual: "$374/yr",
-      annualSave: "save $94",
-      features: ["Everything in Starter", "Weather-Adjusted Forecasts", "CSV Import", "POS Integration", "Event Performance Analytics"],
-    },
-    {
-      tier: "premium",
-      label: "Premium",
-      monthly: "$69/mo",
-      annual: "$662/yr",
-      annualSave: "save $166",
-      features: ["Everything in Pro", "Advanced Analytics", "Monthly Reports", "Organizer Scoring", "Follow My Schedule", "Booking Widget"],
-    },
-  ];
+  // Plan data sourced from src/lib/pricing-plans.ts — same constant
+  // that drives /pricing. Display strings are composed inline because
+  // the settings layout is denser than the marketing surface (price +
+  // saving on the same row, no card description).
+  const plans = PRICING_PLANS;
 
   return (
     <div className="space-y-3">
@@ -403,10 +383,10 @@ function PlanCards({ profile }: { profile: Profile | null }) {
               <div>
                 <h3 className="font-semibold text-lg">{plan.label}</h3>
                 <p className="text-sm text-muted-foreground">
-                  {plan.monthly}{" "}
-                  <span className="text-xs">or {plan.annual}</span>
+                  {plan.monthlyPrice}/mo{" "}
+                  <span className="text-xs">or {plan.annualPrice}/yr</span>
                 </p>
-                <p className="text-xs text-green-600">{plan.annualSave} annually</p>
+                <p className="text-xs text-green-600">save {plan.annualSavings} annually</p>
               </div>
               <ul className="text-xs text-muted-foreground space-y-1">
                 {plan.features.map((f) => (
