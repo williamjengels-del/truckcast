@@ -139,9 +139,19 @@ export async function updateSession(request: NextRequest) {
   } = await supabase.auth.getUser();
 
   const pathname = request.nextUrl.pathname;
+  const method = request.method;
   const isDashboard = pathname.startsWith("/dashboard");
+  const isLogin2fa = pathname.startsWith("/login/2fa");
   const isAuthRoute =
     pathname.startsWith("/login") || pathname.startsWith("/signup");
+  const isApi = pathname.startsWith("/api/");
+  const isMfaApi = pathname.startsWith("/api/auth/mfa/");
+  const isMutation =
+    method === "POST" ||
+    method === "PATCH" ||
+    method === "PUT" ||
+    method === "DELETE";
+  const isServerAction = request.headers.get("next-action") !== null;
 
   // Protected routes — redirect to login if not authenticated
   if (!user && isDashboard) {
@@ -150,10 +160,71 @@ export async function updateSession(request: NextRequest) {
     return NextResponse.redirect(url);
   }
 
-  // Redirect authenticated users away from auth pages
-  if (user && isAuthRoute) {
+  // ── AAL (Authenticator Assurance Level) gate ──────────────────────
+  // For users with TOTP enrolled, the password-only session is AAL1.
+  // After a successful TOTP challenge it becomes AAL2. Any user with
+  // an enrolled+verified factor must be at AAL2 to reach /dashboard
+  // OR perform any mutation (API or server action).
+  //
+  // /login/2fa is the challenge surface — it must remain reachable for
+  // AAL1 users with a factor, otherwise the only way out is logout.
+  // /api/auth/mfa/* exposes the challenge endpoints themselves; they
+  // necessarily run at AAL1 and self-elevate the session, so they're
+  // exempt from the API mutation gate.
+  //
+  // For users without an enrolled factor, getAuthenticatorAssuranceLevel
+  // returns nextLevel === 'aal1' (no step-up needed) and the gate is a
+  // no-op. Cost: one JWT-claim read per request — Supabase doesn't
+  // round-trip to the DB for this.
+  async function aalNeedsStepUp(): Promise<boolean> {
+    const { data } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel();
+    return data?.currentLevel === "aal1" && data?.nextLevel === "aal2";
+  }
+
+  // API + server action mutation gate. Returns 403 (no redirect — the
+  // caller is fetch/server-action machinery, not a navigating browser).
+  // Mirror the impersonation-block shape so the operational story is
+  // consistent across both gates.
+  if (
+    user &&
+    ((isApi && isMutation && !isMfaApi) || isServerAction) &&
+    (await aalNeedsStepUp())
+  ) {
+    return NextResponse.json(
+      {
+        error: "Two-factor verification required",
+        detail:
+          "Your session must complete the two-factor challenge before performing this action.",
+      },
+      {
+        status: 403,
+        headers: { "x-aal-required": "aal2" },
+      }
+    );
+  }
+
+  // Redirect authenticated users away from auth pages — but route
+  // password-authenticated users with a factor to /login/2fa first
+  // instead of bouncing through /dashboard.
+  if (user && isAuthRoute && !isLogin2fa) {
+    const url = request.nextUrl.clone();
+    url.pathname = (await aalNeedsStepUp()) ? "/login/2fa" : "/dashboard";
+    return NextResponse.redirect(url);
+  }
+
+  // /login/2fa for already-AAL2 users: bounce to dashboard so refreshing
+  // the challenge page doesn't get stuck.
+  if (user && isLogin2fa && !(await aalNeedsStepUp())) {
     const url = request.nextUrl.clone();
     url.pathname = "/dashboard";
+    return NextResponse.redirect(url);
+  }
+
+  // Dashboard AAL2 enforcement — must come before onboarding/trial gates
+  // so an AAL1 session never reaches the trial-gate profile fetch.
+  if (user && isDashboard && (await aalNeedsStepUp())) {
+    const url = request.nextUrl.clone();
+    url.pathname = "/login/2fa";
     return NextResponse.redirect(url);
   }
 
