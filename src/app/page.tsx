@@ -196,7 +196,7 @@ const FEATURE_CARDS = [
     icon: Plug,
     title: "POS & CSV Sync",
     description:
-      "Toast, Square, Clover, SumUp — and more. Sales log themselves. Bring your spreadsheet if that's where your history lives.",
+      "Toast, Square, Clover, SumUp — and more. Sales log themselves, or import a CSV.",
   },
   {
     testId: "feature-card-forecasting",
@@ -303,49 +303,26 @@ export default async function LandingPage() {
           </div>
         </div>
 
-        {/* Insight blocks — 2×2 grid on desktop, stacked on mobile.
-            Phase 2.0 reorder per Verdict #12 (inquiry-first positioning):
-              1. Inquiries     2. Weather
-              3. Repeats       4. Timing
-            Tint pairing is diagonal (TL+BR share tintA, TR+BL share tintB)
-            and reflows automatically with the new content order. Each card
-            inverts the old density: the result-claim becomes the H2, the
-            quantified anchor sits below as the stat, body tightens to one
-            sentence, italic punchline cut. */}
+        {/* Insight row — three quantified operations insights side-by-side
+            on desktop, stacked on mobile. Phase 2.1 restored Brad's
+            original 3+1 framing (the four blocks were never meant to do
+            the same job — three are quantified ops insights, one is the
+            differentiator/closer positioning block). Operations-first
+            ordering: ops insights lead the page so VendCast reads as an
+            ops platform that handles leads better than the alternatives,
+            not a lead-gen marketplace that does ops on the side.
+            Alternating teal/orange/teal border treatment per Brad's note. */}
         <div className="border-t">
-          <div className="container mx-auto px-4 py-20 max-w-5xl grid grid-cols-1 md:grid-cols-2 gap-6">
-            {/* Block 1 — Inquiries (operator-direct positioning) */}
-            <div
-              data-testid="insight-block-inquiries"
-              className={`${cardBase} ${tintA}`}
-            >
-              <h2 className="text-2xl font-bold tracking-tight sm:text-3xl">
-                Real inquiries, straight to operators. First to respond, first to book.
-              </h2>
-              <p className="text-xl font-semibold">
-                <span
-                  data-testid="insight-finding-inquiries"
-                  className={EMPHASIS_RESOLVED}
-                >
-                  0%
-                </span>{" "}
-                marketplace fee.
-              </p>
-              <p className="text-base text-muted-foreground">
-                When an event needs a vendor, the inquiry goes to you — not a marketplace
-                that takes 15%.
-              </p>
-            </div>
-
-            {/* Block 2 — Weather */}
+          <div className="container mx-auto px-4 py-20 max-w-6xl grid grid-cols-1 md:grid-cols-3 gap-6">
+            {/* Block 1 — Weather (scheduling decision) */}
             <div
               data-testid="insight-block-weather"
-              className={`${cardBase} ${tintB}`}
+              className={`${cardBase} ${tintA}`}
             >
-              <h2 className="text-2xl font-bold tracking-tight sm:text-3xl">
+              <h2 className="text-xl font-bold tracking-tight sm:text-2xl">
                 Bad-weather risk, flagged before you commit.
               </h2>
-              <p className="text-xl font-semibold">
+              <p className="text-lg font-semibold">
                 <span
                   data-testid="insight-finding-weather"
                   className={weatherEmphasis}
@@ -354,20 +331,20 @@ export default async function LandingPage() {
                 </span>{" "}
                 lost on average per weather-disrupted event.
               </p>
-              <p className="text-base text-muted-foreground">
+              <p className="text-sm text-muted-foreground">
                 Rain, heat, cold snaps — VendCast knows the patterns.
               </p>
             </div>
 
-            {/* Block 3 — Repeat bookings */}
+            {/* Block 2 — Repeat bookings (rebooking decision) */}
             <div
               data-testid="insight-block-repeats"
               className={`${cardBase} ${tintB}`}
             >
-              <h2 className="text-2xl font-bold tracking-tight sm:text-3xl">
-                Know which repeat bookings are still earning their keep.
+              <h2 className="text-xl font-bold tracking-tight sm:text-2xl">
+                Know which repeats are still earning their keep.
               </h2>
-              <p className="text-xl font-semibold">
+              <p className="text-lg font-semibold">
                 <span
                   data-testid="insight-finding-repeats"
                   className={repeatEmphasis}
@@ -376,32 +353,66 @@ export default async function LandingPage() {
                 </span>{" "}
                 of repeat bookings show declining revenue by year three.
               </p>
-              <p className="text-base text-muted-foreground">
-                VendCast tracks every repeat — what you made, how weather hit it, how this
-                year compares to last.
+              <p className="text-sm text-muted-foreground">
+                VendCast tracks each repeat — what you made and how this year compares to last.
               </p>
             </div>
 
-            {/* Block 4 — Revenue timing (qualitative anchor; no invented number) */}
+            {/* Block 3 — Revenue timing (prep + staffing decision; no
+                invented number) */}
             <div
               data-testid="insight-block-timing"
               className={`${cardBase} ${tintA}`}
             >
-              <h2 className="text-2xl font-bold tracking-tight sm:text-3xl">
+              <h2 className="text-xl font-bold tracking-tight sm:text-2xl">
                 Match prep and staffing to when the money actually arrives.
               </h2>
-              <p className="text-xl font-semibold">
+              <p className="text-lg font-semibold">
                 A 6-hour event isn&apos;t 6 hours of revenue.
               </p>
-              <p className="text-base text-muted-foreground">
-                Most of the money shows up in a tighter window. VendCast tracks when, not
-                just when the day ends.
+              <p className="text-sm text-muted-foreground">
+                VendCast tracks when, not just when the day ends.
               </p>
             </div>
           </div>
         </div>
 
-        {/* Features */}
+        {/* Positioning band — full-bleed brand-orange, mirrors the hero's
+            teal band visually and brackets the page (teal opens, orange
+            closes the strategic argument). This is the differentiator
+            moment: ops insights above demonstrate VendCast knows the job;
+            this band lands "and you keep all of it — no commission."
+            Per Verdict #25, orange is reserved for differentiator/closer
+            moments + alternating accents; this is THE orange moment on
+            the homepage. */}
+        <div
+          data-testid="insight-block-inquiries"
+          className="border-t bg-brand-orange text-white"
+        >
+          <div className="container mx-auto px-4 py-16 max-w-4xl text-center">
+            <h2 className="text-2xl font-bold tracking-tight sm:text-3xl lg:text-4xl">
+              Real inquiries, straight to operators. First to respond, first to book.
+            </h2>
+            <p className="mt-6 text-xl font-semibold sm:text-2xl">
+              <span data-testid="insight-finding-inquiries" className="text-white">
+                0%
+              </span>{" "}
+              commission fee.
+            </p>
+            <p className="mx-auto mt-4 max-w-2xl text-base text-white/90">
+              When an event needs a vendor, the inquiry goes directly to you — not a
+              marketplace that takes 15%.
+            </p>
+          </div>
+        </div>
+
+        {/* Feature grid — Phase 2.5 brand integration. Each card now
+            anchors the lucide icon in a brand-teal filled square (white
+            icon inside) so the section carries brand presence after the
+            strong insight row + orange positioning band above. Card
+            border + bg-card unchanged so cards still read as the
+            "capability list" rather than competing with the insight row's
+            visual weight. */}
         <div className="border-t">
           <div className="container mx-auto px-4 py-20">
             <h2 className="text-center text-3xl font-bold mb-4">
@@ -417,7 +428,9 @@ export default async function LandingPage() {
                   data-testid={feature.testId}
                   className="rounded-lg border bg-card p-6"
                 >
-                  <feature.icon className="h-10 w-10 text-primary mb-4" />
+                  <div className="mb-4 inline-flex h-12 w-12 items-center justify-center rounded-lg bg-brand-teal text-white shadow-sm">
+                    <feature.icon className="h-6 w-6" />
+                  </div>
                   <h3 className="font-semibold text-lg mb-2">
                     {feature.title}
                   </h3>
