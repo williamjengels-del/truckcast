@@ -1,15 +1,25 @@
 import { test, expect, type Page } from "@playwright/test";
 
-// Homepage rebuild spec — locked in 2026-04-24 per the homepage-rebuild
-// prompt (removals: testimonials / how-it-works / on-page pricing;
-// additions: three insight blocks + operator-direct positioning block;
-// tightening: feature-grid copy, single CTA, subline). No auth needed —
-// runs via playwright.homepage.config.ts against a local dev server.
+// Homepage spec — last refreshed 2026-04-28 for Phase 2.1 (restored
+// Brad's 3+1 framing) + Phase 2.5 (feature grid brand integration).
+// History:
+//   * 2026-04-24: original homepage rebuild (removals: testimonials,
+//     how-it-works, on-page pricing; additions: three insight blocks +
+//     positioning block; tightening: feature grid copy, single CTA).
+//   * 2026-04-27: Phase 2.0 IA reorder collapsed the 3+1 into a 4-equal
+//     2x2 grid with Inquiries leading. Reverted in Phase 2.1.
+//   * 2026-04-27 evening: Phase 2.1 restored 3 insights side-by-side
+//     + 1 positioning band (full-bleed brand-orange), per Brad's
+//     original framing + Verdict #25 (operator-acquisition wins on
+//     conflict; orange = differentiator/closer + alternating accents).
+//   * 2026-04-27 evening: Phase 2.5 feature grid icons in brand-teal
+//     filled squares so the section carries brand presence after the
+//     orange band above.
 //
 // Structural assertions go through data-testid so Brad's upcoming
-// visual-polish pass can rename wrapper components without breaking
-// the suite. Copy assertions use content strings because that copy IS
-// the review artifact.
+// visual-polish pass can rename wrappers without breaking the suite.
+// Copy assertions use content strings because that copy IS the
+// review artifact.
 
 async function openHomepage(page: Page) {
   const response = await page.goto("/", { waitUntil: "domcontentloaded" });
@@ -21,7 +31,7 @@ test.describe("Homepage rebuild", () => {
     await openHomepage(page);
   });
 
-  test("hero headline and updated subline render", async ({ page }) => {
+  test("hero renders headline, subline, supporting line, and pill CTA", async ({ page }) => {
     const headline = page.getByTestId("hero-headline");
     await expect(headline).toBeVisible();
     await expect(headline).toContainText("The operating system for");
@@ -30,51 +40,99 @@ test.describe("Homepage rebuild", () => {
     const subline = page.getByTestId("hero-subline");
     await expect(subline).toBeVisible();
     await expect(subline).toHaveText("Built by a food truck operator. For mobile vendors.");
+
+    const supporting = page.getByTestId("hero-supporting-line");
+    await expect(supporting).toBeVisible();
+    await expect(supporting).toHaveText(
+      "Know what your next event will make before you book it."
+    );
+
+    const heroCta = page.getByTestId("hero-cta-start-trial");
+    await expect(heroCta).toBeVisible();
+    await expect(heroCta).toContainText("Start free trial");
   });
 
-  test("three insight blocks render with resolved numbers + remaining placeholders", async ({
+  test("three operations insights render side-by-side, ops-first, claim-led", async ({
     page,
   }) => {
+    // Phase 2.1: three quantified ops insights (Weather / Repeats /
+    // Timing) lead the page. Each card carries an H2 with the result
+    // claim + a stat anchor + a one-sentence body. No italic
+    // punchline — the claim was promoted into the H2.
+
     const weather = page.getByTestId("insight-block-weather");
     await expect(weather).toBeVisible();
-    await expect(weather).toContainText("Weather patterns repeat. Losses don't have to.");
-    // Weather-loss finding is either a live-queried "$NNN" value or the
-    // fallback placeholder — both are valid render outcomes.
+    await expect(weather).toContainText("Bad-weather risk, flagged before you commit.");
     await expect(
       page.getByTestId("insight-finding-weather")
     ).toHaveText(/^\$\d{1,3}(,\d{3})*$|^\{\{WEATHER_LOSS_DOLLARS\}\}$/);
-    // Rain/Hot/Cold impacts are hardcoded from WEATHER_COEFFICIENTS.
-    await expect(weather).toContainText("47% below average");
-    await expect(weather).toContainText("37% below");
-    await expect(weather).toContainText("45% below");
-    await expect(weather).toContainText("flags bad-weather risk before you commit");
+    await expect(weather).toContainText("lost on average per weather-disrupted event");
+    await expect(weather).toContainText("Rain, heat, cold snaps");
 
     const repeats = page.getByTestId("insight-block-repeats");
     await expect(repeats).toBeVisible();
-    await expect(repeats).toContainText("Know which repeat bookings are still worth your time.");
-    // Repeat-decline finding is either the live-queried "NN%" value or the
-    // fallback placeholder when Supabase env vars / data aren't available.
+    await expect(repeats).toContainText("Know which repeats are still earning their keep.");
     await expect(
       page.getByTestId("insight-finding-repeats")
     ).toHaveText(/^\d{1,2}%$|^\{\{REPEAT_BOOKING_DECLINE_RATE\}\}$/);
-    await expect(repeats).toContainText("The math stops being a surprise");
+    await expect(repeats).toContainText("declining revenue by year three");
 
     const timing = page.getByTestId("insight-block-timing");
     await expect(timing).toBeVisible();
-    // Block 3 reframed 2026-04-24 — qualitative, no numeric placeholder.
-    await expect(timing).toContainText("Your revenue curve isn't a daily average.");
-    await expect(timing).toContainText("A 6-hour festival isn't 6 hours of revenue.");
-    await expect(timing).toContainText("VendCast tracks when your money actually arrives");
+    await expect(timing).toContainText(
+      "Match prep and staffing to when the money actually arrives."
+    );
+    await expect(timing).toContainText("A 6-hour event isn't 6 hours of revenue.");
   });
 
-  test("positioning block renders", async ({ page }) => {
-    const block = page.getByTestId("positioning-block");
-    await expect(block).toBeVisible();
-    await expect(block).toContainText("Event inquiries, operator-direct. No middleman.");
-    await expect(block).toContainText("First to respond, first to book");
+  test("positioning band (Inquiries) closes the strategic argument in brand-orange", async ({
+    page,
+  }) => {
+    // Phase 2.1: the four-block 2x2 collapsed to 3 insights + 1
+    // positioning band. Inquiries is no longer a peer card — it's the
+    // closing differentiator, full-bleed brand-orange, mirrors the
+    // hero's teal band visually.
+    const inquiries = page.getByTestId("insight-block-inquiries");
+    await expect(inquiries).toBeVisible();
+    await expect(inquiries).toContainText(
+      "Real inquiries, straight to operators. First to respond, first to book."
+    );
+    await expect(page.getByTestId("insight-finding-inquiries")).toHaveText("0%");
+    await expect(inquiries).toContainText("commission fee");
+    await expect(inquiries).toContainText(
+      "the inquiry goes directly to you"
+    );
+    await expect(inquiries).toContainText("not a marketplace that takes 15%");
+    // The band should NOT contain "marketplace fee" — Phase 2.1 swapped
+    // it to "commission fee" (Julian's call: more accurate framing of
+    // what marketplaces actually charge).
+    await expect(inquiries).not.toContainText("marketplace fee");
   });
 
-  test("feature grid renders exactly 5 cards with editorial copy", async ({ page }) => {
+  test("italic-punchline pattern is gone — density inversion lands the claim in the H2", async ({
+    page,
+  }) => {
+    // Pre-Phase-2.0 cards ended with italic muted-foreground paragraphs
+    // carrying the actual claim. Phase 2.0 promoted that claim into
+    // the H2; Phase 2.1 keeps the discipline. Should be no trailing
+    // italic in any insight block (cards or band).
+    const insightBlocks = page.locator(
+      '[data-testid^="insight-block-"]'
+    );
+    const blockCount = await insightBlocks.count();
+    expect(blockCount).toBe(4);
+    for (let i = 0; i < blockCount; i++) {
+      const italics = insightBlocks.nth(i).locator("p.italic");
+      await expect(
+        italics,
+        `Block ${i} should not contain a trailing italic punchline`
+      ).toHaveCount(0);
+    }
+  });
+
+  test("feature grid renders exactly 5 cards with editorial copy + brand-teal icon squares", async ({
+    page,
+  }) => {
     const cards = page.locator('[data-testid^="feature-card-"]');
     await expect(cards).toHaveCount(5);
 
@@ -88,6 +146,8 @@ test.describe("Homepage rebuild", () => {
     const posCard = page.getByTestId("feature-card-pos-sync");
     await expect(posCard).toContainText("POS & CSV Sync");
     await expect(posCard).toContainText("and more");
+    // Phase 2.5 tightened POS body from 3 sentences to 2.
+    await expect(posCard).toContainText("Sales log themselves, or import a CSV");
 
     await expect(page.getByTestId("feature-card-forecasting")).toContainText(
       "Event Forecasting"
@@ -95,21 +155,42 @@ test.describe("Homepage rebuild", () => {
     await expect(page.getByTestId("feature-card-fee-calculator")).toContainText(
       "Fee Calculator"
     );
+
+    // Phase 2.5: every feature card anchors its lucide icon in a
+    // brand-teal filled square (white icon). Smoke-check that each
+    // card contains an element whose className references brand-teal.
+    for (let i = 0; i < 5; i++) {
+      const iconHolder = cards.nth(i).locator("div.bg-brand-teal");
+      await expect(
+        iconHolder,
+        "Each feature card should anchor its icon in a brand-teal square"
+      ).toHaveCount(1);
+    }
   });
 
-  test("stats row preserves validated numbers", async ({ page }) => {
+  test("stats row uses operator-readable wins, not accuracy jargon", async ({ page }) => {
     const row = page.getByTestId("stats-row");
     await expect(row).toBeVisible();
-    await expect(page.getByTestId("stats-accuracy")).toContainText("Within 16%");
+    // Phase 2.0: "Within 16%" → "4 out of 5 forecasts land in range".
+    await expect(page.getByTestId("stats-accuracy")).toContainText("4 out of 5");
+    await expect(page.getByTestId("stats-accuracy")).toContainText(
+      "forecasts land in range"
+    );
+    await expect(page.getByTestId("stats-accuracy")).not.toContainText("Within 16%");
     await expect(page.getByTestId("stats-years")).toContainText("5 years");
     await expect(page.getByTestId("stats-events")).toContainText(/\d[\d,]*\+/);
   });
 
-  test("single Start-free-trial CTA in the footer region", async ({ page }) => {
-    const cta = page.getByTestId("cta-start-free-trial");
-    await expect(cta).toHaveCount(1);
-    await expect(cta).toContainText("Start free trial");
-    await expect(page.locator("body")).toContainText("14 days free, no credit card required.");
+  test("Start-free-trial CTA appears in both hero and footer regions", async ({ page }) => {
+    const heroCta = page.getByTestId("hero-cta-start-trial");
+    const footerCta = page.getByTestId("cta-start-free-trial");
+    await expect(heroCta).toBeVisible();
+    await expect(footerCta).toBeVisible();
+    await expect(heroCta).toContainText("Start free trial");
+    await expect(footerCta).toContainText("Start free trial");
+    await expect(page.locator("body")).toContainText(
+      "14 days free, no credit card required."
+    );
   });
 
   test("removed sections do NOT render on the homepage", async ({ page }) => {
@@ -135,14 +216,11 @@ test.describe("Homepage rebuild", () => {
       const res = await request.get(path);
       expect(res.status(), `${path} should return 2xx`).toBeLessThan(400);
     }
-    // Nav region is present. Individual link visibility varies by
-    // viewport — the Roadmap anchor is `hidden sm:block`, so we don't
-    // pin visibility here; the HTTP check above covers reachability.
     await expect(page.locator("header").first()).toBeVisible();
     await expect(page.getByRole("link", { name: /get started/i }).first()).toBeVisible();
   });
 
-  test("viewport: no horizontal scroll + structural baseline screenshot", async ({
+  test("viewport: no horizontal scroll + structural layout baseline", async ({
     page,
   }, testInfo) => {
     const horizontalOverflow = await page.evaluate(
@@ -153,41 +231,48 @@ test.describe("Homepage rebuild", () => {
       `Horizontal overflow should be 0 (was ${horizontalOverflow}) at viewport ${testInfo.project.name}`
     ).toBeLessThanOrEqual(0);
 
-    // Layout: 2×2 grid on desktop (md ≥ 768px), single column on mobile.
-    //   Desktop: row 1 = weather + repeats, row 2 = timing + positioning.
-    //            Blocks in the same row share ~the same `y`.
-    //   Mobile:  all four stack; `y` increases monotonically.
+    // Phase 2.1 layout:
+    //   Desktop (md ≥ 768px): three insight cards in a single row
+    //     (Weather, Repeats, Timing — all sharing the same `y`),
+    //     positioning band sits below the row, full-bleed.
+    //   Mobile: all four blocks stack; `y` increases monotonically.
     const weatherBox = await page.getByTestId("insight-block-weather").boundingBox();
     const repeatsBox = await page.getByTestId("insight-block-repeats").boundingBox();
     const timingBox = await page.getByTestId("insight-block-timing").boundingBox();
-    const positioningBox = await page.getByTestId("positioning-block").boundingBox();
+    const inquiriesBox = await page.getByTestId("insight-block-inquiries").boundingBox();
     expect(
-      weatherBox && repeatsBox && timingBox && positioningBox
+      weatherBox && repeatsBox && timingBox && inquiriesBox
     ).toBeTruthy();
-    if (weatherBox && repeatsBox && timingBox && positioningBox) {
+    if (weatherBox && repeatsBox && timingBox && inquiriesBox) {
       const viewportWidth = page.viewportSize()?.width ?? 0;
       const isDesktop = viewportWidth >= 768;
       if (isDesktop) {
-        // Same-row: y-offset within a small tolerance of each other.
+        // Three insights in a row — same `y` within tolerance.
         const ROW_TOL = 20;
         expect(Math.abs(weatherBox.y - repeatsBox.y)).toBeLessThanOrEqual(ROW_TOL);
-        expect(Math.abs(timingBox.y - positioningBox.y)).toBeLessThanOrEqual(ROW_TOL);
-        // Row 2 is below row 1.
-        expect(timingBox.y).toBeGreaterThanOrEqual(weatherBox.y + weatherBox.height - 1);
-        // Columns are horizontally distinct — repeats sits to the right of weather.
+        expect(Math.abs(repeatsBox.y - timingBox.y)).toBeLessThanOrEqual(ROW_TOL);
+        // Columns horizontally distinct: weather < repeats < timing on x.
         expect(repeatsBox.x).toBeGreaterThan(weatherBox.x + weatherBox.width / 2);
-        expect(positioningBox.x).toBeGreaterThan(timingBox.x + timingBox.width / 2);
+        expect(timingBox.x).toBeGreaterThan(repeatsBox.x + repeatsBox.width / 2);
+        // Positioning band sits below the row.
+        expect(inquiriesBox.y).toBeGreaterThanOrEqual(
+          weatherBox.y + weatherBox.height - 1
+        );
       } else {
-        // Mobile: all four stacked, y monotonically increasing.
-        expect(repeatsBox.y).toBeGreaterThanOrEqual(weatherBox.y + weatherBox.height - 1);
-        expect(timingBox.y).toBeGreaterThanOrEqual(repeatsBox.y + repeatsBox.height - 1);
-        expect(positioningBox.y).toBeGreaterThanOrEqual(timingBox.y + timingBox.height - 1);
+        // Mobile: all stack, y monotonically increasing in source order
+        // (weather → repeats → timing → inquiries).
+        expect(repeatsBox.y).toBeGreaterThanOrEqual(
+          weatherBox.y + weatherBox.height - 1
+        );
+        expect(timingBox.y).toBeGreaterThanOrEqual(
+          repeatsBox.y + repeatsBox.height - 1
+        );
+        expect(inquiriesBox.y).toBeGreaterThanOrEqual(
+          timingBox.y + timingBox.height - 1
+        );
       }
     }
 
-    // Fresh baseline screenshot — first run creates artifacts at a
-    // stable path; document this in the summary so Julian knows these
-    // aren't regression-diffed yet.
     const screenshotPath = testInfo.outputPath(`homepage-${testInfo.project.name}.png`);
     await page.screenshot({ path: screenshotPath, fullPage: true });
     await testInfo.attach(`homepage-${testInfo.project.name}.png`, {
