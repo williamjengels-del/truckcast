@@ -16,6 +16,7 @@ import { DangerZoneCard } from "./danger-zone-card";
 import type { Profile } from "@/lib/database.types";
 import { PRICING_PLANS } from "@/lib/pricing-plans";
 import { PublicSlugPicker } from "@/components/public-slug-picker";
+import { TwoFactorCard } from "@/components/two-factor-card";
 
 const US_TIMEZONES = [
   "America/New_York",
@@ -337,6 +338,8 @@ function SettingsContent() {
 
       <TeamAccessCard profile={profile} />
       <ManagerInviteCard profile={profile} />
+
+      <TwoFactorCard />
 
       {/* Support link — small muted block above Danger Zone so
           operators always have a visible path to contact us without
