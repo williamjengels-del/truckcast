@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createClient as createServiceClient } from "@supabase/supabase-js";
+import { resolveScopedSupabase } from "@/lib/dashboard-scope";
 import type { Profile } from "@/lib/database.types";
 
 const MANAGER_LIMITS: Record<string, number> = {
@@ -121,17 +122,29 @@ export async function POST(request: Request) {
 
 /**
  * GET /api/team/invite
- * Returns the owner's current team members list.
+ * Returns the team members list for the current dashboard scope —
+ * which honors impersonation and manager-of-owner relationships, not
+ * just the raw authenticated user. Without resolveScopedSupabase, an
+ * admin "viewing as user X" would see their OWN team list instead of
+ * X's, and a manager loading their owner's settings would see an
+ * empty list. Impersonation read paths use the service-role client
+ * because RLS would reject cross-user reads from the admin's session
+ * (see src/lib/dashboard-scope.ts for the full rationale).
+ *
+ * Mutations (POST / DELETE) intentionally do NOT use this helper —
+ * mutations are blocked outright by the impersonation middleware
+ * before this handler runs (src/lib/supabase/middleware.ts).
  */
 export async function GET() {
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const scope = await resolveScopedSupabase();
+  if (scope.kind === "unauthorized") {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
 
-  const { data } = await supabase
+  const { data } = await scope.client
     .from("team_members")
     .select("*")
-    .eq("owner_user_id", user.id)
+    .eq("owner_user_id", scope.userId)
     .order("created_at", { ascending: true });
 
   return NextResponse.json({ members: data ?? [] });
