@@ -492,7 +492,7 @@ export default async function LandingPage() {
       </section>
 
       {/* Footer */}
-      <footer className="border-t py-8">
+      <footer className="border-t py-8 pb-24 md:pb-8">
         <div className="container mx-auto px-4 text-center text-sm text-muted-foreground space-y-2">
           <div className="flex items-center justify-center gap-6">
             <Link href="/help" className="hover:text-foreground transition-colors">Help Center</Link>
@@ -502,6 +502,29 @@ export default async function LandingPage() {
           <p>&copy; {new Date().getFullYear()} VendCast — built by a food truck operator, for mobile vendors.</p>
         </div>
       </footer>
+
+      {/* Phase 2.6 mobile sticky CTA — fixed-bottom action so the
+          conversion path is always one tap away on mobile. Hidden on
+          desktop (md+) where the hero pill + footer CTA both stay
+          visible during normal scroll. Brand-teal background + white
+          text mirrors the hero band so the sticky doesn't introduce a
+          new color story. Footer above gets `pb-24 md:pb-8` so the
+          sticky doesn't overlap the copyright on mobile. */}
+      <div
+        data-testid="mobile-sticky-cta"
+        className="fixed inset-x-0 bottom-0 z-40 border-t border-white/10 bg-brand-teal px-4 py-3 shadow-lg md:hidden"
+        style={{ paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + 0.75rem)" }}
+      >
+        <Link href="/signup" className="block">
+          <Button
+            data-testid="mobile-sticky-cta-button"
+            size="lg"
+            className="w-full rounded-full bg-white font-semibold text-brand-teal shadow-md hover:bg-white/90"
+          >
+            Start free trial
+          </Button>
+        </Link>
+      </div>
     </div>
   );
 }
