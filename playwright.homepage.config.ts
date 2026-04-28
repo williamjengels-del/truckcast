@@ -18,10 +18,10 @@ const BASE_URL = process.env.PLAYWRIGHT_BASE_URL ?? "http://localhost:3000";
 
 export default defineConfig({
   testDir: "tests/e2e",
-  // Marketing specs: homepage + /pricing. Add new public-page specs
-  // to this regex when they land. Auth-gated specs stay on the main
-  // playwright.config.ts.
-  testMatch: /(homepage-rebuild|pricing-page)\.spec\.ts$/,
+  // Public-page specs: homepage, /pricing, /<slug> resolver. Add new
+  // public-page specs to this regex when they land. Auth-gated specs
+  // stay on the main playwright.config.ts.
+  testMatch: /(homepage-rebuild|pricing-page|public-slug-route)\.spec\.ts$/,
   fullyParallel: false,
   retries: 0,
   workers: 1,
