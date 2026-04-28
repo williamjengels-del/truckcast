@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, use } from "react";
+import Image from "next/image";
 import { TruckIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -109,10 +110,13 @@ export default function BookingPage({ params }: { params: Promise<{ userId: stri
 
   return (
     <div className="min-h-screen bg-muted/30">
-      {/* Header */}
+      {/* Header — operator identity is the hero. TruckIcon kept as a
+          generic "mobile vendor" decorative cue; in brand-teal so it
+          carries the same brand presence as /follow's matching icon
+          treatment. */}
       <header className="border-b bg-background">
         <div className="max-w-2xl mx-auto px-4 h-16 flex items-center gap-3">
-          <TruckIcon className="h-6 w-6 text-primary" />
+          <TruckIcon className="h-6 w-6 text-brand-teal" />
           <div>
             <span className="font-bold">{businessName ?? "Vendor"}</span>
             <span className="text-muted-foreground ml-2 text-sm">Request a Booking</span>
@@ -298,6 +302,25 @@ export default function BookingPage({ params }: { params: Promise<{ userId: stri
             </form>
           </div>
         )}
+
+        {/* Footer wordmark — same low-key "powered by" mark as /follow.
+            Gives interested viewers a path to vendcast.co without
+            stealing focus from the operator's booking flow. */}
+        <div className="mt-12 flex justify-center">
+          <a
+            href="https://vendcast.co"
+            className="opacity-50 hover:opacity-80 transition-opacity"
+            aria-label="Powered by VendCast — vendcast.co"
+          >
+            <Image
+              src="/vendcast-logo.jpg"
+              alt="VendCast"
+              width={400}
+              height={140}
+              className="h-6 w-auto"
+            />
+          </a>
+        </div>
       </main>
     </div>
   );
