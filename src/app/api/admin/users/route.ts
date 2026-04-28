@@ -28,6 +28,8 @@ interface AdminProfileRow {
   data_sharing_enabled: boolean | null;
   onboarding_completed: boolean | null;
   created_at: string;
+  last_payment_status: string | null;
+  last_payment_failure_reason: string | null;
 }
 
 async function fetchAllProfiles(
@@ -38,7 +40,7 @@ async function fetchAllProfiles(
   while (true) {
     const { data, error } = await service
       .from("profiles")
-      .select("id, business_name, city, state, subscription_tier, stripe_customer_id, stripe_subscription_id, trial_extended_until, data_sharing_enabled, onboarding_completed, created_at")
+      .select("id, business_name, city, state, subscription_tier, stripe_customer_id, stripe_subscription_id, trial_extended_until, data_sharing_enabled, onboarding_completed, created_at, last_payment_status, last_payment_failure_reason")
       .order("created_at", { ascending: false })
       .range(offset, offset + BATCH_SIZE - 1);
     if (error) throw new Error(error.message);

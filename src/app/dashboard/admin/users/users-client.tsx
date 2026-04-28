@@ -27,6 +27,12 @@ interface AdminUser {
   sales_count: number;
   last_event_date: string | null;
   created_at: string;
+  last_payment_status: string | null;
+  last_payment_failure_reason: string | null;
+}
+
+function isPaymentFailing(u: AdminUser): boolean {
+  return u.last_payment_status === "payment_failed" || u.last_payment_status === "past_due";
 }
 
 const TIER_COLORS: Record<string, string> = {
@@ -43,15 +49,21 @@ export function UsersClient() {
   const [deleting, setDeleting] = useState<string | null>(null);
   const [extending, setExtending] = useState<string | null>(null);
   const [query, setQuery] = useState("");
+  const [onlyPaymentFailing, setOnlyPaymentFailing] = useState(false);
 
   // Client-side filter. User base is small enough (tens to low hundreds)
   // that this runs instantly and avoids a round-trip on every keystroke.
   // Search matches business_name, email, or city — the three fields
   // someone typically has in mind when looking up a specific user.
+  // The "payment failing" toggle narrows to last_payment_status in
+  // ('payment_failed' | 'past_due') — uses the partial index added by
+  // migration 20260424000002 on the server-count side (not this route).
   const filteredUsers = useMemo(() => {
     const q = query.trim().toLowerCase();
-    if (!q) return users;
-    return users.filter((u) => {
+    let list = users;
+    if (onlyPaymentFailing) list = list.filter(isPaymentFailing);
+    if (!q) return list;
+    return list.filter((u) => {
       const haystack = [
         u.business_name ?? "",
         u.email ?? "",
@@ -62,7 +74,7 @@ export function UsersClient() {
         .toLowerCase();
       return haystack.includes(q);
     });
-  }, [users, query]);
+  }, [users, query, onlyPaymentFailing]);
 
   async function load() {
     setLoading(true);
@@ -134,6 +146,7 @@ export function UsersClient() {
     return acc;
   }, {} as Record<string, number>);
   const onboardingDone = users.filter((u) => u.onboarding_completed).length;
+  const paymentFailingCount = users.filter(isPaymentFailing).length;
 
   return (
     <div className="space-y-6">
@@ -156,6 +169,20 @@ export function UsersClient() {
               className="pl-8 w-64 h-9"
             />
           </div>
+          <Button
+            variant={onlyPaymentFailing ? "default" : "outline"}
+            size="sm"
+            onClick={() => setOnlyPaymentFailing((v) => !v)}
+            disabled={paymentFailingCount === 0}
+            title={
+              paymentFailingCount === 0
+                ? "No users have a failing payment right now"
+                : "Show only users with payment_failed or past_due"
+            }
+            data-testid="admin-users-filter-payment-failing"
+          >
+            Payment failing{paymentFailingCount > 0 ? ` (${paymentFailingCount})` : ""}
+          </Button>
           <Button variant="outline" size="sm" onClick={load} disabled={loading}>
             <RefreshCw className="h-4 w-4 mr-2" />
             Refresh
@@ -258,7 +285,7 @@ export function UsersClient() {
                           : "—"}
                       </td>
                       <td className="p-3">
-                        <div className="flex items-center gap-1.5">
+                        <div className="flex items-center gap-1.5 flex-wrap">
                           {user.data_sharing_enabled ? (
                             <Badge className="bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400 border-0 text-xs">Sharing</Badge>
                           ) : (
@@ -266,6 +293,24 @@ export function UsersClient() {
                           )}
                           {user.stripe_customer_id && (
                             <Badge variant="outline" className="text-xs text-blue-600 border-blue-200">Stripe</Badge>
+                          )}
+                          {user.last_payment_status === "payment_failed" && (
+                            <Badge
+                              variant="outline"
+                              className="text-xs border-amber-300 text-amber-800 dark:border-amber-800/60 dark:text-amber-300"
+                              title={user.last_payment_failure_reason ?? undefined}
+                            >
+                              Payment failed
+                            </Badge>
+                          )}
+                          {user.last_payment_status === "past_due" && (
+                            <Badge
+                              variant="outline"
+                              className="text-xs border-destructive/50 text-destructive"
+                              title={user.last_payment_failure_reason ?? undefined}
+                            >
+                              Past due
+                            </Badge>
                           )}
                         </div>
                       </td>
