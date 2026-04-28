@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Image from "next/image";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
@@ -15,7 +16,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { TruckIcon } from "lucide-react";
 import { US_STATES, US_STATE_NAMES, OTHER_STATE } from "@/lib/constants";
 
 /**
@@ -162,10 +162,20 @@ export default function SignupPage() {
     <div className="min-h-screen flex items-center justify-center bg-muted/30 px-4">
       <Card className="w-full max-w-md">
         <CardHeader className="text-center">
-          <div className="flex items-center justify-center gap-2 mb-2">
-            <TruckIcon className="h-8 w-8 text-primary" />
-            <span className="text-2xl font-bold">VendCast</span>
-          </div>
+          <Link
+            href="/"
+            className="mb-2 flex justify-center"
+            aria-label="VendCast home"
+          >
+            <Image
+              src="/vendcast-logo.jpg"
+              alt="VendCast"
+              width={400}
+              height={140}
+              priority
+              className="h-9 w-auto"
+            />
+          </Link>
           <CardTitle>Start your free trial</CardTitle>
           <CardDescription>
             14 days free, no credit card required
