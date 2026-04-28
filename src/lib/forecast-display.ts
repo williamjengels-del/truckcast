@@ -93,12 +93,17 @@ export function forecastContextSentence(
 
   // Level 0: cold-start from platform data only, no personal history.
   if (forecast.level === 0) {
-    return `Based on ${ops} other operators' data — you haven't booked it yet`;
+    return `Based on ${ops} other ${possessive(ops)} data — you haven't booked it yet`;
   }
 
   // Level 1 with a platform blend actually applied.
+  // platformOperatorCount includes the viewing operator (their own
+  // bookings live in platform_events too). Subtract self for an
+  // accurate "other operators" count. Threshold stays at ops >= 2 —
+  // i.e. at least 1 other operator besides the viewer.
   if (forecast.level === 1 && forecast.platformBlendApplied && ops >= 2) {
-    return `Based on your ${n} prior booking${n === 1 ? "" : "s"} + ${ops} other operators' data`;
+    const others = ops - 1;
+    return `Based on your ${n} prior booking${n === 1 ? "" : "s"} + ${others} other ${possessive(others)} data`;
   }
 
   switch (forecast.level) {
@@ -118,6 +123,13 @@ export function forecastContextSentence(
 function pluralize(dayName: string): string {
   // "Saturday" → "Saturdays"
   return dayName.endsWith("s") ? dayName : `${dayName}s`;
+}
+
+// Possessive form for "operator" — apostrophe placement depends on count.
+//   1 → "operator's"  (singular possessive)
+//   N → "operators'"  (plural possessive)
+function possessive(count: number): string {
+  return count === 1 ? "operator's" : "operators'";
 }
 
 // Plain-English adjustments, ordered by impact magnitude (largest first).
@@ -185,8 +197,13 @@ export function plainEnglishAdjustments(
     forecast.platformOperatorCount !== undefined &&
     forecast.platformMedianSales != null
   ) {
+    // platformOperatorCount is the total count including the viewing
+    // operator. "Total operators" reads more accurately than "operators
+    // agree" (which implied independent voices, but the viewer is one
+    // of them).
+    const total = forecast.platformOperatorCount;
     out.push(
-      `Community data: ${forecast.platformOperatorCount} operators agree · median ${formatDollars(forecast.platformMedianSales)}`
+      `Community data: ${total} total operator${total === 1 ? "" : "s"} · median ${formatDollars(forecast.platformMedianSales)}`
     );
   }
 
@@ -200,17 +217,44 @@ function signed(n: number): string {
 }
 
 // Fixed-revenue (catering/contract) detection. Pre-Phase-3 heuristic:
-// use event_mode === "catering" OR a positive invoice_revenue as the
-// signal. Phase 3 will add a first-class events.revenue_model column
-// and this helper should start reading that instead.
+// the headline number an operator should see for these is the
+// contracted/known revenue, not the model's gross-sales prediction.
+//
+// Cases:
+//   - event_mode === "catering"             — invoiced up-front
+//   - invoice_revenue > 0                   — invoice already in hand
+//   - fee_type === "pre_settled"            — contracted payout in fee_rate
+//   - fee_type === "commission_with_minimum"
+//     && sales_minimum > 0                  — guaranteed floor
+//
+// For commission_with_minimum the forecast still has signal (upside
+// above the floor), but headlining a forecast range below the
+// contracted minimum is misleading. The display surfaces the floor
+// instead, and per-event detail still shows the underlying forecast.
+//
+// Phase 3 will add a first-class events.revenue_model column and this
+// helper should start reading that instead of inferring.
 export function isFixedRevenueEvent(event: Event): boolean {
   if (event.event_mode === "catering") return true;
   if ((event.invoice_revenue ?? 0) > 0) return true;
+  if (event.fee_type === "pre_settled") return true;
+  if (event.fee_type === "commission_with_minimum" && (event.sales_minimum ?? 0) > 0) {
+    return true;
+  }
   return false;
 }
 
 export function fixedRevenueAmount(event: Event): number {
-  // Prefer the contract/invoice number; fall back to net_sales then forecast.
+  // Pre-settled stores the contracted payout in fee_rate.
+  if (event.fee_type === "pre_settled" && (event.fee_rate ?? 0) > 0) {
+    return event.fee_rate;
+  }
+  // Commission-with-minimum: the floor is the minimum guaranteed payout.
+  // Show that as the headline; detail panels surface the upside potential.
+  if (event.fee_type === "commission_with_minimum" && (event.sales_minimum ?? 0) > 0) {
+    return event.sales_minimum;
+  }
+  // Catering / explicit invoice — prefer the invoice number.
   if ((event.invoice_revenue ?? 0) > 0) return event.invoice_revenue;
   if ((event.net_sales ?? 0) > 0) return event.net_sales ?? 0;
   return event.forecast_sales ?? 0;
