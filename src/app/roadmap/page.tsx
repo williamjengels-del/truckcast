@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
+import Image from "next/image";
 import Link from "next/link";
-import { TruckIcon } from "lucide-react";
+import { Button } from "@/components/ui/button";
 
 export const metadata: Metadata = {
   title: "Roadmap — VendCast",
@@ -150,31 +151,44 @@ function StatusPill({ status }: { status: PhaseStatus }) {
 export default function RoadmapPage() {
   return (
     <div className="min-h-screen bg-background">
-      {/* Nav */}
+      {/* Nav — sticky preserved for the long scrolly page; logo swapped
+          to Brad's two-color wordmark to match the homepage + pricing
+          surfaces. Phase 2 brand rollout. */}
       <nav className="border-b bg-card/80 backdrop-blur sticky top-0 z-10">
-        <div className="max-w-3xl mx-auto px-6 py-4 flex items-center justify-between">
-          <Link href="/" className="flex items-center gap-2">
-            <TruckIcon className="h-6 w-6 text-primary" />
-            <span className="font-bold text-lg">VendCast</span>
+        <div className="max-w-3xl mx-auto px-6 py-3 flex items-center justify-between">
+          <Link href="/" className="flex items-center" aria-label="VendCast home">
+            <Image
+              src="/vendcast-logo.jpg"
+              alt="VendCast"
+              width={400}
+              height={140}
+              className="h-9 w-auto"
+            />
           </Link>
-          <Link
-            href="/signup"
-            className="rounded-md bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground hover:bg-primary/90 transition-colors"
-          >
-            Start free trial
+          <Link href="/signup">
+            <Button size="sm">Start free trial</Button>
           </Link>
         </div>
       </nav>
 
-      <div className="max-w-3xl mx-auto px-6 py-12 sm:py-16">
-        {/* Header */}
-        <header className="mb-12">
-          <h1 className="text-3xl sm:text-4xl font-bold tracking-tight mb-3">
+      {/* Hero band — full-bleed teal, matching the homepage + /pricing
+          treatment. Carries the H1 + intro subline only; founder note +
+          phase count drop into the body content below. */}
+      <div className="bg-brand-teal text-white">
+        <div className="max-w-3xl mx-auto px-6 py-12 text-center">
+          <h1 className="text-3xl sm:text-4xl font-bold tracking-tight">
             The operating system for mobile vendors
           </h1>
-          <p className="text-lg text-muted-foreground mb-3">
+          <p className="mx-auto mt-4 max-w-2xl text-lg text-white/85">
             Built for solo operators and small teams running any kind of mobile vendor business — from food trucks to pop-up retail.
           </p>
+        </div>
+      </div>
+
+      <div className="max-w-3xl mx-auto px-6 py-12 sm:py-16">
+        {/* Header context — italic founder note + phase count. Pulled out
+            of the (now teal) hero band so the band stays clean. */}
+        <header className="mb-12">
           <p className="text-sm italic text-muted-foreground/90 mb-6">
             Built by a St. Louis food truck operator who ran his own truck for five years before realizing no one had built the tool he needed.
           </p>
@@ -241,27 +255,20 @@ export default function RoadmapPage() {
           ))}
         </div>
 
-        {/* CTA footer */}
+        {/* CTA footer — simplified per the homepage discipline (single
+            primary CTA, no dual-path "Try the calculator" link, no
+            decorative TruckIcon). Mirrors the homepage's bottom CTA so
+            both surfaces close with the same affordance. */}
         <div className="mt-16 text-center rounded-2xl border bg-primary/5 border-primary/20 p-8 sm:p-10">
-          <TruckIcon className="h-10 w-10 text-primary mx-auto mb-4" />
           <h2 className="text-2xl font-bold mb-2">
             Ready to run your business from one place?
           </h2>
           <p className="text-muted-foreground mb-6 max-w-md mx-auto">
             Inquiries, bookings, calendar, sales, and forecasts — in one place. 14-day free trial, no credit card required.
           </p>
-          <div className="flex gap-3 justify-center flex-wrap">
-            <Link
-              href="/signup"
-              className="rounded-md bg-primary px-6 py-3 font-semibold text-primary-foreground hover:bg-primary/90 transition-colors"
-            >
-              Start free trial
-            </Link>
-            <Link
-              href="/tools/calculator"
-              className="rounded-md border border-primary/30 px-6 py-3 font-semibold text-primary hover:bg-primary/5 transition-colors"
-            >
-              Try the calculator
+          <div className="flex justify-center">
+            <Link href="/signup">
+              <Button size="lg">Start free trial</Button>
             </Link>
           </div>
           <p className="mt-6 text-xs text-muted-foreground">
