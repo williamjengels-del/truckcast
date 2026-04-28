@@ -52,6 +52,13 @@ export interface Profile {
    *  /dashboard/settings PlanCards to pre-highlight the matching
    *  tier card. */
   intended_tier?: SubscriptionTier | null;
+  /** Custom URL slug for the operator's public profile. Resolved at
+   *  vendcast.co/<slug> by the Stage-3 public route (separate PR).
+   *  Picker UI lives in src/components/public-slug-picker.tsx, mounted
+   *  on /dashboard/settings's Public Schedule card. Lexical shape +
+   *  uniqueness enforced by migration 20260424000003 + DB unique
+   *  index; reserved-list guard in src/lib/public-slug.ts. */
+  public_slug?: string | null;
   stripe_customer_id: string | null;
   stripe_subscription_id: string | null;
   onboarding_completed: boolean;

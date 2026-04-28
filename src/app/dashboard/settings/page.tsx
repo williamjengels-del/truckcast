@@ -15,6 +15,7 @@ import { PushNotificationsCard } from "@/components/push-notifications-card";
 import { DangerZoneCard } from "./danger-zone-card";
 import type { Profile } from "@/lib/database.types";
 import { PRICING_PLANS } from "@/lib/pricing-plans";
+import { PublicSlugPicker } from "@/components/public-slug-picker";
 
 const US_TIMEZONES = [
   "America/New_York",
@@ -266,22 +267,43 @@ function SettingsContent() {
         <CardHeader>
           <CardTitle>Public Schedule</CardTitle>
         </CardHeader>
-        <CardContent>
+        <CardContent className="space-y-6">
           {profile?.subscription_tier === "starter" ? (
             <p className="text-sm text-muted-foreground">
               Upgrade to Pro to get a shareable public schedule page.
             </p>
           ) : (
-            <div className="space-y-2">
-              <p className="text-sm text-muted-foreground">
-                Your public schedule page:
-              </p>
-              <code className="text-sm bg-muted p-2 rounded block">
-                {typeof window !== "undefined"
-                  ? `${window.location.origin}/schedule/${profile?.id}`
-                  : `/schedule/${profile?.id}`}
-              </code>
-            </div>
+            <>
+              {/* Custom slug picker — Stage 2 of the custom-vendor-profile
+                  workstream. Once Stage 3 ships the public /<slug>
+                  route, an operator's claimed slug is the URL they
+                  share publicly. Falls back to the UUID-based link
+                  below until a slug is set. */}
+              {profile && (
+                <PublicSlugPicker
+                  initialSlug={profile.public_slug ?? null}
+                  businessName={profile.business_name ?? null}
+                  onSaved={(next) =>
+                    setProfile((p) => (p ? { ...p, public_slug: next } : p))
+                  }
+                />
+              )}
+
+              {/* UUID fallback — always shown so the operator has a
+                  permanent link even before they pick a slug. Will keep
+                  working after Stage 3 ships (the /<slug> route is
+                  additive, not a replacement). */}
+              <div className="space-y-2">
+                <p className="text-xs uppercase tracking-wider font-semibold text-muted-foreground">
+                  {profile?.public_slug ? "Or share the permanent UUID link:" : "Permanent link:"}
+                </p>
+                <code className="text-sm bg-muted p-2 rounded block break-all">
+                  {typeof window !== "undefined"
+                    ? `${window.location.origin}/schedule/${profile?.id}`
+                    : `/schedule/${profile?.id}`}
+                </code>
+              </div>
+            </>
           )}
         </CardContent>
       </Card>
