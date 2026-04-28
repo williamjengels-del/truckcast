@@ -23,7 +23,12 @@ export type WeatherType =
   | "Storms"
   | "Snow";
 export type AnomalyFlag = "normal" | "disrupted" | "boosted";
-export type CancellationReason = "weather" | "truck_breakdown" | "organizer_cancelled" | "other";
+export type CancellationReason =
+  | "weather"
+  | "truck_breakdown"
+  | "organizer_cancelled"
+  | "sold_out"
+  | "other";
 export type EventMode = "food_truck" | "catering";
 export type FeeType =
   | "none"

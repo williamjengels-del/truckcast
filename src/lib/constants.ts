@@ -87,6 +87,12 @@ export const CANCELLATION_REASONS = {
   weather: "Weather (rain, heat, etc.)",
   truck_breakdown: "Truck / Equipment Issue",
   organizer_cancelled: "Organizer Cancelled",
+  // sold_out: high-demand cancellation — a previous event ran inventory
+  // dry, leaving nothing to sell at the next one. Recorded as a
+  // cancellation so the slot doesn't sit "booked-but-no-sales" in
+  // reminders; downstream stats can split this from the negative
+  // reasons later if useful.
+  sold_out: "Sold Out (Inventory Depleted)",
   other: "Other",
 } as const;
 
