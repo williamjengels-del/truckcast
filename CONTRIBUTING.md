@@ -2,7 +2,7 @@
 
 For now this is a solo project (Julian + Claude sessions). This doc exists so future Claude sessions — and any future human collaborator — can pick up cold without re-inferring conventions from scattered config files.
 
-If you're starting a new Claude session, also load the latest `vendcast_session_brief_YYYY-MM-DD_vN.md` at the repo root. Use [SESSION-BRIEF-TEMPLATE.md](SESSION-BRIEF-TEMPLATE.md) when writing the next one.
+If you're starting a new Claude session, also load the latest `vendcast_session_brief_YYYY-MM-DD_vN.md` from the top-level `../Briefs/` folder (sibling of this repo, inside `Food Truck Analytics SaaS/`). Use [SESSION-BRIEF-TEMPLATE.md](SESSION-BRIEF-TEMPLATE.md) when writing the next one.
 
 ---
 
@@ -111,11 +111,11 @@ npm run check:full  # + smoke against https://vendcast.co
 
 ## Session briefs
 
-Long-running workstreams span multiple Claude sessions. The briefs at repo root are the persistence layer. Each session should:
+Long-running workstreams span multiple Claude sessions. Briefs live in the top-level `../Briefs/` folder (sibling of this repo, inside `Food Truck Analytics SaaS/`) — not at the repo root. They sit outside the repo so the truckcast/ tree stays focused on shipping code, while the persistence layer for "what did the last session decide and why" is one folder up. Each session should:
 
 1. Read the most recent brief before starting (gives context in ~3 min).
-2. Update the brief (or write a new versioned one) at session end.
-3. Commit the brief with a `docs(brief):` prefix.
+2. Update the brief (or write a new versioned one) at session end and save it to `../Briefs/`.
+3. Briefs are not tracked by this repo — they live as plain files in `../Briefs/`. No commit needed.
 
 The [SESSION-BRIEF-TEMPLATE.md](SESSION-BRIEF-TEMPLATE.md) has the structure and guidance on each section. Copy it, don't type freeform — consistency compounds.
 

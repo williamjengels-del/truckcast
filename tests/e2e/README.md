@@ -7,7 +7,7 @@ End-to-end regression tests for the "impersonation blocks mutation" guard in
 ## Background
 
 A 2026-04-21 investigation (see `vendcast_session_brief_2026-04-21_impersonation-block.md`
-at the repo root) confirmed the guard works correctly in local dev, Vercel
+in the top-level `Briefs/` folder, sibling of this repo) confirmed the guard works correctly in local dev, Vercel
 preview, and production. The original smoke-test report of a bypass could not
 be reproduced. This suite exists as **regression protection** so that future
 refactors (e.g. any follow-on to the `middleware.ts` → `proxy.ts` migration)

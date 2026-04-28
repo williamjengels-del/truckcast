@@ -8,7 +8,7 @@ Live at **[vendcast.co](https://vendcast.co)**.
 
 ## Status
 
-See `vendcast_session_brief_YYYY-MM-DD_vN.md` at the repo root for current state, open workstreams, and session handoff notes. Latest brief = latest session state. Older briefs are history, not current.
+See `vendcast_session_brief_YYYY-MM-DD_vN.md` in the top-level `../Briefs/` folder (sibling of this repo) for current state, open workstreams, and session handoff notes. Latest brief = latest session state. Older briefs are history, not current.
 
 `/api/version` reports the currently-deployed commit: `curl -s https://vendcast.co/api/version`.
 
