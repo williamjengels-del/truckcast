@@ -1,10 +1,10 @@
 import type { Metadata } from "next";
+import Image from "next/image";
 import Link from "next/link";
 import { createClient as createServiceClient } from "@supabase/supabase-js";
 import { Button } from "@/components/ui/button";
 import { WEATHER_COEFFICIENTS } from "@/lib/constants";
 import {
-  TruckIcon,
   BarChart3,
   CalendarDays,
   DollarSign,
@@ -176,11 +176,13 @@ async function getRepeatBookingDeclineRate(): Promise<string> {
 
 /** Apply numeric-emphasis classes only when the value is a resolved number.
  *  Placeholders get muted, normal-size treatment so they read as pending
- *  rather than shouting a literal template string. */
+ *  rather than shouting a literal template string. Resolved values use
+ *  brand-teal so the homepage's data anchors carry brand presence into
+ *  the body content, not just the hero band. */
 function isResolvedValue(s: string): boolean {
   return !/^\{\{.*\}\}$/.test(s);
 }
-const EMPHASIS_RESOLVED = "text-4xl font-bold text-primary";
+const EMPHASIS_RESOLVED = "text-4xl font-bold text-brand-teal";
 const EMPHASIS_PLACEHOLDER = "text-xl font-normal text-muted-foreground";
 
 const FEATURE_CARDS = [
@@ -232,8 +234,11 @@ export default async function LandingPage() {
 
   // Diagonal tint pairing (Row1:L + Row2:R share one tint, others share the other).
   // On desktop this is literal diagonal; on mobile it becomes alternating bands.
-  const tintA = "bg-primary/5 border-l-4 border-primary";
-  const tintB = "bg-orange-500/5 border-l-4 border-orange-500";
+  // Tokens come from globals.css → @theme inline (--color-brand-teal +
+  // --color-brand-orange) sourced from Brad's Figma export. See
+  // docs/design-tokens.md.
+  const tintA = "bg-brand-teal/5 border-l-4 border-brand-teal";
+  const tintB = "bg-brand-orange/5 border-l-4 border-brand-orange";
   const cardBase = "rounded-lg border p-8 space-y-4 break-words";
 
   return (
@@ -241,10 +246,16 @@ export default async function LandingPage() {
       {/* Nav */}
       <header className="border-b">
         <div className="container mx-auto flex h-16 items-center justify-between px-4">
-          <div className="flex items-center gap-2">
-            <TruckIcon className="h-7 w-7 text-primary" />
-            <span className="text-xl font-bold">VendCast</span>
-          </div>
+          <Link href="/" className="flex items-center" aria-label="VendCast home">
+            <Image
+              src="/vendcast-logo.jpg"
+              alt="VendCast"
+              width={400}
+              height={140}
+              priority
+              className="h-10 w-auto"
+            />
+          </Link>
           <div className="flex items-center gap-3">
             <Link href="/roadmap" className="hidden sm:block text-sm text-muted-foreground hover:text-foreground transition-colors">
               Roadmap
@@ -260,25 +271,31 @@ export default async function LandingPage() {
       </header>
 
       <section className="flex-1">
-        {/* Hero */}
-        <div className="container mx-auto px-4 py-20 text-center">
-          <h1
-            data-testid="hero-headline"
-            className="text-4xl font-bold tracking-tight sm:text-5xl lg:text-6xl"
-          >
-            The operating system for{" "}
-            <span className="text-primary">mobile vendors.</span>
-          </h1>
-          <p
-            data-testid="hero-subline"
-            className="mx-auto mt-6 max-w-2xl text-lg text-muted-foreground"
-          >
-            Built by a food truck operator. For mobile vendors.
-          </p>
-          <div
-            aria-hidden="true"
-            className="mx-auto mt-8 h-px w-32 bg-primary/60"
-          />
+        {/* Hero — full-bleed teal band per Brad's Figma. White text on
+            brand-teal background; accent divider becomes white-on-teal
+            instead of teal-on-white. Padding tightened (py-20 → py-12)
+            per Brad's note that the band may feel oversized for a
+            text-only hero. */}
+        <div className="bg-brand-teal text-white">
+          <div className="container mx-auto px-4 py-12 text-center">
+            <h1
+              data-testid="hero-headline"
+              className="text-4xl font-bold tracking-tight sm:text-5xl lg:text-6xl"
+            >
+              The operating system for{" "}
+              <span className="text-white">mobile vendors.</span>
+            </h1>
+            <p
+              data-testid="hero-subline"
+              className="mx-auto mt-6 max-w-2xl text-lg text-white/85"
+            >
+              Built by a food truck operator. For mobile vendors.
+            </p>
+            <div
+              aria-hidden="true"
+              className="mx-auto mt-8 h-px w-32 bg-white/40"
+            />
+          </div>
         </div>
 
         {/* Insight blocks — 2×2 grid on desktop, stacked on mobile.

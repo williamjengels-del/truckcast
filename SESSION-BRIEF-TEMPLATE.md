@@ -2,7 +2,8 @@
 
 <!--
 Template for a VendCast session brief. Copy this file to
-`vendcast_session_brief_YYYY-MM-DD_vN.md` at repo root and fill in.
+`vendcast_session_brief_YYYY-MM-DD_vN.md` in the top-level
+`../Briefs/` folder (sibling of this repo) and fill in.
 
 Purpose: one self-contained document that lets the NEXT Claude session
 pick up cold — no need to re-read five prior briefs. Brief should be
@@ -12,7 +13,7 @@ Match the voice of existing briefs: direct, operator-fluent, no
 marketing language, no apologies. Past tense for ships, present tense
 for decisions, explicit dates for anything time-bound.
 
-Delete these HTML comments before committing.
+Delete these HTML comments before saving the final file.
 -->
 
 **Date range:** <!-- e.g. April 22–24, 2026 -->

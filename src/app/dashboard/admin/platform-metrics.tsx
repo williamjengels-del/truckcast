@@ -48,38 +48,47 @@ function TinyBarChart({
   data: DailyPoint[];
   color: string;
 }) {
+  // Fixed-height parent + RC with 100% dims + minWidth/minHeight=0 mirrors
+  // the pattern used by every other chart in this app. Without the explicit
+  // parent height, Recharts 3 + React 19 concurrent hydration can measure
+  // a 0-px parent before the first ResizeObserver callback and fire
+  // "width(-1) and height(-1) of chart should be greater than 0" warnings
+  // in the console. Harmless (the chart sizes correctly after mount) but
+  // noisy. v11 deferred-cleanup item.
   return (
-    <ResponsiveContainer width="100%" height={140}>
-      <BarChart data={data} margin={{ top: 8, right: 8, left: -24, bottom: 0 }}>
-        <XAxis
-          dataKey="date"
-          tickFormatter={shortDate}
-          tick={{ fontSize: 10, fill: "currentColor", opacity: 0.6 }}
-          // Only show every ~5th tick so labels don't pile up.
-          interval={Math.ceil(data.length / 6)}
-          tickLine={false}
-          axisLine={{ stroke: "currentColor", opacity: 0.1 }}
-        />
-        <YAxis
-          allowDecimals={false}
-          tick={{ fontSize: 10, fill: "currentColor", opacity: 0.6 }}
-          tickLine={false}
-          axisLine={false}
-          width={28}
-        />
-        <Tooltip
-          cursor={{ fill: "currentColor", opacity: 0.05 }}
-          contentStyle={{
-            fontSize: 12,
-            background: "var(--card)",
-            border: "1px solid var(--border)",
-            borderRadius: 6,
-          }}
-          labelFormatter={(v) => shortDate(String(v))}
-        />
-        <Bar dataKey="count" fill={color} radius={[3, 3, 0, 0]} />
-      </BarChart>
-    </ResponsiveContainer>
+    <div className="h-[140px] w-full">
+      <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0}>
+        <BarChart data={data} margin={{ top: 8, right: 8, left: -24, bottom: 0 }}>
+          <XAxis
+            dataKey="date"
+            tickFormatter={shortDate}
+            tick={{ fontSize: 10, fill: "currentColor", opacity: 0.6 }}
+            // Only show every ~5th tick so labels don't pile up.
+            interval={Math.ceil(data.length / 6)}
+            tickLine={false}
+            axisLine={{ stroke: "currentColor", opacity: 0.1 }}
+          />
+          <YAxis
+            allowDecimals={false}
+            tick={{ fontSize: 10, fill: "currentColor", opacity: 0.6 }}
+            tickLine={false}
+            axisLine={false}
+            width={28}
+          />
+          <Tooltip
+            cursor={{ fill: "currentColor", opacity: 0.05 }}
+            contentStyle={{
+              fontSize: 12,
+              background: "var(--card)",
+              border: "1px solid var(--border)",
+              borderRadius: 6,
+            }}
+            labelFormatter={(v) => shortDate(String(v))}
+          />
+          <Bar dataKey="count" fill={color} radius={[3, 3, 0, 0]} />
+        </BarChart>
+      </ResponsiveContainer>
+    </div>
   );
 }
 

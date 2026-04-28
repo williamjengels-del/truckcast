@@ -11,28 +11,110 @@ async function getServiceClient() {
   );
 }
 
+// PostgREST defaults to 1000 rows per select() without an explicit range.
+// These helpers page through in 1000-row batches so the admin view shows
+// real totals rather than silent ceilings. Sibling of PR #21 on event-data.
+const BATCH_SIZE = 1000;
+
+interface AdminProfileRow {
+  id: string;
+  business_name: string | null;
+  city: string | null;
+  state: string | null;
+  subscription_tier: string;
+  stripe_customer_id: string | null;
+  stripe_subscription_id: string | null;
+  trial_extended_until: string | null;
+  data_sharing_enabled: boolean | null;
+  onboarding_completed: boolean | null;
+  created_at: string;
+  last_payment_status: string | null;
+  last_payment_failure_reason: string | null;
+}
+
+async function fetchAllProfiles(
+  service: NonNullable<Awaited<ReturnType<typeof getServiceClient>>>
+): Promise<AdminProfileRow[]> {
+  const all: AdminProfileRow[] = [];
+  let offset = 0;
+  while (true) {
+    const { data, error } = await service
+      .from("profiles")
+      .select("id, business_name, city, state, subscription_tier, stripe_customer_id, stripe_subscription_id, trial_extended_until, data_sharing_enabled, onboarding_completed, created_at, last_payment_status, last_payment_failure_reason")
+      .order("created_at", { ascending: false })
+      .range(offset, offset + BATCH_SIZE - 1);
+    if (error) throw new Error(error.message);
+    if (!data || data.length === 0) break;
+    all.push(...(data as unknown as AdminProfileRow[]));
+    if (data.length < BATCH_SIZE) break;
+    offset += BATCH_SIZE;
+  }
+  return all;
+}
+
+async function fetchAllEvents(
+  service: NonNullable<Awaited<ReturnType<typeof getServiceClient>>>
+) {
+  const all: Array<{ user_id: string; booked: boolean | null; net_sales: number | null; event_date: string }> = [];
+  let offset = 0;
+  while (true) {
+    const { data, error } = await service
+      .from("events")
+      .select("user_id, booked, net_sales, event_date")
+      .range(offset, offset + BATCH_SIZE - 1);
+    if (error) throw new Error(error.message);
+    if (!data || data.length === 0) break;
+    all.push(...(data as typeof all));
+    if (data.length < BATCH_SIZE) break;
+    offset += BATCH_SIZE;
+  }
+  return all;
+}
+
+// auth.admin.listUsers is 1-indexed and returns { users, aud, … }.
+// No explicit totalPages in the response; paginate until a short page.
+async function fetchAllAuthUsers(
+  service: NonNullable<Awaited<ReturnType<typeof getServiceClient>>>
+) {
+  const all: Array<{ id: string; email: string | null | undefined }> = [];
+  let page = 1;
+  while (true) {
+    const { data } = await service.auth.admin.listUsers({ page, perPage: BATCH_SIZE });
+    const batch = data?.users ?? [];
+    if (batch.length === 0) break;
+    all.push(...batch.map((u) => ({ id: u.id, email: u.email })));
+    if (batch.length < BATCH_SIZE) break;
+    page++;
+  }
+  return all;
+}
+
 export async function GET() {
   const service = await getServiceClient();
   if (!service) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
-  const { data: profiles, error } = await service
-    .from("profiles")
-    .select("id, business_name, city, state, subscription_tier, stripe_customer_id, stripe_subscription_id, trial_extended_until, data_sharing_enabled, onboarding_completed, created_at, last_payment_status, last_payment_failure_reason")
-    .order("created_at", { ascending: false });
-
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-
-  // Get event breakdown per user
-  const { data: eventCounts } = await service
-    .from("events")
-    .select("user_id, booked, net_sales, event_date");
+  let profiles: Awaited<ReturnType<typeof fetchAllProfiles>>;
+  let eventCounts: Awaited<ReturnType<typeof fetchAllEvents>>;
+  let authUsers: Awaited<ReturnType<typeof fetchAllAuthUsers>>;
+  try {
+    [profiles, eventCounts, authUsers] = await Promise.all([
+      fetchAllProfiles(service),
+      fetchAllEvents(service),
+      fetchAllAuthUsers(service),
+    ]);
+  } catch (err) {
+    return NextResponse.json(
+      { error: err instanceof Error ? err.message : "Unknown error" },
+      { status: 500 }
+    );
+  }
 
   const countMap: Record<string, number> = {};
   const bookedMap: Record<string, number> = {};
   const salesMap: Record<string, number> = {};
   const lastEventMap: Record<string, string> = {};
 
-  for (const row of eventCounts ?? []) {
+  for (const row of eventCounts) {
     countMap[row.user_id] = (countMap[row.user_id] ?? 0) + 1;
     if (row.booked) bookedMap[row.user_id] = (bookedMap[row.user_id] ?? 0) + 1;
     if (row.net_sales != null && row.net_sales > 0) salesMap[row.user_id] = (salesMap[row.user_id] ?? 0) + 1;
@@ -41,10 +123,8 @@ export async function GET() {
     }
   }
 
-  // Get auth users for emails
-  const { data: authData } = await service.auth.admin.listUsers({ perPage: 1000 });
   const emailMap: Record<string, string> = {};
-  for (const u of authData?.users ?? []) {
+  for (const u of authUsers) {
     emailMap[u.id] = u.email ?? "";
   }
 
