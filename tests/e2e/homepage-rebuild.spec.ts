@@ -1,15 +1,24 @@
 import { test, expect, type Page } from "@playwright/test";
 
-// Homepage rebuild spec — locked in 2026-04-24 per the homepage-rebuild
-// prompt (removals: testimonials / how-it-works / on-page pricing;
-// additions: three insight blocks + operator-direct positioning block;
-// tightening: feature-grid copy, single CTA, subline). No auth needed —
-// runs via playwright.homepage.config.ts against a local dev server.
+// Homepage spec — last refreshed 2026-04-27 for Phase 2.0 IA reorder.
+// (History: locked 2026-04-24 for the original homepage rebuild —
+// removals: testimonials / how-it-works / on-page pricing; additions:
+// three insight blocks + operator-direct positioning block; tightening:
+// feature-grid copy, single CTA, subline.)
+//
+// Phase 2.0 changes asserted here:
+//  - Hero supporting line + pill CTA in the teal band
+//  - Card grid reordered: Inquiries → Weather → Repeats → Timing
+//    (per Verdict #12, inquiry flow leads acquisition)
+//  - Density inversion on each card: claim becomes the H2, stat sits
+//    below, body tightens to one sentence, italic punchline cut
+//  - Stats row: "Within 16%" reads as accuracy jargon, replaced with
+//    "4 out of 5 forecasts land in range" (same number inverted)
 //
 // Structural assertions go through data-testid so Brad's upcoming
-// visual-polish pass can rename wrapper components without breaking
-// the suite. Copy assertions use content strings because that copy IS
-// the review artifact.
+// visual-polish pass can rename wrappers without breaking the suite.
+// Copy assertions use content strings because that copy IS the
+// review artifact.
 
 async function openHomepage(page: Page) {
   const response = await page.goto("/", { waitUntil: "domcontentloaded" });
@@ -21,7 +30,7 @@ test.describe("Homepage rebuild", () => {
     await openHomepage(page);
   });
 
-  test("hero headline and updated subline render", async ({ page }) => {
+  test("hero renders headline, subline, supporting line, and pill CTA", async ({ page }) => {
     const headline = page.getByTestId("hero-headline");
     await expect(headline).toBeVisible();
     await expect(headline).toContainText("The operating system for");
@@ -30,48 +39,83 @@ test.describe("Homepage rebuild", () => {
     const subline = page.getByTestId("hero-subline");
     await expect(subline).toBeVisible();
     await expect(subline).toHaveText("Built by a food truck operator. For mobile vendors.");
+
+    const supporting = page.getByTestId("hero-supporting-line");
+    await expect(supporting).toBeVisible();
+    await expect(supporting).toHaveText(
+      "Know what your next event will make before you book it."
+    );
+
+    const heroCta = page.getByTestId("hero-cta-start-trial");
+    await expect(heroCta).toBeVisible();
+    await expect(heroCta).toContainText("Start free trial");
   });
 
-  test("three insight blocks render with resolved numbers + remaining placeholders", async ({
+  test("four insight blocks render in inquiry-first order with claim-led density", async ({
     page,
   }) => {
+    // Block 1 — Inquiries (operator-direct positioning, anchored by 0% fee).
+    const inquiries = page.getByTestId("insight-block-inquiries");
+    await expect(inquiries).toBeVisible();
+    await expect(inquiries).toContainText(
+      "Real inquiries, straight to operators. First to respond, first to book."
+    );
+    await expect(page.getByTestId("insight-finding-inquiries")).toHaveText("0%");
+    await expect(inquiries).toContainText("marketplace fee");
+    await expect(inquiries).toContainText("not a marketplace that takes 15%");
+
+    // Block 2 — Weather. Stat is dynamic ($NNN or placeholder).
     const weather = page.getByTestId("insight-block-weather");
     await expect(weather).toBeVisible();
-    await expect(weather).toContainText("Weather patterns repeat. Losses don't have to.");
-    // Weather-loss finding is either a live-queried "$NNN" value or the
-    // fallback placeholder — both are valid render outcomes.
+    await expect(weather).toContainText("Bad-weather risk, flagged before you commit.");
     await expect(
       page.getByTestId("insight-finding-weather")
     ).toHaveText(/^\$\d{1,3}(,\d{3})*$|^\{\{WEATHER_LOSS_DOLLARS\}\}$/);
-    // Rain/Hot/Cold impacts are hardcoded from WEATHER_COEFFICIENTS.
-    await expect(weather).toContainText("47% below average");
-    await expect(weather).toContainText("37% below");
-    await expect(weather).toContainText("45% below");
-    await expect(weather).toContainText("flags bad-weather risk before you commit");
+    await expect(weather).toContainText("lost on average per weather-disrupted event");
+    await expect(weather).toContainText("Rain, heat, cold snaps");
 
+    // Block 3 — Repeat bookings. Stat is dynamic (NN% or placeholder).
     const repeats = page.getByTestId("insight-block-repeats");
     await expect(repeats).toBeVisible();
-    await expect(repeats).toContainText("Know which repeat bookings are still worth your time.");
-    // Repeat-decline finding is either the live-queried "NN%" value or the
-    // fallback placeholder when Supabase env vars / data aren't available.
+    await expect(repeats).toContainText(
+      "Know which repeat bookings are still earning their keep."
+    );
     await expect(
       page.getByTestId("insight-finding-repeats")
     ).toHaveText(/^\d{1,2}%$|^\{\{REPEAT_BOOKING_DECLINE_RATE\}\}$/);
-    await expect(repeats).toContainText("The math stops being a surprise");
+    await expect(repeats).toContainText("declining revenue by year three");
 
+    // Block 4 — Revenue timing (qualitative, no invented numeric).
     const timing = page.getByTestId("insight-block-timing");
     await expect(timing).toBeVisible();
-    // Block 3 reframed 2026-04-24 — qualitative, no numeric placeholder.
-    await expect(timing).toContainText("Your revenue curve isn't a daily average.");
-    await expect(timing).toContainText("A 6-hour festival isn't 6 hours of revenue.");
-    await expect(timing).toContainText("VendCast tracks when your money actually arrives");
+    await expect(timing).toContainText(
+      "Match prep and staffing to when the money actually arrives."
+    );
+    await expect(timing).toContainText("A 6-hour event isn't 6 hours of revenue.");
+    await expect(timing).toContainText(
+      "VendCast tracks when, not just when the day ends."
+    );
   });
 
-  test("positioning block renders", async ({ page }) => {
-    const block = page.getByTestId("positioning-block");
-    await expect(block).toBeVisible();
-    await expect(block).toContainText("Event inquiries, operator-direct. No middleman.");
-    await expect(block).toContainText("First to respond, first to book");
+  test("italic-punchline pattern is gone — density inversion lands the claim in the H2", async ({
+    page,
+  }) => {
+    // The pre-Phase-2.0 cards ended each block with an italic
+    // muted-foreground paragraph that carried the actual claim. Phase
+    // 2.0 promotes that claim into the H2, so the italic should not
+    // appear inside any insight block.
+    const insightBlocks = page.locator(
+      '[data-testid^="insight-block-"]'
+    );
+    const blockCount = await insightBlocks.count();
+    expect(blockCount).toBe(4);
+    for (let i = 0; i < blockCount; i++) {
+      const italics = insightBlocks.nth(i).locator("p.italic");
+      await expect(
+        italics,
+        `Block ${i} should not contain a trailing italic punchline`
+      ).toHaveCount(0);
+    }
   });
 
   test("feature grid renders exactly 5 cards with editorial copy", async ({ page }) => {
@@ -97,19 +141,32 @@ test.describe("Homepage rebuild", () => {
     );
   });
 
-  test("stats row preserves validated numbers", async ({ page }) => {
+  test("stats row uses operator-readable wins, not accuracy jargon", async ({ page }) => {
     const row = page.getByTestId("stats-row");
     await expect(row).toBeVisible();
-    await expect(page.getByTestId("stats-accuracy")).toContainText("Within 16%");
+    // Phase 2.0: "Within 16%" → "4 out of 5 forecasts land in range" (same
+    // number inverted from miss-rate to hit-rate).
+    await expect(page.getByTestId("stats-accuracy")).toContainText("4 out of 5");
+    await expect(page.getByTestId("stats-accuracy")).toContainText(
+      "forecasts land in range"
+    );
+    await expect(page.getByTestId("stats-accuracy")).not.toContainText("Within 16%");
     await expect(page.getByTestId("stats-years")).toContainText("5 years");
     await expect(page.getByTestId("stats-events")).toContainText(/\d[\d,]*\+/);
   });
 
-  test("single Start-free-trial CTA in the footer region", async ({ page }) => {
-    const cta = page.getByTestId("cta-start-free-trial");
-    await expect(cta).toHaveCount(1);
-    await expect(cta).toContainText("Start free trial");
-    await expect(page.locator("body")).toContainText("14 days free, no credit card required.");
+  test("Start-free-trial CTA appears in both hero and footer regions", async ({ page }) => {
+    // Phase 2.0: hero now has its own pill CTA; footer CTA still
+    // exists. Two total renderings of "Start free trial" are expected.
+    const heroCta = page.getByTestId("hero-cta-start-trial");
+    const footerCta = page.getByTestId("cta-start-free-trial");
+    await expect(heroCta).toBeVisible();
+    await expect(footerCta).toBeVisible();
+    await expect(heroCta).toContainText("Start free trial");
+    await expect(footerCta).toContainText("Start free trial");
+    await expect(page.locator("body")).toContainText(
+      "14 days free, no credit card required."
+    );
   });
 
   test("removed sections do NOT render on the homepage", async ({ page }) => {
@@ -154,34 +211,34 @@ test.describe("Homepage rebuild", () => {
     ).toBeLessThanOrEqual(0);
 
     // Layout: 2×2 grid on desktop (md ≥ 768px), single column on mobile.
-    //   Desktop: row 1 = weather + repeats, row 2 = timing + positioning.
+    //   Desktop: row 1 = inquiries + weather, row 2 = repeats + timing.
     //            Blocks in the same row share ~the same `y`.
     //   Mobile:  all four stack; `y` increases monotonically.
+    const inquiriesBox = await page.getByTestId("insight-block-inquiries").boundingBox();
     const weatherBox = await page.getByTestId("insight-block-weather").boundingBox();
     const repeatsBox = await page.getByTestId("insight-block-repeats").boundingBox();
     const timingBox = await page.getByTestId("insight-block-timing").boundingBox();
-    const positioningBox = await page.getByTestId("positioning-block").boundingBox();
     expect(
-      weatherBox && repeatsBox && timingBox && positioningBox
+      inquiriesBox && weatherBox && repeatsBox && timingBox
     ).toBeTruthy();
-    if (weatherBox && repeatsBox && timingBox && positioningBox) {
+    if (inquiriesBox && weatherBox && repeatsBox && timingBox) {
       const viewportWidth = page.viewportSize()?.width ?? 0;
       const isDesktop = viewportWidth >= 768;
       if (isDesktop) {
         // Same-row: y-offset within a small tolerance of each other.
         const ROW_TOL = 20;
-        expect(Math.abs(weatherBox.y - repeatsBox.y)).toBeLessThanOrEqual(ROW_TOL);
-        expect(Math.abs(timingBox.y - positioningBox.y)).toBeLessThanOrEqual(ROW_TOL);
+        expect(Math.abs(inquiriesBox.y - weatherBox.y)).toBeLessThanOrEqual(ROW_TOL);
+        expect(Math.abs(repeatsBox.y - timingBox.y)).toBeLessThanOrEqual(ROW_TOL);
         // Row 2 is below row 1.
-        expect(timingBox.y).toBeGreaterThanOrEqual(weatherBox.y + weatherBox.height - 1);
-        // Columns are horizontally distinct — repeats sits to the right of weather.
-        expect(repeatsBox.x).toBeGreaterThan(weatherBox.x + weatherBox.width / 2);
-        expect(positioningBox.x).toBeGreaterThan(timingBox.x + timingBox.width / 2);
+        expect(repeatsBox.y).toBeGreaterThanOrEqual(inquiriesBox.y + inquiriesBox.height - 1);
+        // Columns are horizontally distinct — weather sits to the right of inquiries.
+        expect(weatherBox.x).toBeGreaterThan(inquiriesBox.x + inquiriesBox.width / 2);
+        expect(timingBox.x).toBeGreaterThan(repeatsBox.x + repeatsBox.width / 2);
       } else {
         // Mobile: all four stacked, y monotonically increasing.
+        expect(weatherBox.y).toBeGreaterThanOrEqual(inquiriesBox.y + inquiriesBox.height - 1);
         expect(repeatsBox.y).toBeGreaterThanOrEqual(weatherBox.y + weatherBox.height - 1);
         expect(timingBox.y).toBeGreaterThanOrEqual(repeatsBox.y + repeatsBox.height - 1);
-        expect(positioningBox.y).toBeGreaterThanOrEqual(timingBox.y + timingBox.height - 1);
       }
     }
 

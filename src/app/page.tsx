@@ -22,15 +22,6 @@ export const metadata: Metadata = {
     "Inquiries, bookings, calendar, sales, and forecasts — in one place. Built by a food truck operator. For mobile vendors.",
 };
 
-/* Derived 2026-04-24 from WEATHER_COEFFICIENTS in src/lib/constants.ts.
-   Each percentage is (1 - coefficient) × 100, rounded to nearest integer —
-   the average dollar shortfall a booked event takes under that weather.
-   Keeping these inline (not live-queried) because the coefficients only
-   change when the forecast engine is re-tuned. */
-const RAIN_IMPACT_PCT = Math.round((1 - WEATHER_COEFFICIENTS["Rain During Event"]) * 100);
-const HOT_IMPACT_PCT = Math.round((1 - WEATHER_COEFFICIENTS.Hot) * 100);
-const COLD_IMPACT_PCT = Math.round((1 - WEATHER_COEFFICIENTS.Cold) * 100);
-
 /* Julian's Supabase user_id — only operator with enough history to anchor
    a credible "average loss per event" number on the marketing page. Keep
    the query server-side-only via the service role key; homepage is public
@@ -272,10 +263,11 @@ export default async function LandingPage() {
 
       <section className="flex-1">
         {/* Hero — full-bleed teal band per Brad's Figma. White text on
-            brand-teal background; accent divider becomes white-on-teal
-            instead of teal-on-white. Padding tightened (py-20 → py-12)
-            per Brad's note that the band may feel oversized for a
-            text-only hero. */}
+            brand-teal background. Phase 2.0: pulled the OG-card claim
+            ("Know what your next event will make before you book it.")
+            into the hero as a supporting line, and added a CTA pill so
+            the hero leads with a benefit + action, not just category
+            positioning. Per Verdict #12 (inquiry flow leads acquisition). */}
         <div className="bg-brand-teal text-white">
           <div className="container mx-auto px-4 py-12 text-center">
             <h1
@@ -291,58 +283,89 @@ export default async function LandingPage() {
             >
               Built by a food truck operator. For mobile vendors.
             </p>
-            <div
-              aria-hidden="true"
-              className="mx-auto mt-8 h-px w-32 bg-white/40"
-            />
+            <p
+              data-testid="hero-supporting-line"
+              className="mx-auto mt-4 max-w-2xl text-xl font-medium text-white sm:text-2xl"
+            >
+              Know what your next event will make before you book it.
+            </p>
+            <div className="mt-8">
+              <Link href="/signup">
+                <Button
+                  data-testid="hero-cta-start-trial"
+                  size="lg"
+                  className="rounded-full bg-white px-8 font-semibold text-brand-teal shadow-md hover:bg-white/90"
+                >
+                  Start free trial
+                </Button>
+              </Link>
+            </div>
           </div>
         </div>
 
         {/* Insight blocks — 2×2 grid on desktop, stacked on mobile.
-            Diagonal tint pairing: blocks 1+4 share tintA, blocks 2+3 share tintB. */}
+            Phase 2.0 reorder per Verdict #12 (inquiry-first positioning):
+              1. Inquiries     2. Weather
+              3. Repeats       4. Timing
+            Tint pairing is diagonal (TL+BR share tintA, TR+BL share tintB)
+            and reflows automatically with the new content order. Each card
+            inverts the old density: the result-claim becomes the H2, the
+            quantified anchor sits below as the stat, body tightens to one
+            sentence, italic punchline cut. */}
         <div className="border-t">
           <div className="container mx-auto px-4 py-20 max-w-5xl grid grid-cols-1 md:grid-cols-2 gap-6">
-            {/* Block 1 — Weather */}
+            {/* Block 1 — Inquiries (operator-direct positioning) */}
             <div
-              data-testid="insight-block-weather"
+              data-testid="insight-block-inquiries"
               className={`${cardBase} ${tintA}`}
             >
               <h2 className="text-2xl font-bold tracking-tight sm:text-3xl">
-                Weather patterns repeat. Losses don&apos;t have to.
+                Real inquiries, straight to operators. First to respond, first to book.
               </h2>
               <p className="text-xl font-semibold">
-                Operators lose{" "}
+                <span
+                  data-testid="insight-finding-inquiries"
+                  className={EMPHASIS_RESOLVED}
+                >
+                  0%
+                </span>{" "}
+                marketplace fee.
+              </p>
+              <p className="text-base text-muted-foreground">
+                When an event needs a vendor, the inquiry goes to you — not a marketplace
+                that takes 15%.
+              </p>
+            </div>
+
+            {/* Block 2 — Weather */}
+            <div
+              data-testid="insight-block-weather"
+              className={`${cardBase} ${tintB}`}
+            >
+              <h2 className="text-2xl font-bold tracking-tight sm:text-3xl">
+                Bad-weather risk, flagged before you commit.
+              </h2>
+              <p className="text-xl font-semibold">
                 <span
                   data-testid="insight-finding-weather"
                   className={weatherEmphasis}
                 >
                   {weatherLossDollars}
                 </span>{" "}
-                on average per weather-disrupted event.
+                lost on average per weather-disrupted event.
               </p>
-              <ul className="space-y-1 text-sm text-muted-foreground">
-                <li>
-                  Rain within 2 hours of service: {RAIN_IMPACT_PCT}% below average
-                </li>
-                <li>
-                  Temperatures over 90°F: {HOT_IMPACT_PCT}% below
-                </li>
-                <li>
-                  Cold snaps under 45°F: {COLD_IMPACT_PCT}% below
-                </li>
-              </ul>
-              <p className="text-base text-muted-foreground italic">
-                VendCast flags bad-weather risk before you commit.
+              <p className="text-base text-muted-foreground">
+                Rain, heat, cold snaps — VendCast knows the patterns.
               </p>
             </div>
 
-            {/* Block 2 — Repeat bookings */}
+            {/* Block 3 — Repeat bookings */}
             <div
               data-testid="insight-block-repeats"
               className={`${cardBase} ${tintB}`}
             >
               <h2 className="text-2xl font-bold tracking-tight sm:text-3xl">
-                Know which repeat bookings are still worth your time.
+                Know which repeat bookings are still earning their keep.
               </h2>
               <p className="text-xl font-semibold">
                 <span
@@ -353,52 +376,26 @@ export default async function LandingPage() {
                 </span>{" "}
                 of repeat bookings show declining revenue by year three.
               </p>
-              <p className="text-sm text-muted-foreground">
-                Same venue three years running, same organizer five events in, same weekly
-                market every Saturday — patterns emerge, and they rarely announce themselves
-                until the math is already against you.
-              </p>
-              <p className="text-base text-muted-foreground italic">
-                The math stops being a surprise. VendCast tracks every repeat booking — what
-                you made, how weather hit it, how it compares to last year.
+              <p className="text-base text-muted-foreground">
+                VendCast tracks every repeat — what you made, how weather hit it, how this
+                year compares to last.
               </p>
             </div>
 
-            {/* Block 3 — Revenue timing (qualitative; no numbers) */}
+            {/* Block 4 — Revenue timing (qualitative anchor; no invented number) */}
             <div
               data-testid="insight-block-timing"
-              className={`${cardBase} ${tintB}`}
-            >
-              <h2 className="text-2xl font-bold tracking-tight sm:text-3xl">
-                Your revenue curve isn&apos;t a daily average.
-              </h2>
-              <p className="text-xl font-semibold">
-                A 6-hour festival isn&apos;t 6 hours of revenue. Most of the money shows up
-                in a tighter window — and if prep and staffing don&apos;t match the curve,
-                sales walk when the line gets long.
-              </p>
-              <p className="text-base text-muted-foreground italic">
-                VendCast tracks when your money actually arrives, not just when the day
-                ends.
-              </p>
-            </div>
-
-            {/* Block 4 — Positioning */}
-            <div
-              data-testid="positioning-block"
               className={`${cardBase} ${tintA}`}
             >
               <h2 className="text-2xl font-bold tracking-tight sm:text-3xl">
-                Event inquiries, operator-direct. No middleman.
+                Match prep and staffing to when the money actually arrives.
               </h2>
-              <p className="text-base">
-                When an event needs a vendor, the inquiry goes to you — not a marketplace that
-                takes 15%, not a platform that decides who gets the booking. Your contact, your
-                price, your booking.
+              <p className="text-xl font-semibold">
+                A 6-hour event isn&apos;t 6 hours of revenue.
               </p>
-              <p className="text-base text-muted-foreground italic">
-                VendCast routes real inquiries straight to operators. First to respond, first to
-                book.
+              <p className="text-base text-muted-foreground">
+                Most of the money shows up in a tighter window. VendCast tracks when, not
+                just when the day ends.
               </p>
             </div>
           </div>
@@ -445,19 +442,19 @@ export default async function LandingPage() {
                   {eventCount.toLocaleString()}+
                 </p>
                 <p className="text-sm text-muted-foreground">
-                  Events analyzed across operator history
+                  events analyzed
                 </p>
               </div>
               <div data-testid="stats-accuracy" className="space-y-1">
-                <p className="text-4xl font-bold text-primary">Within 16%</p>
+                <p className="text-4xl font-bold text-primary">4 out of 5</p>
                 <p className="text-sm text-muted-foreground">
-                  Forecast accuracy on real event data
+                  forecasts land in range
                 </p>
               </div>
               <div data-testid="stats-years" className="space-y-1">
                 <p className="text-4xl font-bold text-primary">5 years</p>
                 <p className="text-sm text-muted-foreground">
-                  Of operator history baked into the engine
+                  of operator history
                 </p>
               </div>
             </div>
