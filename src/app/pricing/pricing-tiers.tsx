@@ -4,6 +4,11 @@ import Link from "next/link";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Check } from "lucide-react";
+import {
+  PRICING_PLANS,
+  MAX_ANNUAL_SAVINGS,
+  type BillingPeriod,
+} from "@/lib/pricing-plans";
 
 /**
  * Public pricing page tier cards + monthly/annual toggle.
@@ -14,74 +19,13 @@ import { Check } from "lucide-react";
  * free trial" to /signup with the chosen tier + billing as URL
  * params, so the signup flow can pre-select on day-2.
  *
- * Plan constant duplicates the one inside dashboard/settings/page.tsx's
- * PlanCards. Worth consolidating into src/lib/pricing-plans.ts later;
- * left inline here to keep this PR scoped to the marketing surface.
+ * Plan + price data lives in src/lib/pricing-plans.ts — single source
+ * of truth shared with /dashboard/settings PlanCards. A price change
+ * is a one-file edit there.
  */
 
-type Billing = "monthly" | "annual";
-
-interface PricingPlan {
-  tier: "starter" | "pro" | "premium";
-  label: string;
-  monthlyPrice: string;
-  annualPrice: string;
-  annualSavings: string;
-  description: string;
-  features: string[];
-}
-
-const PLANS: PricingPlan[] = [
-  {
-    tier: "starter",
-    label: "Starter",
-    monthlyPrice: "$19",
-    annualPrice: "$182",
-    annualSavings: "$46",
-    description: "The essentials for a single-truck operator.",
-    features: [
-      "Event scheduling & calendar",
-      "Fee calculator",
-      "Revenue tracking",
-      "Public schedule page",
-      "Team share link",
-    ],
-  },
-  {
-    tier: "pro",
-    label: "Pro",
-    monthlyPrice: "$39",
-    annualPrice: "$374",
-    annualSavings: "$94",
-    description: "Forecasting, integrations, and the full data toolkit.",
-    features: [
-      "Everything in Starter",
-      "Weather-adjusted forecasts",
-      "CSV import",
-      "POS integration (Toast, Square, Clover, SumUp)",
-      "Event performance analytics",
-    ],
-  },
-  {
-    tier: "premium",
-    label: "Premium",
-    monthlyPrice: "$69",
-    annualPrice: "$662",
-    annualSavings: "$166",
-    description: "For multi-event operators and growing teams.",
-    features: [
-      "Everything in Pro",
-      "Advanced analytics",
-      "Monthly reports",
-      "Organizer scoring",
-      "Follow My Schedule",
-      "Embeddable booking widget",
-    ],
-  },
-];
-
 export function PricingTiers() {
-  const [billing, setBilling] = useState<Billing>("monthly");
+  const [billing, setBilling] = useState<BillingPeriod>("monthly");
 
   return (
     <div className="space-y-10">
@@ -117,13 +61,13 @@ export function PricingTiers() {
           }`}
           aria-hidden={billing !== "annual"}
         >
-          Save up to $166/yr
+          Save up to {MAX_ANNUAL_SAVINGS}/yr
         </span>
       </div>
 
       {/* Three tier cards — equal weight, no "most popular" anchoring. */}
       <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
-        {PLANS.map((plan) => {
+        {PRICING_PLANS.map((plan) => {
           const price = billing === "annual" ? plan.annualPrice : plan.monthlyPrice;
           const period = billing === "annual" ? "/yr" : "/mo";
           const signupHref = `/signup?plan=${plan.tier}&billing=${billing}`;
@@ -150,7 +94,7 @@ export function PricingTiers() {
               </div>
               {billing === "annual" && (
                 <p className="mt-1 text-sm font-medium text-brand-orange">
-                  Save ${plan.annualSavings}/yr
+                  Save {plan.annualSavings}/yr
                 </p>
               )}
               <ul className="mt-6 space-y-2 text-sm">
