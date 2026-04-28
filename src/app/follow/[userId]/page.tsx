@@ -2,7 +2,8 @@
 
 import { useState, useEffect } from "react";
 import { useParams } from "next/navigation";
-import { TruckIcon, MapPin, Calendar, Clock, CheckCircle2 } from "lucide-react";
+import Image from "next/image";
+import { TruckIcon, MapPin, Clock, CheckCircle2 } from "lucide-react";
 
 interface TruckProfile {
   business_name: string | null;
@@ -99,18 +100,18 @@ export default function FollowTruckPage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gradient-to-b from-orange-50 to-white flex items-center justify-center">
-        <p className="text-gray-500 text-lg">Loading...</p>
+      <div className="min-h-screen bg-muted/30 flex items-center justify-center">
+        <p className="text-muted-foreground text-lg">Loading...</p>
       </div>
     );
   }
 
   if (error) {
     return (
-      <div className="min-h-screen bg-gradient-to-b from-orange-50 to-white flex items-center justify-center px-4">
+      <div className="min-h-screen bg-muted/30 flex items-center justify-center px-4">
         <div className="text-center">
-          <TruckIcon className="h-12 w-12 text-gray-300 mx-auto mb-4" />
-          <p className="text-gray-500 text-lg">{error}</p>
+          <TruckIcon className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+          <p className="text-muted-foreground text-lg">{error}</p>
         </div>
       </div>
     );
@@ -120,18 +121,20 @@ export default function FollowTruckPage() {
   const location = [profile?.city, profile?.state].filter(Boolean).join(", ");
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-orange-50 to-white">
+    <div className="min-h-screen bg-muted/30">
       <div className="max-w-lg mx-auto px-4 py-8 sm:py-12">
-        {/* Header */}
+        {/* Header — operator identity is the hero. The TruckIcon
+            decorative circle uses brand-teal/10 as a soft brand-presence
+            cue without competing with the operator's name. */}
         <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-orange-100 mb-4">
-            <TruckIcon className="h-8 w-8 text-orange-600" />
+          <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-brand-teal/10 mb-4">
+            <TruckIcon className="h-8 w-8 text-brand-teal" />
           </div>
-          <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">
+          <h1 className="text-2xl sm:text-3xl font-bold text-foreground">
             {truckName}
           </h1>
           {location && (
-            <p className="text-gray-500 mt-1 flex items-center justify-center gap-1">
+            <p className="text-muted-foreground mt-1 flex items-center justify-center gap-1">
               <MapPin className="h-4 w-4" />
               {location}
             </p>
@@ -140,28 +143,28 @@ export default function FollowTruckPage() {
 
         {/* Subscribe form */}
         {success ? (
-          <div className="bg-white rounded-2xl shadow-sm border border-green-200 p-6 mb-8 text-center">
+          <div className="bg-card rounded-2xl shadow-sm border border-green-200 p-6 mb-8 text-center">
             <CheckCircle2 className="h-12 w-12 text-green-500 mx-auto mb-3" />
-            <h2 className="text-xl font-semibold text-gray-900 mb-2">
+            <h2 className="text-xl font-semibold text-foreground mb-2">
               You&apos;re subscribed!
             </h2>
-            <p className="text-gray-500">
+            <p className="text-muted-foreground">
               You&apos;ll get notified when {truckName} posts new events. See you there!
             </p>
           </div>
         ) : (
-          <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-6 mb-8">
-            <h2 className="text-lg font-semibold text-gray-900 mb-1">
+          <div className="bg-card rounded-2xl shadow-sm border border-border p-6 mb-8">
+            <h2 className="text-lg font-semibold text-foreground mb-1">
               Get notified about new events
             </h2>
-            <p className="text-sm text-gray-500 mb-4">
+            <p className="text-sm text-muted-foreground mb-4">
               Sign up to know when and where {truckName} will be next.
             </p>
             <form onSubmit={handleSubmit} className="space-y-3">
               <div>
                 <label
                   htmlFor="email"
-                  className="block text-sm font-medium text-gray-700 mb-1"
+                  className="block text-sm font-medium text-foreground mb-1"
                 >
                   Email *
                 </label>
@@ -172,13 +175,13 @@ export default function FollowTruckPage() {
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   placeholder="you@example.com"
-                  className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent"
+                  className="w-full rounded-lg border border-input bg-background px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand-teal focus:border-transparent"
                 />
               </div>
               <div>
                 <label
                   htmlFor="name"
-                  className="block text-sm font-medium text-gray-700 mb-1"
+                  className="block text-sm font-medium text-foreground mb-1"
                 >
                   Name (optional)
                 </label>
@@ -188,30 +191,32 @@ export default function FollowTruckPage() {
                   value={name}
                   onChange={(e) => setName(e.target.value)}
                   placeholder="Your name"
-                  className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent"
+                  className="w-full rounded-lg border border-input bg-background px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand-teal focus:border-transparent"
                 />
               </div>
               {submitError && (
-                <p className="text-sm text-red-600">{submitError}</p>
+                <p className="text-sm text-destructive">{submitError}</p>
               )}
               <button
                 type="submit"
                 disabled={submitting}
-                className="w-full bg-orange-600 hover:bg-orange-700 disabled:bg-orange-400 text-white font-medium py-2.5 px-4 rounded-lg transition-colors text-sm"
+                className="w-full bg-brand-teal hover:bg-brand-teal/90 disabled:opacity-60 text-white font-medium py-2.5 px-4 rounded-lg transition-colors text-sm"
               >
                 {submitting ? "Subscribing..." : "Follow This Schedule"}
               </button>
             </form>
-            <p className="text-xs text-gray-400 mt-3 text-center">
+            <p className="text-xs text-muted-foreground mt-3 text-center">
               You can unsubscribe at any time.
             </p>
           </div>
         )}
 
-        {/* Upcoming events */}
+        {/* Upcoming events — date badges keep brand-orange as the
+            accent moment per Verdict #25 (orange = accent + closer;
+            teal = default brand presence). */}
         {events.length > 0 && (
           <div>
-            <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wider mb-3">
+            <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider mb-3">
               Upcoming Events
             </h3>
             <div className="space-y-2">
@@ -228,28 +233,28 @@ export default function FollowTruckPage() {
                 return (
                   <div
                     key={`${event.event_date}-${event.event_name}-${i}`}
-                    className="bg-white rounded-xl border border-gray-200 p-4 flex items-start gap-3"
+                    className="bg-card rounded-xl border border-border p-4 flex items-start gap-3"
                   >
                     <div className="flex-shrink-0 text-center min-w-[3rem]">
-                      <div className="text-xs font-semibold text-orange-600 uppercase">
+                      <div className="text-xs font-semibold text-brand-orange uppercase">
                         {formatDate(event.event_date).split(",")[0]}
                       </div>
-                      <div className="text-sm font-bold text-gray-900">
+                      <div className="text-sm font-bold text-foreground">
                         {formatDate(event.event_date).split(", ").slice(1).join(", ")}
                       </div>
                     </div>
                     <div className="flex-1 min-w-0">
-                      <p className="font-medium text-gray-900 text-sm truncate">
+                      <p className="font-medium text-foreground text-sm truncate">
                         {event.event_name}
                       </p>
                       {timeRange && (
-                        <p className="text-xs text-gray-500 flex items-center gap-1 mt-0.5">
+                        <p className="text-xs text-muted-foreground flex items-center gap-1 mt-0.5">
                           <Clock className="h-3 w-3" />
                           {timeRange}
                         </p>
                       )}
                       {loc && (
-                        <p className="text-xs text-gray-500 flex items-center gap-1 mt-0.5 truncate">
+                        <p className="text-xs text-muted-foreground flex items-center gap-1 mt-0.5 truncate">
                           <MapPin className="h-3 w-3 flex-shrink-0" />
                           {loc}
                         </p>
@@ -262,13 +267,23 @@ export default function FollowTruckPage() {
           </div>
         )}
 
-        {/* Footer */}
-        <div className="mt-8 text-center">
+        {/* Footer — wordmark image as a low-key "powered by" mark.
+            Operator identity stays the page's primary signal; the
+            wordmark gives interested viewers a path to vendcast.co
+            without stealing focus. */}
+        <div className="mt-8 flex flex-col items-center gap-1">
           <a
             href="https://vendcast.co"
-            className="text-xs text-gray-400 hover:text-gray-500 transition-colors"
+            className="opacity-50 hover:opacity-80 transition-opacity"
+            aria-label="Powered by VendCast — vendcast.co"
           >
-            Powered by VendCast
+            <Image
+              src="/vendcast-logo.jpg"
+              alt="VendCast"
+              width={400}
+              height={140}
+              className="h-6 w-auto"
+            />
           </a>
         </div>
       </div>
