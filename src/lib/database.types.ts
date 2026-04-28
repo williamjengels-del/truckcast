@@ -46,6 +46,12 @@ export interface Profile {
   state: string | null;
   timezone: string;
   subscription_tier: SubscriptionTier;
+  /** What the operator clicked on /pricing before reaching /signup.
+   *  Set once at signup from URL params, never overwritten. Distinct
+   *  from subscription_tier (the current tier). Read by
+   *  /dashboard/settings PlanCards to pre-highlight the matching
+   *  tier card. */
+  intended_tier?: SubscriptionTier | null;
   stripe_customer_id: string | null;
   stripe_subscription_id: string | null;
   onboarding_completed: boolean;

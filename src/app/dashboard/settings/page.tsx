@@ -371,17 +371,37 @@ function PlanCards({ profile }: { profile: Profile | null }) {
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
         {plans.map((plan) => {
           const isCurrent = profile?.subscription_tier === plan.tier;
+          // Pre-highlight the tier the operator clicked on /pricing
+          // before signing up. Only when they're not already on it
+          // (isCurrent wins visually — current state is louder than
+          // intent). Subtle brand-orange ring rather than the full
+          // brand-teal "current" treatment so the two states read
+          // as distinct.
+          const isIntended =
+            !isCurrent &&
+            profile?.intended_tier === plan.tier &&
+            plan.tier !== "starter";
           return (
             <div
               key={plan.tier}
+              data-intended={isIntended || undefined}
               className={`rounded-lg border p-4 space-y-3 ${
                 isCurrent
                   ? "border-primary bg-primary/5 ring-1 ring-primary"
-                  : "border-border"
+                  : isIntended
+                    ? "border-brand-orange/50 ring-1 ring-brand-orange/40"
+                    : "border-border"
               }`}
             >
               <div>
-                <h3 className="font-semibold text-lg">{plan.label}</h3>
+                <div className="flex items-center justify-between gap-2">
+                  <h3 className="font-semibold text-lg">{plan.label}</h3>
+                  {isIntended && (
+                    <span className="text-[10px] font-medium uppercase tracking-wider text-brand-orange">
+                      Your pick
+                    </span>
+                  )}
+                </div>
                 <p className="text-sm text-muted-foreground">
                   {plan.monthlyPrice}/mo{" "}
                   <span className="text-xs">or {plan.annualPrice}/yr</span>

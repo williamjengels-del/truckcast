@@ -97,7 +97,11 @@ export default function SignupPage() {
       return;
     }
 
-    // Upsert profile — ensures row exists even if the DB trigger didn't fire
+    // Upsert profile — ensures row exists even if the DB trigger didn't fire.
+    // intended_tier persists the /pricing → /signup plan choice so
+    // /dashboard/settings can pre-highlight the matching tier on
+    // day-2. Only written when the URL carried a valid plan param;
+    // direct signups carry no intent and the column stays null.
     if (data.user) {
       await supabase
         .from("profiles")
@@ -107,6 +111,7 @@ export default function SignupPage() {
             business_name: businessName,
             state: profileState,
             subscription_tier: "starter",
+            ...(intendedPlan ? { intended_tier: intendedPlan } : {}),
           },
           { onConflict: "id" }
         );
