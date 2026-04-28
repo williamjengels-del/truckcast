@@ -135,8 +135,9 @@ export default function PricingPage() {
         </div>
       </section>
 
-      {/* Footer — matches the homepage. */}
-      <footer className="border-t py-8">
+      {/* Footer — matches the homepage. pb-24 on mobile so the sticky
+          CTA below doesn't overlap the copyright. */}
+      <footer className="border-t py-8 pb-24 md:pb-8">
         <div className="container mx-auto space-y-2 px-4 text-center text-sm text-muted-foreground">
           <div className="flex items-center justify-center gap-6">
             <Link
@@ -164,6 +165,27 @@ export default function PricingPage() {
           </p>
         </div>
       </footer>
+
+      {/* Mobile sticky CTA — mirrors the homepage's #44 treatment. The
+          tier cards above each carry their own CTA, but on mobile the
+          operator scrolls past them while reading the founder story
+          and bottom CTA; the sticky keeps the action one tap away.
+          White pill on brand-teal, hidden at md+. */}
+      <div
+        data-testid="pricing-mobile-sticky-cta"
+        className="fixed inset-x-0 bottom-0 z-40 border-t border-white/10 bg-brand-teal px-4 py-3 shadow-lg md:hidden"
+        style={{ paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + 0.75rem)" }}
+      >
+        <Link href="/signup" className="block">
+          <Button
+            data-testid="pricing-mobile-sticky-cta-button"
+            size="lg"
+            className="w-full rounded-full bg-white font-semibold text-brand-teal shadow-md hover:bg-white/90"
+          >
+            Start free trial
+          </Button>
+        </Link>
+      </div>
     </div>
   );
 }
