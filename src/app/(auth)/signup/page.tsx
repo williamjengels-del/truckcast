@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -18,6 +18,39 @@ import {
 import { TruckIcon } from "lucide-react";
 import { US_STATES, US_STATE_NAMES, OTHER_STATE } from "@/lib/constants";
 
+/**
+ * Plan/billing pickup from /pricing CTAs. The /pricing page links to
+ * /signup?plan=<tier>&billing=<period> when an operator clicks a tier
+ * card. We read those here so the form can confirm the chosen plan
+ * and reduce drop-off ("yes, I'm starting the right trial").
+ *
+ * Persistence is intentionally NOT implemented yet — the trial is
+ * plan-agnostic (every signup gets 14 days free regardless of which
+ * tier they clicked) and Stripe checkout happens later via
+ * /dashboard/settings. Adding an `intended_tier` column would need a
+ * migration; out of scope for this PR. The banner is the operator-
+ * facing reassurance; persistence is a future enhancement.
+ */
+const VALID_PLANS = {
+  starter: "Starter",
+  pro: "Pro",
+  premium: "Premium",
+} as const;
+type ValidPlan = keyof typeof VALID_PLANS;
+
+const VALID_BILLING = {
+  monthly: "monthly",
+  annual: "annual",
+} as const;
+type ValidBilling = keyof typeof VALID_BILLING;
+
+function isValidPlan(s: string | null): s is ValidPlan {
+  return s !== null && Object.prototype.hasOwnProperty.call(VALID_PLANS, s);
+}
+function isValidBilling(s: string | null): s is ValidBilling {
+  return s !== null && Object.prototype.hasOwnProperty.call(VALID_BILLING, s);
+}
+
 export default function SignupPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -30,6 +63,11 @@ export default function SignupPage() {
   const [success, setSuccess] = useState(false);
   const router = useRouter();
   const supabase = createClient();
+  const searchParams = useSearchParams();
+  const planParam = searchParams.get("plan");
+  const billingParam = searchParams.get("billing");
+  const intendedPlan = isValidPlan(planParam) ? planParam : null;
+  const intendedBilling = isValidBilling(billingParam) ? billingParam : null;
 
   async function handleSignup(e: React.FormEvent) {
     e.preventDefault();
@@ -134,6 +172,21 @@ export default function SignupPage() {
           </CardDescription>
         </CardHeader>
         <CardContent>
+          {intendedPlan && (
+            <div
+              data-testid="signup-intended-plan-banner"
+              className="mb-6 rounded-md border border-brand-teal/30 bg-brand-teal/5 px-4 py-3 text-sm"
+            >
+              <p className="font-medium text-foreground">
+                You&apos;re starting with VendCast {VALID_PLANS[intendedPlan]}
+                {intendedBilling ? ` (${intendedBilling})` : ""}.
+              </p>
+              <p className="mt-1 text-xs text-muted-foreground">
+                14 days free first — billing setup happens after the trial,
+                from your dashboard.
+              </p>
+            </div>
+          )}
           <form onSubmit={handleSignup} className="space-y-4">
             <div className="space-y-2">
               <Label htmlFor="businessName">Business Name</Label>
