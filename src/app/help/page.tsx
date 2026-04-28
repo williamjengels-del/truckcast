@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
+import Image from "next/image";
 import Link from "next/link";
-import { TruckIcon, ChevronRight } from "lucide-react";
+import { ChevronRight } from "lucide-react";
+import { Button } from "@/components/ui/button";
 
 export const metadata: Metadata = {
   title: "Help Center — VendCast",
@@ -102,11 +104,11 @@ const sections = [
     faqs: [
       {
         q: "What's included in each plan?",
-        a: "Starter ($29/mo): manual event tracking, fee calculator, performance table, basic dashboard. Pro ($79/mo): adds POS integrations, weather forecasts, public schedule page. Premium ($149/mo): adds organizer quality scoring, risk analysis, monthly reports, confidence bands.",
+        a: "Starter ($19/mo): event scheduling, fee calculator, revenue tracking, public schedule page, team share link. Pro ($39/mo): adds weather-adjusted forecasts, CSV import, POS integration (Toast, Square, Clover, SumUp), event performance analytics. Premium ($69/mo): adds advanced analytics, monthly reports, organizer scoring, Follow My Schedule, embeddable booking widget.",
       },
       {
         q: "Is there an annual discount?",
-        a: "Yes — annual plans save about 17% versus monthly. Starter annual is $290, Pro is $790, Premium is $1,490.",
+        a: "Yes — annual plans save about 20% versus monthly. Starter annual is $182 (save $46), Pro is $374 (save $94), Premium is $662 (save $166).",
       },
       {
         q: "How do I change or cancel my plan?",
@@ -141,26 +143,40 @@ const sections = [
 export default function HelpPage() {
   return (
     <div className="flex flex-col min-h-screen">
-      {/* Nav */}
+      {/* Nav — Phase 2 brand swap to match homepage / pricing /
+          roadmap / contact. */}
       <header className="border-b">
         <div className="container mx-auto flex h-16 items-center justify-between px-4">
-          <Link href="/" className="flex items-center gap-2">
-            <TruckIcon className="h-7 w-7 text-primary" />
-            <span className="text-xl font-bold">VendCast</span>
+          <Link href="/" className="flex items-center" aria-label="VendCast home">
+            <Image
+              src="/vendcast-logo.jpg"
+              alt="VendCast"
+              width={400}
+              height={140}
+              className="h-9 w-auto"
+            />
           </Link>
-          <div className="flex items-center gap-3 text-sm text-muted-foreground">
-            <Link href="/login" className="hover:text-foreground transition-colors">Sign in</Link>
-            <Link href="/signup" className="hover:text-foreground transition-colors">Get started</Link>
+          <div className="flex items-center gap-3 text-sm">
+            <Link href="/login" className="text-muted-foreground hover:text-foreground transition-colors">
+              Sign in
+            </Link>
+            <Link href="/signup">
+              <Button size="sm">Get started</Button>
+            </Link>
           </div>
         </div>
       </header>
 
       <main className="flex-1">
-        {/* Hero */}
-        <div className="border-b bg-muted/30 py-12">
-          <div className="container mx-auto px-4 text-center">
-            <h1 className="text-3xl font-bold">Help Center</h1>
-            <p className="mt-2 text-muted-foreground">
+        {/* Hero — full-bleed teal band swapped in from the prior
+            bg-muted/30 treatment. Matches homepage / pricing / roadmap /
+            contact. */}
+        <div className="bg-brand-teal text-white">
+          <div className="container mx-auto px-4 py-12 text-center">
+            <h1 className="text-3xl font-bold tracking-tight sm:text-4xl">
+              Help Center
+            </h1>
+            <p className="mx-auto mt-3 max-w-xl text-base text-white/85">
               Everything you need to get the most out of VendCast
             </p>
           </div>
