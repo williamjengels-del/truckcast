@@ -1,9 +1,14 @@
 import { NextRequest } from "next/server";
 import * as Sentry from "@sentry/nextjs";
 import Anthropic from "@anthropic-ai/sdk";
+import { createClient as createServiceClient } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/server";
 import { checkRateLimit } from "@/lib/rate-limit";
 import { runAgentLoop } from "@/lib/chat-tools/agent-loop";
+import {
+  checkMonthlyCap,
+  recordChatV2Usage,
+} from "@/lib/chat-v2-usage";
 
 // Tier-B chat endpoint — tool-calling chatbot for Premium operators.
 //
@@ -95,6 +100,22 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    // Monthly cost cap — refuse before doing any model work if this
+    // operator is already over the soft cap for the calendar month.
+    // Returns 402 (Payment Required) so the client can surface the
+    // cap-reached message distinctly from generic 4xx errors.
+    const cap = await checkMonthlyCap(supabase, user.id);
+    if (!cap.ok) {
+      return Response.json(
+        {
+          error: cap.reason,
+          spent_cents: cap.spentCents,
+          cap_cents: cap.capCents,
+        },
+        { status: 402 }
+      );
+    }
+
     const body = (await req.json()) as ChatV2RequestBody;
     const messages = body.messages ?? [];
     if (messages.length === 0) {
@@ -147,16 +168,20 @@ When answering:
       maxTokens: TIER_B_MAX_TOKENS,
     });
 
-    // Cost telemetry: console.log for now so it surfaces in Vercel
-    // logs. PR 4 (cost telemetry table) replaces this with a chat_v2_usage
-    // row insert + the monthly cap check.
-    console.log("[chat-v2] usage", {
-      user_id: user.id,
-      input_tokens: result.usage.input_tokens,
-      output_tokens: result.usage.output_tokens,
-      tool_calls: result.toolCalls.length,
+    // Persist per-turn usage to chat_v2_usage. Service-role client —
+    // RLS doesn't grant INSERT to authenticated. Failures swallowed by
+    // recordChatV2Usage so telemetry never blocks the response.
+    const service = createServiceClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.SUPABASE_SERVICE_ROLE_KEY!
+    );
+    await recordChatV2Usage(service, {
+      userId: user.id,
+      inputTokens: result.usage.input_tokens,
+      outputTokens: result.usage.output_tokens,
+      toolCalls: result.toolCalls.length,
+      stopReason: result.stopReason,
       truncated: result.truncated,
-      stop_reason: result.stopReason,
     });
 
     return Response.json({
