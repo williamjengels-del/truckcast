@@ -192,12 +192,12 @@ function PosSettingsContent() {
       )}
 
       {!isPro && (
-        <div className="rounded-md bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 p-4">
-          <p className="text-sm text-amber-800 dark:text-amber-200">
+        <div className="rounded-md border border-brand-orange/40 bg-brand-orange/5 p-4">
+          <p className="text-sm text-foreground">
             POS integrations require a Pro or Premium subscription.{" "}
             <a
               href="/dashboard/settings"
-              className="underline font-medium"
+              className="font-medium text-brand-orange underline-offset-2 hover:underline"
             >
               Upgrade your plan
             </a>
@@ -576,7 +576,7 @@ function PosProviderCard({
                     <p className="text-xs text-muted-foreground">
                       {dayCount.toLocaleString()} day range
                       {dayCount > 365 && (
-                        <span className="text-amber-600 font-medium"> — may take 30–60 seconds</span>
+                        <span className="text-brand-orange font-medium"> — may take 30–60 seconds</span>
                       )}
                     </p>
                   )}
@@ -594,20 +594,20 @@ function PosProviderCard({
                     <div
                       className={`rounded-md p-3 text-sm space-y-1 ${
                         historicalResult.success
-                          ? "bg-emerald-50 border border-emerald-200"
+                          ? "border border-brand-teal/30 bg-brand-teal/5"
                           : "bg-red-50 border border-red-200"
                       }`}
                     >
                       {historicalResult.success ? (
                         <>
-                          <p className="font-medium text-emerald-800">Sync complete</p>
-                          <p className="text-emerald-700">
+                          <p className="font-medium text-brand-teal">Sync complete</p>
+                          <p className="text-foreground">
                             {historicalResult.ordersFound.toLocaleString()} orders found &middot;{" "}
                             {historicalResult.daysWithSales} days with sales &middot;{" "}
                             {historicalResult.eventsUpdated} events updated
                           </p>
                           {historicalResult.eventsUpdated === 0 && historicalResult.daysWithSales > 0 && (
-                            <p className="text-amber-700 text-xs mt-1">
+                            <p className="text-brand-orange text-xs mt-1">
                               Sales found but no matching events updated — make sure events are booked for those dates.
                             </p>
                           )}
@@ -789,18 +789,18 @@ function ToastCard({
             {/* Gmail verification pending banner */}
             {connection.last_sync_status === "pending_verify" &&
               connection.last_sync_error?.startsWith("GMAIL_VERIFY:") && (
-              <div className="rounded-md bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900/50 p-3 space-y-2">
-                <p className="text-sm font-medium text-amber-900 dark:text-amber-300">
+              <div className="rounded-md border border-brand-orange/40 bg-brand-orange/5 p-3 space-y-2">
+                <p className="text-sm font-medium text-foreground">
                   ⚠️ One more step — verify your forwarding address
                 </p>
-                <p className="text-xs text-amber-800 dark:text-amber-400">
+                <p className="text-xs text-muted-foreground">
                   Gmail sent a verification email to your sync address. Click the button below to confirm it, then return here.
                 </p>
                 <a
                   href={connection.last_sync_error.replace("GMAIL_VERIFY:", "")}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="inline-flex items-center gap-1.5 rounded-md bg-amber-600 hover:bg-amber-700 text-white px-3 py-1.5 text-xs font-medium transition-colors"
+                  className="inline-flex items-center gap-1.5 rounded-md bg-brand-orange hover:bg-brand-orange/90 text-white px-3 py-1.5 text-xs font-medium transition-colors"
                 >
                   Confirm Gmail Forwarding →
                 </a>
@@ -812,9 +812,9 @@ function ToastCard({
               <span
                 className={`inline-block h-2 w-2 rounded-full ${
                   connection.last_sync_status === "success" || connection.sync_enabled
-                    ? "bg-green-500"
+                    ? "bg-brand-teal"
                     : connection.last_sync_status === "pending_verify"
-                    ? "bg-amber-500"
+                    ? "bg-brand-orange"
                     : "bg-muted-foreground"
                 }`}
               />
@@ -1052,7 +1052,7 @@ function ToastCard({
                       </div>
 
                       {parsed.matchedEvents.length === 0 && (
-                        <p className="text-sm text-amber-700 dark:text-amber-400">
+                        <p className="text-sm text-brand-orange">
                           No booked event found on {parsed.date}. Create or book an event for that date first.
                         </p>
                       )}

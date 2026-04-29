@@ -663,9 +663,9 @@ export function CsvImportTab() {
             {/* Google Sheets URL */}
             {importSource === "sheets" && (
               <div className="space-y-3">
-                <div className="rounded-md bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800/40 p-3 text-sm text-blue-800 dark:text-blue-300 space-y-1">
+                <div className="rounded-md border bg-muted/40 p-3 text-sm text-foreground space-y-1">
                   <p className="font-medium">Before you paste your link:</p>
-                  <p className="text-xs">In Google Sheets, click <strong>Share</strong> → set to <strong>&ldquo;Anyone with the link can view&rdquo;</strong>. Your data stays private — we only read it once to import.</p>
+                  <p className="text-xs text-muted-foreground">In Google Sheets, click <strong>Share</strong> → set to <strong>&ldquo;Anyone with the link can view&rdquo;</strong>. Your data stays private — we only read it once to import.</p>
                 </div>
                 <div className="flex gap-2">
                   <Input
@@ -844,7 +844,7 @@ export function CsvImportTab() {
                         {ADVANCED_FIELD_VALUES.includes(col.assignedField) && col.assignedField !== "skip" && (
                           <Badge
                             variant="outline"
-                            className="ml-2 text-xs text-indigo-700 border-indigo-300"
+                            className="ml-2 text-xs text-brand-teal border-brand-teal/40"
                           >
                             advanced
                           </Badge>
@@ -918,8 +918,8 @@ export function CsvImportTab() {
             </div>
 
             {!canProceed && (
-              <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
-                <AlertCircle className="h-4 w-4 inline mr-2" />
+              <div className="rounded-lg border border-brand-orange/40 bg-brand-orange/5 p-3 text-sm text-foreground">
+                <AlertCircle className="h-4 w-4 inline mr-2 text-brand-orange" />
                 Please map at least an <strong>Event Name</strong> column and a{" "}
                 <strong>Date</strong> (or Start Time / Setup Time) column to continue.
               </div>
@@ -949,7 +949,7 @@ export function CsvImportTab() {
             <div className="flex items-start justify-between gap-4">
               <div>
                 <CardTitle className="flex items-center gap-2">
-                  <AlertCircle className="h-5 w-5 text-amber-500" />
+                  <AlertCircle className="h-5 w-5 text-brand-orange" />
                   Duplicate Detection
                 </CardTitle>
                 <p className="text-sm text-muted-foreground mt-1">
@@ -1118,7 +1118,7 @@ export function CsvImportTab() {
                 </Badge>
               )}
               {multiDayCount > 0 && (
-                <Badge variant="secondary" className="bg-purple-100 text-purple-800">
+                <Badge variant="secondary" className="bg-brand-teal/15 text-brand-teal">
                   {multiDayCount} multi-day rows
                 </Badge>
               )}
@@ -1128,7 +1128,7 @@ export function CsvImportTab() {
                   a pure food-truck import doesn't benefit from the chip
                   and the suffix would be empty. */}
               {validCount > 0 && modeBreakdown.catering > 0 && (
-                <Badge variant="secondary" className="bg-blue-100 text-blue-800">
+                <Badge variant="secondary" className="bg-brand-teal/15 text-brand-teal">
                   {modeBreakdown.foodTruck} vending · {modeBreakdown.catering} catering
                   {showInferenceSuffix && " (auto-classified from event_type)"}
                 </Badge>
@@ -1137,11 +1137,11 @@ export function CsvImportTab() {
 
             {/* Parse errors */}
             {invalidCount > 0 && (
-              <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 space-y-1">
-                <p className="text-sm font-medium text-amber-800">
+              <div className="rounded-lg border border-brand-orange/40 bg-brand-orange/5 p-3 space-y-1">
+                <p className="text-sm font-medium text-foreground">
                   {invalidCount} row(s) have errors and will be skipped:
                 </p>
-                <ul className="text-xs text-amber-700 space-y-0.5 max-h-32 overflow-y-auto">
+                <ul className="text-xs text-muted-foreground space-y-0.5 max-h-32 overflow-y-auto">
                   {parsedRows
                     .filter((r) => !r.valid)
                     .map((r, i) => (
@@ -1186,7 +1186,7 @@ export function CsvImportTab() {
                         {row.multi_day_label && (
                           <Badge
                             variant="outline"
-                            className="ml-2 text-xs text-purple-700 border-purple-300"
+                            className="ml-2 text-xs text-brand-teal border-brand-teal/40"
                           >
                             {row.multi_day_label}
                           </Badge>
