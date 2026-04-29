@@ -14,15 +14,18 @@ import {
   CartesianGrid,
 } from "recharts";
 
+// Branded categorical palette — leads with brand-orange + brand-teal,
+// then chart-2/3/4/5 hex equivalents from globals.css oklch tokens.
+// Hex literals because Recharts ignores CSS vars on <Cell>.
 const COLORS = [
-  "#2563eb",
-  "#16a34a",
-  "#eab308",
-  "#dc2626",
-  "#9333ea",
-  "#06b6d4",
-  "#f97316",
-  "#ec4899",
+  "#e8621a", // brand-orange
+  "#0d4f5c", // brand-teal
+  "#2c8a8c", // chart-2 mid teal
+  "#ddb043", // chart-4 yellow-gold
+  "#d6a358", // chart-5 gold
+  "#1f4756", // chart-3 deep teal
+  "#f4b08c", // brand-orange tint
+  "#5a9ea0", // teal tint
 ];
 
 interface TrendDataPoint {
@@ -134,13 +137,13 @@ export function AnalyticsCharts({
                   <Bar
                     dataKey="revenue"
                     name={periodLabel}
-                    fill="#2563eb"
+                    fill="#e8621a"
                     radius={[4, 4, 0, 0]}
                   />
                   <Bar
                     dataKey="compareRevenue"
                     name={comparePeriodLabel}
-                    fill="#93c5fd"
+                    fill="#f4b08c"
                     radius={[4, 4, 0, 0]}
                   />
                 </BarChart>
@@ -158,9 +161,9 @@ export function AnalyticsCharts({
                   <Line
                     type="monotone"
                     dataKey="revenue"
-                    stroke="#2563eb"
+                    stroke="#e8621a"
                     strokeWidth={2}
-                    dot={{ fill: "#2563eb", r: 4 }}
+                    dot={{ fill: "#e8621a", r: 4 }}
                     activeDot={{ r: 6 }}
                   />
                 </LineChart>
@@ -200,14 +203,14 @@ export function AnalyticsCharts({
                 <Bar
                   dataKey="revenue"
                   name={compareEnabled ? periodLabel : "Revenue"}
-                  fill="#2563eb"
+                  fill="#e8621a"
                   radius={[4, 4, 0, 0]}
                 />
                 {compareEnabled && (
                   <Bar
                     dataKey="compareRevenue"
                     name={comparePeriodLabel}
-                    fill="#93c5fd"
+                    fill="#f4b08c"
                     radius={[4, 4, 0, 0]}
                   />
                 )}
@@ -253,14 +256,14 @@ export function AnalyticsCharts({
                 <Bar
                   dataKey="revenue"
                   name={compareEnabled ? periodLabel : "Revenue"}
-                  fill="#2563eb"
+                  fill="#e8621a"
                   radius={[0, 4, 4, 0]}
                 />
                 {compareEnabled && (
                   <Bar
                     dataKey="compareRevenue"
                     name={comparePeriodLabel}
-                    fill="#93c5fd"
+                    fill="#f4b08c"
                     radius={[0, 4, 4, 0]}
                   />
                 )}
