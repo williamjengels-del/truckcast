@@ -398,13 +398,13 @@ function ListView({
           <button
             className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors flex items-center gap-1.5 whitespace-nowrap ${
               activeTab === "flagged"
-                ? "border-amber-500 text-amber-700 dark:text-amber-400"
-                : "border-transparent text-amber-600 dark:text-amber-500 hover:text-amber-700"
+                ? "border-brand-orange text-brand-orange"
+                : "border-transparent text-brand-orange/80 hover:text-brand-orange"
             }`}
             onClick={() => handleTabChange("flagged")}
           >
             Needs Attention
-            <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-amber-500 px-1.5 text-[10px] font-bold text-white">
+            <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-brand-orange px-1.5 text-[10px] font-bold text-white">
               {flaggedEvents.length}
             </span>
           </button>
@@ -506,7 +506,7 @@ function ListView({
                     type="button"
                     onClick={() => setEditingEvent(event)}
                     className={`w-full text-left rounded-lg border bg-card p-3 hover:bg-muted/50 transition-colors ${
-                      isCatering ? "border-l-[3px] border-l-violet-500" :
+                      isCatering ? "border-l-[3px] border-l-brand-teal" :
                       activeTab === "all" && event.booked ? "border-l-[3px] border-l-green-500" :
                       activeTab === "all" && !event.booked ? "border-l-[3px] border-l-slate-300 dark:border-l-slate-600" :
                       ""
@@ -540,7 +540,7 @@ function ListView({
                         <div className="text-sm font-semibold tabular-nums">
                           {formatCurrency(displaySales)}
                           {isCatering && (event.invoice_revenue ?? 0) > 0 && (
-                            <span className="text-[10px] text-violet-600 ml-1">inv</span>
+                            <span className="text-[10px] text-brand-teal ml-1">inv</span>
                           )}
                         </div>
                         {event.event_date >= today && event.forecast_sales && (
@@ -670,7 +670,7 @@ function ListView({
                     key={event.id}
                     className={`cursor-pointer hover:bg-muted/50 transition-colors ${
                       (event.event_mode ?? "food_truck") === "catering"
-                        ? "border-l-[3px] border-l-violet-500 bg-violet-50/30 dark:bg-violet-950/10"
+                        ? "border-l-[3px] border-l-brand-teal bg-brand-teal/[0.04] "
                         : activeTab === "all"
                           ? event.booked
                             ? "border-l-[3px] border-l-green-500 bg-green-50/40 dark:bg-green-950/10"
@@ -711,7 +711,7 @@ function ListView({
                       {event.event_mode === "catering" && (event.invoice_revenue ?? 0) > 0 ? (
                         <span title={`Invoice: ${formatCurrency(event.invoice_revenue)}\nOn-site: ${formatCurrency(event.net_sales)}`}>
                           {formatCurrency((event.net_sales ?? 0) + (event.invoice_revenue ?? 0))}
-                          <span className="text-[10px] text-violet-600 ml-1">inv</span>
+                          <span className="text-[10px] text-brand-teal ml-1">inv</span>
                         </span>
                       ) : (
                         formatCurrency(event.net_sales)
@@ -1623,7 +1623,7 @@ export function EventsClient({ initialEvents, userId = "", businessName = "", us
                     {hasEvents && (
                       <div className="flex items-center gap-0.5">
                         <span
-                          className={`h-1.5 w-1.5 rounded-full ${hasCatering ? "bg-violet-500" : "bg-primary"}`}
+                          className={`h-1.5 w-1.5 rounded-full ${hasCatering ? "bg-brand-teal" : "bg-primary"}`}
                         />
                         {dayEvents.length > 1 && (
                           <span className="text-[9px] font-semibold text-muted-foreground leading-none">
@@ -1668,7 +1668,7 @@ export function EventsClient({ initialEvents, userId = "", businessName = "", us
                         key={event.id}
                         onClick={() => setEditingEvent(event)}
                         className={`flex items-start gap-2 w-full text-left rounded-md border bg-background px-3 py-2 hover:bg-muted transition-colors ${
-                          isCatering ? "border-l-[3px] border-l-violet-500" : ""
+                          isCatering ? "border-l-[3px] border-l-brand-teal" : ""
                         }`}
                       >
                         <div className="flex-1 min-w-0">
@@ -1742,7 +1742,7 @@ export function EventsClient({ initialEvents, userId = "", businessName = "", us
 
                   {dayEvents.slice(0, 3).map((event) => {
                     const cateringBorderClass = (event.event_mode ?? "food_truck") === "catering"
-                      ? "border-l-2 border-l-violet-500"
+                      ? "border-l-2 border-l-brand-teal"
                       : "border-l-2 border-l-transparent";
                     return (
                       <button
@@ -2029,7 +2029,7 @@ export function EventsClient({ initialEvents, userId = "", businessName = "", us
                 onClick={() => setModeFilter("food_truck")}
               >🚚 Vending</button>
               <button
-                className={`px-3 py-1.5 font-medium transition-colors ${modeFilter === "catering" ? "bg-violet-600 text-white" : "bg-background text-muted-foreground hover:text-foreground"}`}
+                className={`px-3 py-1.5 font-medium transition-colors ${modeFilter === "catering" ? "bg-brand-teal text-white" : "bg-background text-muted-foreground hover:text-foreground"}`}
                 onClick={() => setModeFilter("catering")}
               >🍽️ Catering</button>
             </div>
