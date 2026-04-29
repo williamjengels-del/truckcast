@@ -69,6 +69,11 @@ export interface Profile {
   onboarding_completed: boolean;
   data_sharing_enabled: boolean;
   email_reminders_enabled?: boolean | null;
+  /** Per-operator opt-out for new-device login email notifications.
+   *  Migration 20260429000003 adds the column with default true. Used
+   *  by src/app/api/auth/record-login/route.ts to gate the SMTP send;
+   *  profile_login_events recording is unaffected. */
+  login_notifications_enabled?: boolean | null;
   team_share_token?: string | null;
   owner_user_id?: string | null;
   trial_extended_until?: string | null;

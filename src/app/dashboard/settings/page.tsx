@@ -328,6 +328,11 @@ function SettingsContent() {
         onToggle={(val) =>
           setProfile((p) => (p ? { ...p, email_reminders_enabled: val } : p))
         }
+        onLoginAlertToggle={(val) =>
+          setProfile((p) =>
+            p ? { ...p, login_notifications_enabled: val } : p
+          )
+        }
       />
 
       <DataPrivacyCard
@@ -483,26 +488,43 @@ function PlanCards({ profile }: { profile: Profile | null }) {
 function NotificationsCard({
   profile,
   onToggle,
+  onLoginAlertToggle,
 }: {
   profile: Profile | null;
   onToggle: (val: boolean) => void;
+  onLoginAlertToggle: (val: boolean) => void;
 }) {
-  const [saving, setSaving] = useState(false);
+  const [savingReminder, setSavingReminder] = useState(false);
+  const [savingLoginAlert, setSavingLoginAlert] = useState(false);
   const supabase = createClient();
 
-  // Default true when column not yet present (null)
-  const enabled = profile?.email_reminders_enabled ?? true;
+  // Default true when columns not yet present (null) — matches the
+  // server-side default of the migrations that backed each flag.
+  const reminderEnabled = profile?.email_reminders_enabled ?? true;
+  const loginAlertEnabled = profile?.login_notifications_enabled ?? true;
 
-  async function handleToggle() {
+  async function handleReminderToggle() {
     if (!profile) return;
-    const next = !enabled;
-    setSaving(true);
+    const next = !reminderEnabled;
+    setSavingReminder(true);
     await supabase
       .from("profiles")
       .update({ email_reminders_enabled: next })
       .eq("id", profile.id);
     onToggle(next);
-    setSaving(false);
+    setSavingReminder(false);
+  }
+
+  async function handleLoginAlertToggle() {
+    if (!profile) return;
+    const next = !loginAlertEnabled;
+    setSavingLoginAlert(true);
+    await supabase
+      .from("profiles")
+      .update({ login_notifications_enabled: next })
+      .eq("id", profile.id);
+    onLoginAlertToggle(next);
+    setSavingLoginAlert(false);
   }
 
   return (
@@ -510,30 +532,61 @@ function NotificationsCard({
       <CardHeader>
         <CardTitle>Notifications</CardTitle>
       </CardHeader>
-      <CardContent className="space-y-4">
-        <div className="flex items-start justify-between gap-6">
-          <div className="space-y-1">
-            <p className="text-sm font-medium">Sales reminder emails</p>
-            <p className="text-sm text-muted-foreground">
-              Receive an email when a past event has no sales logged. Sent
-              once, 1–3 days after the event date.
-            </p>
+      <CardContent className="space-y-6">
+        <div className="space-y-2">
+          <div className="flex items-start justify-between gap-6">
+            <div className="space-y-1">
+              <p className="text-sm font-medium">Sales reminder emails</p>
+              <p className="text-sm text-muted-foreground">
+                Receive an email when a past event has no sales logged. Sent
+                once, 1–3 days after the event date.
+              </p>
+            </div>
+            <Button
+              variant={reminderEnabled ? "default" : "outline"}
+              size="sm"
+              onClick={handleReminderToggle}
+              disabled={savingReminder}
+              className="shrink-0"
+            >
+              {savingReminder ? "Saving..." : reminderEnabled ? "On" : "Off"}
+            </Button>
           </div>
-          <Button
-            variant={enabled ? "default" : "outline"}
-            size="sm"
-            onClick={handleToggle}
-            disabled={saving}
-            className="shrink-0"
-          >
-            {saving ? "Saving..." : enabled ? "On" : "Off"}
-          </Button>
+          {!reminderEnabled && (
+            <p className="text-xs text-muted-foreground rounded border border-dashed p-3">
+              Sales reminder emails are turned off. You can re-enable at any
+              time.
+            </p>
+          )}
         </div>
-        {!enabled && (
-          <p className="text-xs text-muted-foreground rounded border border-dashed p-3">
-            Sales reminder emails are turned off. You can re-enable at any time.
-          </p>
-        )}
+
+        <div className="space-y-2">
+          <div className="flex items-start justify-between gap-6">
+            <div className="space-y-1">
+              <p className="text-sm font-medium">New-device sign-in alerts</p>
+              <p className="text-sm text-muted-foreground">
+                Email me when my account signs in from a device or location I
+                haven&apos;t used recently. Sign-ins are still recorded either
+                way — this only governs the email notification.
+              </p>
+            </div>
+            <Button
+              variant={loginAlertEnabled ? "default" : "outline"}
+              size="sm"
+              onClick={handleLoginAlertToggle}
+              disabled={savingLoginAlert}
+              className="shrink-0"
+            >
+              {savingLoginAlert ? "Saving..." : loginAlertEnabled ? "On" : "Off"}
+            </Button>
+          </div>
+          {!loginAlertEnabled && (
+            <p className="text-xs text-muted-foreground rounded border border-dashed p-3">
+              New-device login alerts are turned off. Sign-ins are still
+              recorded for security review.
+            </p>
+          )}
+        </div>
       </CardContent>
     </Card>
   );

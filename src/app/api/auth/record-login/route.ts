@@ -76,12 +76,32 @@ export async function POST(req: NextRequest) {
       if (email) {
         const { data: profile } = await service
           .from("profiles")
-          .select("business_name")
+          .select("business_name, login_notifications_enabled")
           .eq("id", user.id)
           .maybeSingle();
         const businessName =
           (profile as { business_name?: string | null } | null)
             ?.business_name ?? null;
+        // Default true when the column isn't materialized yet (e.g.,
+        // migration 20260429000003 hasn't been applied locally). The
+        // recording above always succeeds; only the email send is
+        // gated by the operator preference.
+        const loginAlertsEnabled =
+          (
+            profile as {
+              login_notifications_enabled?: boolean | null;
+            } | null
+          )?.login_notifications_enabled ?? true;
+        if (!loginAlertsEnabled) {
+          // Operator opted out — record-only mode. Skip email send.
+          return NextResponse.json({
+            ok: true,
+            first_login: result.isFirstLogin,
+            new_device: result.isNewDevice,
+            login_event_id: result.loginEventId,
+            email_skipped: "operator_opted_out",
+          });
+        }
 
         // Fire-and-forget — login flow shouldn't wait for SMTP.
         (async () => {
