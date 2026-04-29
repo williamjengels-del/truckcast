@@ -11,24 +11,28 @@ import {
   Cell,
 } from "recharts";
 
+// Branded categorical palette — leads with brand-orange + brand-teal,
+// then chart-2/3/4/5 hex equivalents from globals.css oklch tokens,
+// then tints for the longer-tail event-type slices. Hex literals
+// because Recharts ignores CSS vars on <Cell>.
 const COLORS = [
-  "#2563eb",
-  "#16a34a",
-  "#eab308",
-  "#dc2626",
-  "#9333ea",
-  "#06b6d4",
-  "#f97316",
-  "#ec4899",
-  "#14b8a6",
-  "#8b5cf6",
-  "#f43f5e",
-  "#84cc16",
+  "#e8621a", // brand-orange
+  "#0d4f5c", // brand-teal
+  "#2c8a8c", // chart-2 mid teal
+  "#ddb043", // chart-4 yellow-gold
+  "#d6a358", // chart-5 gold
+  "#1f4756", // chart-3 deep teal
+  "#f4b08c", // brand-orange tint
+  "#5a9ea0", // teal tint
+  "#a3623d", // burnt orange
+  "#3a7a82", // teal-aqua
+  "#c8915c", // muted gold
+  "#7a4623", // dark orange
 ];
 
 const FEE_COLORS: Record<string, string> = {
-  none: "#16a34a",
-  flat_fee: "#2563eb",
+  none: "#0d4f5c",
+  flat_fee: "#e8621a",
   percentage: "#eab308",
   commission_with_minimum: "#f97316",
   pre_settled: "#9333ea",
@@ -149,7 +153,7 @@ export function SeasonalTrendsCharts({
                     "Revenue",
                   ]}
                 />
-                <Bar dataKey="revenue" name="Revenue" fill="#2563eb" radius={[4, 4, 0, 0]} />
+                <Bar dataKey="revenue" name="Revenue" fill="#e8621a" radius={[4, 4, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
           </div>
@@ -181,13 +185,13 @@ export function SeasonalTrendsCharts({
                 <Bar
                   dataKey="revenue"
                   name="Total Revenue"
-                  fill="#2563eb"
+                  fill="#e8621a"
                   radius={[4, 4, 0, 0]}
                 />
                 <Bar
                   dataKey="avgRevenue"
                   name="Avg Revenue"
-                  fill="#16a34a"
+                  fill="#0d4f5c"
                   radius={[4, 4, 0, 0]}
                 />
               </BarChart>

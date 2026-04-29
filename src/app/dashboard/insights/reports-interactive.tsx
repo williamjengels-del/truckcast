@@ -255,7 +255,7 @@ function MonthlyBreakdownSection({
                   {chartData.map((d, i) => (
                     <Cell
                       key={i}
-                      fill={d.aboveAvg ? "#16a34a" : "#94a3b8"}
+                      fill={d.aboveAvg ? "#0d4f5c" : "#94a3b8"}
                     />
                   ))}
                 </Bar>
@@ -355,7 +355,7 @@ function EventTypeSection({
                     "Avg Revenue",
                   ]}
                 />
-                <Bar dataKey="avgRevenue" fill="#2563eb" radius={[0, 4, 4, 0]} />
+                <Bar dataKey="avgRevenue" fill="#e8621a" radius={[0, 4, 4, 0]} />
               </BarChart>
             </ResponsiveContainer>
           </div>
@@ -445,12 +445,12 @@ function DayOfWeekSection({
                     "Avg Revenue",
                   ]}
                 />
-                <Bar dataKey="avgRevenue" fill="#2563eb" radius={[4, 4, 0, 0]}>
+                <Bar dataKey="avgRevenue" fill="#e8621a" radius={[4, 4, 0, 0]}>
                   {chartData.map((d, i) => (
                     <Cell
                       key={i}
                       fill={
-                        d.day === best?.day.slice(0, 3) ? "#16a34a" : "#2563eb"
+                        d.day === best?.day.slice(0, 3) ? "#0d4f5c" : "#e8621a"
                       }
                     />
                   ))}
@@ -552,7 +552,7 @@ function TopEventsSection({ top10 }: { top10: Top10Row[] }) {
                     "Avg Revenue",
                   ]}
                 />
-                <Bar dataKey="avgRevenue" fill="#2563eb" radius={[0, 4, 4, 0]} />
+                <Bar dataKey="avgRevenue" fill="#e8621a" radius={[0, 4, 4, 0]} />
               </BarChart>
             </ResponsiveContainer>
           </div>
@@ -798,7 +798,7 @@ function VenueSection({
                       "Avg Revenue",
                     ]}
                   />
-                  <Bar dataKey="avgRevenue" fill="#2563eb" radius={[0, 4, 4, 0]} />
+                  <Bar dataKey="avgRevenue" fill="#e8621a" radius={[0, 4, 4, 0]} />
                 </BarChart>
               </ResponsiveContainer>
             </div>
@@ -849,8 +849,8 @@ function CompareCard({
       o.anomaly_flag === "disrupted"
         ? "#dc2626"
         : o.anomaly_flag === "boosted"
-          ? "#16a34a"
-          : "#2563eb",
+          ? "#0d4f5c"
+          : "#e8621a",
   }));
 
   return (
