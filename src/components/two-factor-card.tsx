@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Image from "next/image";
-import { ShieldCheck, ShieldAlert } from "lucide-react";
+import { ShieldCheck, ShieldAlert, Copy, Check } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -11,17 +11,19 @@ import { Label } from "@/components/ui/label";
 
 // Two-factor authentication card on /dashboard/settings.
 //
-// Three states:
-//   - "loading"    — initial factor lookup
-//   - "disabled"   — no verified factor; offers Enable button
-//   - "enrolling"  — factor created (unverified); shows QR + 6-digit verify
-//   - "enabled"    — verified factor exists; offers Disable button
-//
-// Recovery codes UI is deliberately NOT in this PR — recovery codes ship
-// in their own follow-up so the Supabase MFA primitives can land first
-// without being bottlenecked on the recovery-code DB schema.
+// States:
+//   - "loading"          — initial factor lookup
+//   - "disabled"         — no verified factor; offers Enable button
+//   - "enrolling"        — factor created (unverified); shows QR + 6-digit verify
+//   - "showing-codes"    — TOTP just verified; show single-display recovery codes
+//   - "enabled"          — verified factor + codes saved; offers Disable / Regenerate
 
-type FactorStatus = "loading" | "disabled" | "enrolling" | "enabled";
+type FactorStatus =
+  | "loading"
+  | "disabled"
+  | "enrolling"
+  | "showing-codes"
+  | "enabled";
 
 interface PendingFactor {
   id: string;
@@ -36,6 +38,9 @@ export function TwoFactorCard() {
   const [verifiedFactorId, setVerifiedFactorId] = useState<string | null>(null);
   const [pending, setPending] = useState<PendingFactor | null>(null);
   const [code, setCode] = useState("");
+  const [recoveryCodes, setRecoveryCodes] = useState<string[]>([]);
+  const [recoveryCodesAcked, setRecoveryCodesAcked] = useState(false);
+  const [copied, setCopied] = useState(false);
   const [working, setWorking] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -65,9 +70,6 @@ export function TwoFactorCard() {
     setWorking(true);
     setError(null);
     try {
-      // Clean up any stale unverified factors first — Supabase doesn't
-      // auto-expire them, and starting a new enroll while one is
-      // unverified throws.
       const { data: existing } = await supabase.auth.mfa.listFactors();
       for (const f of existing?.totp ?? []) {
         if (f.status !== "verified") {
@@ -96,6 +98,17 @@ export function TwoFactorCard() {
     setWorking(false);
   }
 
+  async function generateRecoveryCodes(): Promise<string[]> {
+    const res = await fetch("/api/auth/mfa/recovery-codes/generate", {
+      method: "POST",
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      throw new Error(data.error ?? "Failed to generate recovery codes");
+    }
+    return (data.codes ?? []) as string[];
+  }
+
   async function handleVerify(e: React.FormEvent) {
     e.preventDefault();
     if (!pending) return;
@@ -107,9 +120,18 @@ export function TwoFactorCard() {
         code: code.trim(),
       });
       if (error) throw new Error(error.message);
+
+      // TOTP is verified. Generate recovery codes immediately so the
+      // operator can save them in the same flow. The session is now
+      // AAL2 (we just completed a challenge), so the generate
+      // endpoint accepts.
+      const codes = await generateRecoveryCodes();
+
       setPending(null);
       setCode("");
-      await refreshStatus();
+      setRecoveryCodes(codes);
+      setRecoveryCodesAcked(false);
+      setStatus("showing-codes");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Verification failed");
     }
@@ -131,6 +153,59 @@ export function TwoFactorCard() {
     setWorking(false);
   }
 
+  function handleCopyCodes() {
+    navigator.clipboard.writeText(recoveryCodes.join("\n"));
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  }
+
+  function handleDownloadCodes() {
+    const blob = new Blob(
+      [
+        `VendCast — Two-Factor Recovery Codes\n` +
+          `Generated: ${new Date().toISOString().slice(0, 10)}\n\n` +
+          `Each code may be used once to recover access if you lose your\n` +
+          `authenticator app. Using a code disables 2FA — re-enroll afterward.\n\n` +
+          recoveryCodes.join("\n") +
+          `\n`,
+      ],
+      { type: "text/plain" }
+    );
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "vendcast-recovery-codes.txt";
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  async function handleAckCodes() {
+    setRecoveryCodes([]);
+    setRecoveryCodesAcked(true);
+    await refreshStatus();
+  }
+
+  async function handleRegenerateCodes() {
+    if (
+      !confirm(
+        "Generate new recovery codes? Your existing codes will become invalid."
+      )
+    ) {
+      return;
+    }
+    setWorking(true);
+    setError(null);
+    try {
+      const codes = await generateRecoveryCodes();
+      setRecoveryCodes(codes);
+      setRecoveryCodesAcked(false);
+      setStatus("showing-codes");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Regenerate failed");
+    }
+    setWorking(false);
+  }
+
   async function handleDisable() {
     if (!verifiedFactorId) return;
     if (
@@ -143,10 +218,13 @@ export function TwoFactorCard() {
     setWorking(true);
     setError(null);
     try {
-      const { error } = await supabase.auth.mfa.unenroll({
-        factorId: verifiedFactorId,
+      const res = await fetch("/api/auth/mfa/disable", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ factorId: verifiedFactorId }),
       });
-      if (error) throw new Error(error.message);
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "Disable failed");
       await refreshStatus();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Disable failed");
@@ -196,9 +274,6 @@ export function TwoFactorCard() {
               setup key manually.
             </p>
             <div className="flex flex-col sm:flex-row gap-4 items-start">
-              {/* Supabase returns qr_code as an SVG data URI — render via
-                  next/image so the build pipeline doesn't choke on raw
-                  inline SVG, while still letting the contents render. */}
               <Image
                 src={pending.qrCode}
                 alt="Two-factor authentication QR code"
@@ -256,6 +331,80 @@ export function TwoFactorCard() {
           </div>
         )}
 
+        {status === "showing-codes" && (
+          <div className="space-y-4">
+            <div className="rounded-md border-2 border-brand-orange/50 bg-brand-orange/5 p-4 space-y-3">
+              <p className="text-sm font-medium">
+                Save these recovery codes now.
+              </p>
+              <p className="text-sm text-muted-foreground">
+                Each code can be used once to recover access if you lose your
+                authenticator app. Using a code disables 2FA — you&apos;ll
+                re-enroll afterward. <strong>You won&apos;t see these
+                again.</strong>
+              </p>
+              <div className="grid grid-cols-2 sm:grid-cols-2 gap-2 font-mono text-sm">
+                {recoveryCodes.map((c) => (
+                  <code
+                    key={c}
+                    className="bg-background border rounded px-2 py-1.5 text-center select-all"
+                  >
+                    {c}
+                  </code>
+                ))}
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={handleCopyCodes}
+                  className="gap-1.5"
+                >
+                  {copied ? (
+                    <>
+                      <Check className="h-3.5 w-3.5" /> Copied
+                    </>
+                  ) : (
+                    <>
+                      <Copy className="h-3.5 w-3.5" /> Copy all
+                    </>
+                  )}
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={handleDownloadCodes}
+                >
+                  Download .txt
+                </Button>
+              </div>
+            </div>
+            <div className="space-y-2">
+              <label className="flex items-start gap-2 text-sm cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={recoveryCodesAcked}
+                  onChange={(e) => setRecoveryCodesAcked(e.target.checked)}
+                  className="mt-0.5"
+                />
+                <span>
+                  I&apos;ve saved my recovery codes somewhere safe.
+                </span>
+              </label>
+              <Button
+                type="button"
+                size="sm"
+                onClick={handleAckCodes}
+                disabled={!recoveryCodesAcked}
+              >
+                Continue
+              </Button>
+            </div>
+          </div>
+        )}
+
         {status === "enabled" && (
           <div className="space-y-3">
             <p className="text-sm text-muted-foreground">
@@ -274,16 +423,27 @@ export function TwoFactorCard() {
               — we&apos;ll verify your identity and reset within 1 business
               day.
             </p>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={handleDisable}
-              disabled={working}
-              className="text-destructive hover:text-destructive"
-            >
-              {working ? "Working..." : "Disable two-factor authentication"}
-            </Button>
+            <div className="flex flex-wrap gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={handleRegenerateCodes}
+                disabled={working}
+              >
+                {working ? "Working..." : "Generate new recovery codes"}
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={handleDisable}
+                disabled={working}
+                className="text-destructive hover:text-destructive"
+              >
+                {working ? "Working..." : "Disable two-factor authentication"}
+              </Button>
+            </div>
           </div>
         )}
 
