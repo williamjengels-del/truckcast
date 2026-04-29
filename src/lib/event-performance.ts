@@ -16,11 +16,19 @@ export function calculateEventPerformance(
   events: Event[]
 ): Omit<EventPerformance, "id" | "updated_at"> {
   // Step 1: Filter to booked events with revenue (net_sales OR catering invoice)
+  // The caused_by_event_id check is a defensive belt-and-suspenders alongside
+  // !cancellation_reason — events linked as carry-over (Sunday cancelled
+  // because Saturday sold out) are excluded from per-event-name stats so the
+  // event-name aggregate isn't dragged down by a $0 row that wasn't really
+  // a $0 outcome. Today, cancelled rows already wouldn't have net_sales > 0
+  // and would fail the revenue clause; the explicit filter keeps the
+  // invariant clear if the inclusion criteria ever change.
   const relevantEvents = events.filter(
     (e) =>
       e.event_name.toLowerCase().trim() === eventName.toLowerCase().trim() &&
       e.booked &&
       !e.cancellation_reason &&
+      !e.caused_by_event_id &&
       ((e.net_sales !== null && e.net_sales > 0) ||
         (e.event_mode === "catering" && e.invoice_revenue > 0))
   );
