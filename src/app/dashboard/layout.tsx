@@ -36,6 +36,7 @@ export default async function DashboardLayout({
   const { data: { user } } = await supabase.auth.getUser();
 
   let isPro = false;
+  let isPremium = false;
   let managerBanner: { ownerName: string } | null = null;
   // TODO: Re-enable chat widget when ANTHROPIC_API_KEY is added to Vercel;
   // gated behind Pro/Premium tier. When the env var is absent, the widget
@@ -51,6 +52,7 @@ export default async function DashboardLayout({
       .single();
     const tier = profile?.subscription_tier ?? "starter";
     isPro = tier === "pro" || tier === "premium";
+    isPremium = tier === "premium";
 
     // If this user is a manager, fetch the owner's business name for the banner
     if (profile?.owner_user_id) {
@@ -132,7 +134,7 @@ export default async function DashboardLayout({
         </div>
         <FeedbackDialog />
         <WelcomeTour />
-        <ChatWidget isPro={isPro} enabled={chatEnabled} />
+        <ChatWidget isPro={isPro} isPremium={isPremium} enabled={chatEnabled} />
         <InstallPrompt />
       </div>
     </ImpersonationProvider>
