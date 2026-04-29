@@ -39,6 +39,8 @@ function renderSummary(row: AdminActionRow): string {
       return `began impersonating ${m.email ?? row.target_id}`;
     case "user.impersonate_end":
       return `ended impersonation`;
+    case "user.mfa_reset":
+      return `reset 2FA (${m.factors_deleted ?? 0} factor${m.factors_deleted === 1 ? "" : "s"}, ${m.recovery_codes_deleted ?? 0} recovery codes)${m.email ? ` for ${m.email}` : ""}`;
     case "testimonial.create":
       return `"${m.author_name ?? "?"}" (${m.rating ?? "?"}★)`;
     case "testimonial.update": {
