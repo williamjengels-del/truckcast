@@ -444,8 +444,8 @@ export default async function DashboardPage() {
               {/* Option 2 — Add manually */}
               <Link href="/dashboard/events?new=true" className="group">
                 <div className="h-full rounded-xl border bg-card p-5 hover:border-primary/50 hover:shadow-md transition-all">
-                  <div className="w-10 h-10 rounded-lg bg-blue-100 dark:bg-blue-950/30 flex items-center justify-center mb-3">
-                    <Plus className="h-5 w-5 text-blue-600" />
+                  <div className="w-10 h-10 rounded-lg bg-muted flex items-center justify-center mb-3">
+                    <Plus className="h-5 w-5 text-foreground" />
                   </div>
                   <p className="font-semibold text-sm mb-1">Add an event manually</p>
                   <p className="text-xs text-muted-foreground leading-relaxed">
@@ -460,8 +460,8 @@ export default async function DashboardPage() {
               {/* Option 3 — Forecasts preview */}
               <Link href="/dashboard/insights?tab=forecasts" className="group">
                 <div className="h-full rounded-xl border bg-card p-5 hover:border-primary/50 hover:shadow-md transition-all">
-                  <div className="w-10 h-10 rounded-lg bg-indigo-100 dark:bg-indigo-950/30 flex items-center justify-center mb-3">
-                    <TrendingUp className="h-5 w-5 text-indigo-600" />
+                  <div className="w-10 h-10 rounded-lg bg-brand-teal/10 flex items-center justify-center mb-3">
+                    <TrendingUp className="h-5 w-5 text-brand-teal" />
                   </div>
                   <p className="font-semibold text-sm mb-1">See how forecasts work</p>
                   <p className="text-xs text-muted-foreground leading-relaxed">
@@ -495,7 +495,7 @@ export default async function DashboardPage() {
       ) : (
         <>
           {/* ── Season Progress Hero — first thing users see ── */}
-          <div className="rounded-xl border bg-gradient-to-br from-orange-50 to-amber-50 dark:from-orange-950/20 dark:to-amber-950/10 p-5 md:p-6">
+          <div className="rounded-xl border bg-gradient-to-br from-brand-orange/5 to-brand-orange/10 dark:from-brand-orange/10 dark:to-brand-orange/[0.05] p-5 md:p-6">
             <div className="flex items-center justify-between mb-4">
               <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">
                 Season Progress · {currentYear}
@@ -520,9 +520,9 @@ export default async function DashboardPage() {
             </div>
             {projectedSeason > 0 && (
               <div>
-                <div className="w-full bg-orange-200/60 dark:bg-orange-900/30 rounded-full h-2.5 overflow-hidden">
+                <div className="w-full bg-brand-orange/20 dark:bg-brand-orange/10 rounded-full h-2.5 overflow-hidden">
                   <div
-                    className="bg-orange-500 h-2.5 rounded-full transition-all duration-500"
+                    className="bg-brand-orange h-2.5 rounded-full transition-all duration-500"
                     style={{
                       width: `${Math.min(100, Math.round((ytdRevenue / projectedSeason) * 100))}%`,
                     }}
@@ -556,16 +556,16 @@ export default async function DashboardPage() {
                mid-dashboard card. Three-slot structure: revenue logging,
                unmatched payments (Phase 3), weather-not-set (Phase 3). ── */}
           {unloggedEvents.length > 0 && (
-            <div className="rounded-lg border border-amber-200 bg-amber-50 dark:border-amber-900/50 dark:bg-amber-950/20 p-4 space-y-3">
+            <div className="rounded-lg border border-brand-orange/40 bg-brand-orange/5 p-4 space-y-3">
               <div className="flex items-center justify-between gap-3">
                 <div className="flex items-center gap-2">
-                  <ClipboardList className="h-4 w-4 text-amber-600 dark:text-amber-500 shrink-0" />
-                  <p className="text-sm font-medium text-amber-900 dark:text-amber-300">
+                  <ClipboardList className="h-4 w-4 text-brand-orange shrink-0" />
+                  <p className="text-sm font-medium text-foreground">
                     Needs attention: {unloggedEvents.length} event{unloggedEvents.length !== 1 ? "s" : ""} need{unloggedEvents.length === 1 ? "s" : ""} revenue logged
                   </p>
                 </div>
                 <Link href="/dashboard/events?tab=flagged">
-                  <Button variant="outline" size="sm" className="text-xs border-amber-300 hover:bg-amber-100 dark:border-amber-800 dark:hover:bg-amber-900/30">
+                  <Button variant="outline" size="sm" className="text-xs border-brand-orange/40 hover:bg-brand-orange/10">
                     View all
                   </Button>
                 </Link>
@@ -573,21 +573,21 @@ export default async function DashboardPage() {
               <div className="space-y-1">
                 {unloggedEvents.slice(0, 4).map((e) => (
                   <div key={e.id} className="flex items-center justify-between text-sm">
-                    <span className="text-amber-800 dark:text-amber-400 truncate mr-3">
+                    <span className="text-foreground truncate mr-3">
                       {new Date(e.event_date + "T00:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric" })}
                       {" · "}
                       {e.event_name}
                       {e.event_mode === "catering" && (
-                        <span className="ml-1.5 text-xs font-medium opacity-70">(catering)</span>
+                        <span className="ml-1.5 text-xs font-medium text-muted-foreground">(catering)</span>
                       )}
                     </span>
-                    <Link href="/dashboard/events?tab=flagged" className="text-xs text-amber-700 dark:text-amber-500 hover:underline shrink-0 font-medium">
+                    <Link href="/dashboard/events?tab=flagged" className="text-xs font-medium text-brand-orange underline-offset-2 hover:underline shrink-0">
                       {e.event_mode === "catering" ? "Log invoice →" : "Log sales →"}
                     </Link>
                   </div>
                 ))}
                 {unloggedEvents.length > 4 && (
-                  <p className="text-xs text-amber-700 dark:text-amber-500 pt-1">
+                  <p className="text-xs font-medium text-brand-orange pt-1">
                     +{unloggedEvents.length - 4} more
                   </p>
                 )}
@@ -625,7 +625,7 @@ export default async function DashboardPage() {
               </p>
               <div className="grid grid-cols-2 gap-4">
                 {/* Food Truck */}
-                <div className="rounded-lg border border-border bg-muted/30 p-4 space-y-2">
+                <div className="rounded-lg border border-brand-orange/30 bg-brand-orange/[0.04] p-4 space-y-2">
                   <div className="flex items-center gap-2">
                     <span className="text-lg">🚚</span>
                     <span className="text-sm font-semibold">Vending</span>
@@ -639,7 +639,7 @@ export default async function DashboardPage() {
                   </div>
                   <div className="w-full bg-muted rounded-full h-1.5 mt-1">
                     <div
-                      className="bg-orange-500 h-1.5 rounded-full"
+                      className="bg-brand-orange h-1.5 rounded-full"
                       style={{
                         width: `${Math.round(
                           (modeBreakdown.truck.revenue /
@@ -653,7 +653,7 @@ export default async function DashboardPage() {
                 </div>
 
                 {/* Catering */}
-                <div className="rounded-lg border border-violet-200 bg-violet-50/40 dark:border-violet-800/30 dark:bg-violet-950/10 p-4 space-y-2">
+                <div className="rounded-lg border border-brand-teal/30 bg-brand-teal/[0.04] p-4 space-y-2">
                   <div className="flex items-center gap-2">
                     <span className="text-lg">🍽️</span>
                     <span className="text-sm font-semibold">Catering</span>
@@ -669,7 +669,7 @@ export default async function DashboardPage() {
                   </div>
                   <div className="w-full bg-muted rounded-full h-1.5 mt-1">
                     <div
-                      className="bg-violet-500 h-1.5 rounded-full"
+                      className="bg-brand-teal h-1.5 rounded-full"
                       style={{
                         width: `${Math.round(
                           (modeBreakdown.catering.revenue /

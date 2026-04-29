@@ -22,7 +22,10 @@ interface HeroChartProps {
   rollingWeekData: RollingWeek[];
 }
 
-// Custom bar shape — solid orange for actual, lighter for projected
+// Custom bar shape — brand orange for actual, faded for projected.
+// Hex literals because Recharts ignores currentColor on <rect>; values
+// derived from --vendcast-orange (#e8621a) and a 50% lift toward white
+// for the projected/lighter state.
 function RollingBar(props: {
   x?: number;
   y?: number;
@@ -33,7 +36,7 @@ function RollingBar(props: {
 }) {
   const { x = 0, y = 0, width = 0, height = 0, isFuture, value } = props;
   if (!value || height <= 0) return null;
-  const fill = isFuture ? "#fdba74" : "#f97316";
+  const fill = isFuture ? "#f4b08c" : "#e8621a";
   const radius = 3;
   return (
     <rect
@@ -69,11 +72,11 @@ export function DashboardHeroChart({ rollingWeekData }: HeroChartProps) {
           <p className="text-sm font-semibold">12-Week Revenue</p>
           <div className="flex items-center gap-3 text-xs text-muted-foreground">
             <span className="flex items-center gap-1">
-              <span className="w-2.5 h-2.5 rounded-sm bg-orange-500 inline-block" />
+              <span className="w-2.5 h-2.5 rounded-sm bg-brand-orange inline-block" />
               Actual
             </span>
             <span className="flex items-center gap-1">
-              <span className="w-2.5 h-2.5 rounded-sm bg-orange-200 inline-block" />
+              <span className="w-2.5 h-2.5 rounded-sm bg-brand-orange/40 inline-block" />
               Projected
             </span>
           </div>

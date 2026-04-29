@@ -120,7 +120,7 @@ export default async function DashboardLayout({
           <ImpersonationBanner />
           <TrialBanner />
           {managerBanner && (
-            <div className="shrink-0 bg-violet-600 text-white text-xs text-center py-1.5 px-4 font-medium">
+            <div className="shrink-0 bg-brand-teal text-white text-xs text-center py-1.5 px-4 font-medium">
               You&apos;re managing <span className="font-bold">{managerBanner.ownerName}</span>&apos;s account
             </div>
           )}
