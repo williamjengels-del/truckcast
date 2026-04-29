@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Check } from "lucide-react";
 import { EmbedWidgetSection } from "@/components/embed-widget-section";
 import { InstallSettingsCard } from "@/components/install-settings-card";
 import { PushNotificationsCard } from "@/components/push-notifications-card";
@@ -435,8 +436,8 @@ function PlanCards({ profile }: { profile: Profile | null }) {
               </div>
               <ul className="text-xs text-muted-foreground space-y-1">
                 {plan.features.map((f) => (
-                  <li key={f} className="flex items-start gap-1">
-                    <span className="text-brand-teal mt-0.5">&#10003;</span>
+                  <li key={f} className="flex items-start gap-1.5">
+                    <Check className="mt-0.5 h-3.5 w-3.5 shrink-0 text-brand-teal" strokeWidth={2.5} />
                     {f}
                   </li>
                 ))}
