@@ -61,6 +61,20 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    // Operational kill switch — set CHAT_V2_DISABLED=1 in Vercel env
+    // to disable Tier-B without a code deploy. Use case: cost spike,
+    // model regression, or a hold while we investigate something.
+    // The widget surfaces the error message verbatim from the body.
+    if (process.env.CHAT_V2_DISABLED === "1") {
+      return Response.json(
+        {
+          error:
+            "Advanced AI assistant is temporarily paused for maintenance. Please try again later.",
+        },
+        { status: 503 }
+      );
+    }
+
     const supabase = await createClient();
     const {
       data: { user },
