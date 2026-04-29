@@ -883,6 +883,11 @@ export function EventsClient({ initialEvents, userId = "", businessName = "", us
   const [bookingId, setBookingId] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<ViewMode>("split");
   const [activeTab, setActiveTab] = useState<TabMode>("upcoming");
+  // Optional ?missing= filter — fed by dashboard fill-gaps cards. Keeps the
+  // mental loop from "X events missing event type" → events page filtered to
+  // those rows. Cleared on tab change so chips don't quietly persist across
+  // navigation.
+  const [missingFilter, setMissingFilter] = useState<"type" | "weather" | "location" | null>(null);
   const [calendarMonth, setCalendarMonth] = useState<Date>(() => {
     const now = new Date();
     return new Date(now.getFullYear(), now.getMonth(), 1);
@@ -956,6 +961,12 @@ export function EventsClient({ initialEvents, userId = "", businessName = "", us
           ? "desc"
           : "asc"
       );
+    }
+    const missing = searchParams.get("missing");
+    if (missing === "type" || missing === "weather" || missing === "location") {
+      setMissingFilter(missing);
+    } else {
+      setMissingFilter(null);
     }
   }, [searchParams]);
 
@@ -1176,9 +1187,19 @@ export function EventsClient({ initialEvents, userId = "", businessName = "", us
           new Date(e.event_date + "T00:00:00").getFullYear().toString() === yearFilter;
         const matchesMode =
           modeFilter === "all" || (e.event_mode ?? "food_truck") === modeFilter;
-        return matchesSearch && matchesYear && matchesMode;
+        const matchesMissing =
+          missingFilter === null
+            ? true
+            : missingFilter === "type"
+              ? !e.event_type
+              : missingFilter === "weather"
+                ? !e.event_weather
+                : missingFilter === "location"
+                  ? !e.location && !e.city
+                  : true;
+        return matchesSearch && matchesYear && matchesMode && matchesMissing;
       }),
-    [activeEvents, search, yearFilter, modeFilter]
+    [activeEvents, search, yearFilter, modeFilter, missingFilter]
   );
 
   // Sort: upcoming/unbooked = ascending (soonest first), all/past/flagged = descending (most recent first)
@@ -1232,11 +1253,15 @@ export function EventsClient({ initialEvents, userId = "", businessName = "", us
     }
   });
 
-  // When switching tabs, reset sort to default for that tab
+  // When switching tabs, reset sort to default for that tab and clear any
+  // active ?missing= filter from the dashboard fill-gaps deep-link — the
+  // filter only makes sense in the context of the deep-link the user clicked
+  // through; persisting it across tab clicks would be confusing.
   function handleTabChange(tab: TabMode) {
     setActiveTab(tab);
     setSortField("event_date");
     setSortDirection((tab === "past" || tab === "past_unbooked" || tab === "flagged" || tab === "all" || tab === "cancelled") ? "desc" : "asc");
+    setMissingFilter(null);
   }
 
   function handleSort(field: SortField) {
@@ -1994,6 +2019,27 @@ export function EventsClient({ initialEvents, userId = "", businessName = "", us
            * inside ListView for the full explanation). Tabs still live
            * inside ListView since they don't host text inputs.
            */}
+          {missingFilter && (
+            <div className="flex items-center justify-between gap-3 rounded-md border border-indigo-200 bg-indigo-50 dark:border-indigo-800/40 dark:bg-indigo-950/20 px-3 py-2 text-sm text-indigo-900 dark:text-indigo-300">
+              <span>
+                Showing only events missing{" "}
+                <strong>
+                  {missingFilter === "type" ? "event type" : missingFilter === "weather" ? "weather" : "location"}
+                </strong>
+              </span>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="text-xs h-7 px-2 text-indigo-700 hover:bg-indigo-100 dark:text-indigo-300 dark:hover:bg-indigo-900/30"
+                onClick={() => {
+                  setMissingFilter(null);
+                  router.replace("/dashboard/events?tab=" + activeTab);
+                }}
+              >
+                Clear
+              </Button>
+            </div>
+          )}
           <div className="flex items-center gap-3 flex-wrap">
             <div className="relative flex-1 max-w-sm min-w-48">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
