@@ -153,13 +153,15 @@ export default async function AdminOverviewPage() {
         </div>
       </div>
 
-      {/* Stripe live mode deadline banner */}
+      {/* Stripe live mode deadline banner — pre-deadline reads brand-orange
+          (call-to-action), post-deadline stays destructive red (genuine
+          error state, not brand). */}
       {isStripeTestMode && (
-        <div className={`rounded-lg border p-4 ${deadlinePassed ? "bg-red-50 border-red-300 dark:bg-red-950/20 dark:border-red-800" : "bg-amber-50 border-amber-300 dark:bg-amber-950/20 dark:border-amber-800"}`}>
+        <div className={`rounded-lg border p-4 ${deadlinePassed ? "bg-red-50 border-red-300 dark:bg-red-950/20 dark:border-red-800" : "border-brand-orange/40 bg-brand-orange/5"}`}>
           <div className="flex items-start gap-3">
             <span className="text-xl">{deadlinePassed ? "🚨" : "⚠️"}</span>
             <div>
-              <p className={`font-semibold text-sm ${deadlinePassed ? "text-red-800 dark:text-red-300" : "text-amber-800 dark:text-amber-300"}`}>
+              <p className={`font-semibold text-sm ${deadlinePassed ? "text-red-800 dark:text-red-300" : "text-foreground"}`}>
                 {deadlinePassed
                   ? "Stripe is still in TEST MODE — first trials have expired. Users cannot pay."
                   : `Stripe is in TEST MODE — switch to live keys before April 22 (${daysToDeadline} day${daysToDeadline !== 1 ? "s" : ""} left)`}
@@ -174,11 +176,11 @@ export default async function AdminOverviewPage() {
 
       {/* Cost tracking migration reminder — disappears once migration is applied */}
       {!costMigrationApplied && (
-        <div className="rounded-lg border p-4 bg-blue-50 border-blue-300 dark:bg-blue-950/20 dark:border-blue-800">
+        <div className="rounded-lg border p-4 border-brand-teal/30 bg-brand-teal/5">
           <div className="flex items-start gap-3">
             <span className="text-xl">🗄️</span>
             <div>
-              <p className="font-semibold text-sm text-blue-800 dark:text-blue-300">
+              <p className="font-semibold text-sm text-brand-teal">
                 Supabase migration needed: cost tracking columns
               </p>
               <p className="text-xs text-muted-foreground mt-1">
