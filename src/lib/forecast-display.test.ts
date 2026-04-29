@@ -3,6 +3,7 @@ import {
   isFixedRevenueEvent,
   fixedRevenueAmount,
   forecastContextSentence,
+  lowConfidenceAnchorSentence,
 } from "./forecast-display";
 import type { Event } from "./database.types";
 import type { ForecastResult } from "./forecast-engine";
@@ -200,5 +201,61 @@ describe("forecastContextSentence (other-operators copy)", () => {
       event
     );
     expect(result).toContain("3 other operators' data");
+  });
+});
+
+describe("lowConfidenceAnchorSentence (replaces dropped Learning pill)", () => {
+  function forecast(
+    overrides: Partial<ForecastResult>
+  ): ForecastResult {
+    return {
+      forecast: 1200,
+      baseForecast: 1200,
+      level: 2,
+      confidence: "LOW",
+      confidenceScore: 0.3,
+      dataPoints: 3,
+      method: "test",
+      explanation: "test",
+      breakdown: {},
+      calibrated: false,
+      venueFamiliarityApplied: false,
+      platformBlendApplied: false,
+      ...overrides,
+    } as ForecastResult;
+  }
+
+  it("returns the cold-start prompt at L0", () => {
+    const out = lowConfidenceAnchorSentence(
+      forecast({ level: 0, dataPoints: 0 }),
+      eventOf({ event_type: "Festival" })
+    );
+    expect(out).toBe(
+      "No forecast yet — need 2-3 prior bookings of this event before we can predict"
+    );
+  });
+
+  it("returns the cold-start prompt when dataPoints is 0 even past L0", () => {
+    const out = lowConfidenceAnchorSentence(
+      forecast({ level: 4, dataPoints: 0 }),
+      eventOf({ event_type: "Festival" })
+    );
+    expect(out).toContain("No forecast yet");
+  });
+
+  it("anchors on event_type when there's history", () => {
+    const out = lowConfidenceAnchorSentence(
+      forecast({ level: 2, dataPoints: 3, baseForecast: 1450 }),
+      eventOf({ event_type: "Festival" })
+    );
+    expect(out).toBe("Similar Festivals averaged $1,450 in your history");
+  });
+
+  it("falls back to 'events' when event_type is null", () => {
+    const out = lowConfidenceAnchorSentence(
+      forecast({ level: 4, dataPoints: 2, baseForecast: 800 }),
+      eventOf({ event_type: null })
+    );
+    expect(out).toBe("Similar events averaged $800 in your history");
   });
 });
