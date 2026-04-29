@@ -7,9 +7,16 @@
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-sans);
+  /* --font-geist-sans + --font-geist-mono are set by next/font/google
+     in src/app/layout.tsx and attached to <html className=...>. Wire
+     them through here so Tailwind's font-sans / font-mono utilities
+     (and our own font-heading alias) actually pick up the loaded
+     fonts instead of falling through to Tailwind's system-stack
+     default. The original `--font-sans: var(--font-sans);` was a
+     self-reference that quietly resolved to the system default. */
+  --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
-  --font-heading: var(--font-sans);
+  --font-heading: var(--font-geist-sans);
   --color-sidebar-ring: var(--sidebar-ring);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
