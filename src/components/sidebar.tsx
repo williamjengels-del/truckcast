@@ -6,7 +6,8 @@ import { usePathname, useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { useImpersonation } from "@/components/impersonation-context";
 import { cn } from "@/lib/utils";
-import { LogOut, TruckIcon } from "lucide-react";
+import Image from "next/image";
+import { LogOut } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { navItems } from "@/lib/nav-items";
 import type { SubscriptionTier } from "@/lib/database.types";
@@ -59,9 +60,18 @@ export function Sidebar() {
 
   return (
     <aside className="hidden lg:flex h-screen w-64 flex-col border-r bg-card">
-      <div className="flex items-center gap-2 px-6 py-5 border-b">
-        <TruckIcon className="h-7 w-7 text-primary" />
-        <span className="text-xl font-bold">VendCast</span>
+      {/* Brand mark — matches every public surface (login, signup,
+          marketing pages). Replaces the previous TruckIcon + wordmark
+          combo. */}
+      <div className="flex items-center px-6 py-5 border-b">
+        <Image
+          src="/vendcast-logo.jpg"
+          alt="VendCast"
+          width={400}
+          height={140}
+          priority
+          className="h-8 w-auto"
+        />
       </div>
 
       <nav className="flex-1 px-3 py-4 space-y-1">

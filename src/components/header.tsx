@@ -2,7 +2,7 @@ import { createClient } from "@/lib/supabase/server";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import Link from "next/link";
-import { TruckIcon } from "lucide-react";
+import Image from "next/image";
 import { MobileNav } from "@/components/mobile-nav";
 import { TourButton } from "@/components/tour-button";
 
@@ -43,15 +43,22 @@ export async function Header() {
     <header className="flex h-14 items-center justify-between border-b bg-card px-4 lg:px-6">
       <div className="flex items-center gap-2">
         <MobileNav />
-        {/* Mobile-only brand mark so users know which app they're in.
-            Desktop already has the full VendCast wordmark in the sidebar. */}
+        {/* Mobile-only brand mark — matches the sidebar mark on
+            desktop and every public surface. Replaces the previous
+            TruckIcon + wordmark combo. */}
         <Link
           href="/dashboard"
-          className="lg:hidden inline-flex items-center gap-1.5"
+          className="lg:hidden inline-flex items-center"
           aria-label="VendCast home"
         >
-          <TruckIcon className="h-5 w-5 text-primary" />
-          <span className="font-bold text-base tracking-tight">VendCast</span>
+          <Image
+            src="/vendcast-logo.jpg"
+            alt="VendCast"
+            width={400}
+            height={140}
+            priority
+            className="h-7 w-auto"
+          />
         </Link>
       </div>
       <div className="flex items-center gap-2">
