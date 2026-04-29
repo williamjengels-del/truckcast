@@ -60,12 +60,16 @@ These are real OKLCH-based brand-consistent chart colors, replacing our previous
 
 `--sidebar`, `--sidebar-foreground`, `--sidebar-primary`, `--sidebar-primary-foreground`, `--sidebar-accent`, `--sidebar-accent-foreground`, `--sidebar-border`, `--sidebar-ring` — see `:root` in `globals.css` for current values. Aligned with the rest of the role-token system.
 
-### Geometry
+### Geometry + typography
 
 | Token | Value |
 |---|---|
 | `--radius` | `0.625rem` |
 | `--font-size` (Brad's Figma) | `16px` (we don't override) |
+| Body font | **Geist** (Vercel sans, loaded via `next/font/google` in `src/app/layout.tsx`) |
+| Mono font | **Geist Mono** (same loader) |
+
+**Body font decision (locked 2026-04-28):** Brad confirmed he didn't apply a specific font to the Figma mock — he told Figma AI "basic sans serif, looks good on any device." We're already on Geist, which fits that criteria exactly: clean modern sans, designed for cross-device legibility, no extra dependency. Stay on Geist. Don't switch to system stack or Adobe Fonts — that would be churn for marginal benefit, and the mock won't match pixel-for-pixel either way.
 
 ### Dark mode (`.dark`)
 
