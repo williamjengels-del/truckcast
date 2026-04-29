@@ -32,6 +32,11 @@ export default function LoginPage() {
       setError(error.message);
       setLoading(false);
     } else {
+      // Record the login event for new-device email notifications.
+      // Fire-and-forget — never block the redirect on telemetry.
+      void fetch("/api/auth/record-login", { method: "POST" }).catch(
+        () => undefined
+      );
       router.push("/dashboard");
       router.refresh();
     }
