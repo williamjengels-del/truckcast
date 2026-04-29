@@ -97,13 +97,13 @@ export function forecastContextSentence(
   }
 
   // Level 1 with a platform blend actually applied.
-  // platformOperatorCount includes the viewing operator (their own
-  // bookings live in platform_events too). Subtract self for an
-  // accurate "other operators" count. Threshold stays at ops >= 2 —
-  // i.e. at least 1 other operator besides the viewer.
-  if (forecast.level === 1 && forecast.platformBlendApplied && ops >= 2) {
-    const others = ops - 1;
-    return `Based on your ${n} prior booking${n === 1 ? "" : "s"} + ${others} other ${possessive(others)} data`;
+  // platformOperatorCount is now the count of OTHER operators (engine
+  // self-filters via getPlatformEventsExcludingUser per operator-notes
+  // Q2, 2026-04-28). Use it directly — no subtract. Privacy floor (2+
+  // others) is enforced upstream in getPlatformEventsExcludingUser, so
+  // when this branch fires ops is at least 2.
+  if (forecast.level === 1 && forecast.platformBlendApplied && ops >= 1) {
+    return `Based on your ${n} prior booking${n === 1 ? "" : "s"} + ${ops} other ${possessive(ops)} data`;
   }
 
   switch (forecast.level) {
@@ -197,13 +197,13 @@ export function plainEnglishAdjustments(
     forecast.platformOperatorCount !== undefined &&
     forecast.platformMedianSales != null
   ) {
-    // platformOperatorCount is the total count including the viewing
-    // operator. "Total operators" reads more accurately than "operators
-    // agree" (which implied independent voices, but the viewer is one
-    // of them).
-    const total = forecast.platformOperatorCount;
+    // platformOperatorCount is the count of OTHER operators (engine
+    // self-filters per operator-notes Q2, 2026-04-28). Read as
+    // "X other operators · median Y" — viewer's own data is excluded
+    // from the median.
+    const others = forecast.platformOperatorCount;
     out.push(
-      `Community data: ${total} total operator${total === 1 ? "" : "s"} · median ${formatDollars(forecast.platformMedianSales)}`
+      `Community data: ${others} other operator${others === 1 ? "" : "s"} · median ${formatDollars(forecast.platformMedianSales)}`
     );
   }
 

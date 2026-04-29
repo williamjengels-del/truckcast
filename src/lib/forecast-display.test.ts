@@ -156,13 +156,15 @@ describe("forecastContextSentence (other-operators copy)", () => {
 
   const event = eventOf({ event_date: "2026-05-02", event_type: "Festival" });
 
-  it("subtracts self when L1 + blend (off-by-one fix)", () => {
-    // platformOperatorCount of 2 = viewing operator + 1 other.
+  it("uses platformOperatorCount directly (engine returns others-only count)", () => {
+    // After operator-notes Q2 fix (2026-04-28), engine self-filters
+    // via getPlatformEventsExcludingUser — platformOperatorCount IS
+    // the count of other operators. No display-side subtract.
     const result = forecastContextSentence(
       forecast({
         level: 1,
         platformBlendApplied: true,
-        platformOperatorCount: 2,
+        platformOperatorCount: 1, // 1 other operator
         dataPoints: 9,
       }),
       event
@@ -177,7 +179,7 @@ describe("forecastContextSentence (other-operators copy)", () => {
       forecast({
         level: 1,
         platformBlendApplied: true,
-        platformOperatorCount: 5, // 4 other operators
+        platformOperatorCount: 4, // 4 other operators
         dataPoints: 12,
       }),
       event

@@ -1,7 +1,10 @@
 import { createClient } from "@/lib/supabase/server";
 import { calculateEventPerformance } from "@/lib/event-performance";
 import { calculateForecast, calibrateCoefficients } from "@/lib/forecast-engine";
-import { updatePlatformRegistry, getPlatformEvents } from "@/lib/platform-registry";
+import {
+  updatePlatformRegistry,
+  getPlatformEventsExcludingUser,
+} from "@/lib/platform-registry";
 import { autoClassifyWeather } from "@/lib/weather";
 import type { Event, WeatherType } from "@/lib/database.types";
 
@@ -78,7 +81,12 @@ export async function recalculateForUser(userId: string) {
   // Fetch platform event data for booked upcoming event names (for Level 0 blending)
   const bookedUpcoming = allEvents.filter((e) => e.event_date >= today && e.booked);
   const upcomingNames = [...new Set(bookedUpcoming.map((e) => e.event_name))];
-  const platformMap = await getPlatformEvents(upcomingNames).catch(() => new Map<string, import("@/lib/database.types").PlatformEvent>());
+  // Self-excluding aggregate (operator-notes Q2): the engine's blend
+  // shouldn't regress toward this operator's own mean.
+  const platformMap = await getPlatformEventsExcludingUser(
+    upcomingNames,
+    userId
+  ).catch(() => new Map<string, import("@/lib/database.types").PlatformEvent>());
 
   // Recalculate forecasts for ALL future events — booked AND unbooked
   const futureEvents = allEvents.filter((e) => e.event_date >= today);
