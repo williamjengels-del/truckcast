@@ -40,6 +40,11 @@ export type EventFormData = {
   notes?: string;
   pos_source?: string;
   cancellation_reason?: string | null;
+  /** UUID of the event whose outcome caused this cancellation (e.g.,
+   *  sold-out carry-over). Persisted into events.caused_by_event_id by
+   *  both create and update flows. Empty string serializes to null in
+   *  updateEvent's generic for-loop. */
+  caused_by_event_id?: string | null;
 };
 
 export async function createEvent(formData: EventFormData) {
@@ -118,6 +123,8 @@ export async function createEvent(formData: EventFormData) {
     insertData.other_costs = formData.other_costs;
   if (formData.notes) insertData.notes = formData.notes;
   if (formData.pos_source) insertData.pos_source = formData.pos_source;
+  if (formData.cancellation_reason) insertData.cancellation_reason = formData.cancellation_reason;
+  if (formData.caused_by_event_id) insertData.caused_by_event_id = formData.caused_by_event_id;
 
   const { data, error } = await supabase
     .from("events")
