@@ -174,9 +174,9 @@ export function PushNotificationsCard() {
         )}
 
         {ready && permission !== "unsupported" && iosCaveat && (
-          <div className="flex items-start gap-3 rounded-lg border border-amber-200 bg-amber-50 dark:border-amber-900/40 dark:bg-amber-950/20 p-3">
-            <Smartphone className="h-4 w-4 text-amber-600 shrink-0 mt-0.5" />
-            <p className="text-xs text-amber-900 dark:text-amber-300">
+          <div className="flex items-start gap-3 rounded-lg border bg-muted/40 p-3">
+            <Smartphone className="h-4 w-4 text-muted-foreground shrink-0 mt-0.5" />
+            <p className="text-xs text-muted-foreground">
               On iPhone, notifications only work after installing VendCast to your
               home screen. Tap the Mobile app section above to install, then come
               back here.
