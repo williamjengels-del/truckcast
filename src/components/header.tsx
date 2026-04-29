@@ -30,10 +30,13 @@ export async function Header() {
       .slice(0, 2)
       .toUpperCase() ?? "TC";
 
+  // Tier pills — starter stays neutral, pro reads as brand presence
+  // (teal), premium gets the differentiator/closer hue (orange) so it
+  // visually signals "top tier" without leaning on a yellow palette.
   const tierColors: Record<string, string> = {
     starter: "bg-muted text-muted-foreground",
-    pro: "bg-blue-100 text-blue-800",
-    premium: "bg-amber-100 text-amber-800",
+    pro: "bg-brand-teal/15 text-brand-teal",
+    premium: "bg-brand-orange/15 text-brand-orange",
   };
 
   return (

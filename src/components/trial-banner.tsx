@@ -47,15 +47,16 @@ export async function TrialBanner() {
   const msLeft = trialEnd.getTime() - now.getTime();
   const daysLeft = Math.ceil(msLeft / (1000 * 60 * 60 * 24));
 
-  // Trial expired — informational amber, not alarming red. The hard-gate
-  // date in middleware.ts still enforces access cutoff; no need to yell.
+  // Trial expired — closer surface (operator needs to upgrade), use
+  // brand-orange tint. The hard-gate date in middleware.ts still
+  // enforces access cutoff; no need to yell with a destructive palette.
   if (daysLeft <= 0) {
     const hardGateActive = now >= HARD_GATE_DATE;
     return (
-      <div className="bg-amber-50 border-b border-amber-200 dark:bg-amber-950/20 dark:border-amber-800/30 px-4 py-2.5 flex items-center justify-between gap-3 flex-wrap">
+      <div className="bg-brand-orange/10 border-b border-brand-orange/30 px-4 py-2.5 flex items-center justify-between gap-3 flex-wrap">
         <div className="flex items-center gap-2 text-sm">
-          <AlertTriangle className="h-4 w-4 text-amber-600 shrink-0" />
-          <span className="text-amber-800 dark:text-amber-400 font-medium">Your free trial has ended.</span>
+          <AlertTriangle className="h-4 w-4 text-brand-orange shrink-0" />
+          <span className="text-foreground font-medium">Your free trial has ended.</span>
           {hardGateActive ? (
             <span className="text-muted-foreground hidden sm:inline">Upgrade to keep your data and continue using VendCast.</span>
           ) : (
@@ -66,7 +67,7 @@ export async function TrialBanner() {
         </div>
         <Link
           href="/dashboard/settings?upgrade=true"
-          className="shrink-0 inline-flex items-center gap-1.5 rounded-md bg-amber-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-amber-700 transition-colors"
+          className="shrink-0 inline-flex items-center gap-1.5 rounded-md bg-brand-orange px-3 py-1.5 text-xs font-semibold text-white hover:bg-brand-orange/90 transition-colors"
         >
           <Sparkles className="h-3.5 w-3.5" />
           Upgrade now
@@ -80,19 +81,22 @@ export async function TrialBanner() {
 
   const urgency = daysLeft <= 3;
 
+  // Two-state banner: urgent (≤3 days) leans on brand-orange as the
+  // closer; relaxed (4-7 days) leans on brand-teal as default brand
+  // presence — neither pretends to be a destructive warning.
   return (
     <div
       className={`border-b px-4 py-2.5 flex items-center justify-between gap-3 flex-wrap ${
         urgency
-          ? "bg-amber-50 border-amber-200 dark:bg-amber-950/20 dark:border-amber-800/30"
-          : "bg-blue-50 border-blue-200 dark:bg-blue-950/20 dark:border-blue-800/30"
+          ? "bg-brand-orange/10 border-brand-orange/30"
+          : "bg-brand-teal/5 border-brand-teal/20"
       }`}
     >
       <div className="flex items-center gap-2 text-sm">
         <Sparkles
-          className={`h-4 w-4 shrink-0 ${urgency ? "text-amber-600" : "text-blue-600"}`}
+          className={`h-4 w-4 shrink-0 ${urgency ? "text-brand-orange" : "text-brand-teal"}`}
         />
-        <span className={`font-medium ${urgency ? "text-amber-800 dark:text-amber-400" : "text-blue-800 dark:text-blue-400"}`}>
+        <span className="font-medium text-foreground">
           {daysLeft === 1 ? "Last day" : `${daysLeft} days`} left in your free trial.
         </span>
         <span className="text-muted-foreground hidden sm:inline">
@@ -101,10 +105,10 @@ export async function TrialBanner() {
       </div>
       <Link
         href="/dashboard/settings?upgrade=true"
-        className={`shrink-0 inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-semibold transition-colors ${
+        className={`shrink-0 inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-semibold text-white transition-colors ${
           urgency
-            ? "bg-amber-600 text-white hover:bg-amber-700"
-            : "bg-blue-600 text-white hover:bg-blue-700"
+            ? "bg-brand-orange hover:bg-brand-orange/90"
+            : "bg-brand-teal hover:bg-brand-teal/90"
         }`}
       >
         View plans

@@ -15,15 +15,19 @@ import {
   ReferenceLine,
 } from "recharts";
 
+// Branded categorical palette for the event-type pie. Lead with the
+// two brand hues, then derived chart tokens (warm orange, mid teal,
+// deep teal, gold) from globals.css. Hex literals because Recharts
+// fills don't pick up CSS variables on <Cell>.
 const PIE_COLORS = [
-  "#2563eb",
-  "#16a34a",
-  "#eab308",
-  "#dc2626",
-  "#9333ea",
-  "#06b6d4",
-  "#f97316",
-  "#ec4899",
+  "#e8621a", // brand-orange
+  "#0d4f5c", // brand-teal
+  "#2c8a8c", // chart-2 mid teal
+  "#ddb043", // chart-4 yellow-gold
+  "#d6a358", // chart-5 gold
+  "#1f4756", // chart-3 deep teal
+  "#f4b08c", // brand-orange tint
+  "#5a9ea0", // teal tint
 ];
 
 interface RollingWeek {
@@ -50,7 +54,9 @@ function RollingBar(props: {
 }) {
   const { x = 0, y = 0, width = 0, height = 0, isFuture, value } = props;
   if (!value || height <= 0) return null;
-  const fill = isFuture ? "#fdba74" : "#f97316"; // light orange for forecast, solid for actual
+  // Brand-orange (#e8621a) for actual, lifted toward white for forecast.
+  // Hex literals because Recharts ignores CSS vars on <rect>.
+  const fill = isFuture ? "#f4b08c" : "#e8621a";
   const radius = 3;
   return (
     <rect
@@ -95,11 +101,11 @@ export function DashboardCharts({
             <CardTitle>12-Week Revenue View</CardTitle>
             <div className="flex items-center gap-3 text-xs text-muted-foreground">
               <span className="flex items-center gap-1">
-                <span className="w-3 h-3 rounded-sm bg-orange-500 inline-block" />
+                <span className="w-3 h-3 rounded-sm bg-brand-orange inline-block" />
                 Actual
               </span>
               <span className="flex items-center gap-1">
-                <span className="w-3 h-3 rounded-sm bg-orange-200 inline-block" />
+                <span className="w-3 h-3 rounded-sm bg-brand-orange/40 inline-block" />
                 Forecast
               </span>
             </div>
@@ -205,13 +211,13 @@ export function DashboardCharts({
                   <Bar
                     dataKey="actual"
                     name="Actual"
-                    fill="#2563eb"
+                    fill="#e8621a"
                     radius={[4, 4, 0, 0]}
                   />
                   <Bar
                     dataKey="forecast"
                     name="Forecast"
-                    fill="#93c5fd"
+                    fill="#f4b08c"
                     radius={[4, 4, 0, 0]}
                   />
                 </BarChart>

@@ -88,7 +88,7 @@ export function Sidebar() {
                 <item.icon className="h-4 w-4 shrink-0" />
                 <span className="flex-1">{item.label}</span>
                 {item.href === "/dashboard/events" && unloggedCount > 0 && (
-                  <span className="ml-auto flex h-5 min-w-5 items-center justify-center rounded-full bg-amber-500 px-1.5 text-[10px] font-bold text-white">
+                  <span className="ml-auto flex h-5 min-w-5 items-center justify-center rounded-full bg-brand-orange px-1.5 text-[10px] font-bold text-white">
                     {unloggedCount > 99 ? "99+" : unloggedCount}
                   </span>
                 )}
