@@ -13,7 +13,7 @@ import Link from "next/link";
 import { CloudSun, Calculator, ClipboardList } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { calculateForecast, calibrateCoefficients } from "@/lib/forecast-engine";
-import { getPlatformEvents } from "@/lib/platform-registry";
+import { getPlatformEventsExcludingUser } from "@/lib/platform-registry";
 import type { Event } from "@/lib/database.types";
 import { ForecastExplainer } from "./forecast-explainer";
 import { WhatIfPanel } from "@/components/what-if-panel";
@@ -63,11 +63,17 @@ export async function ForecastsTab() {
   // Calibrate per-user coefficients
   const calibrated = calibrateCoefficients(events);
 
-  // Fetch platform data for upcoming events (matches recalculate.ts for consistency)
+  // Fetch platform data for upcoming events. Use the self-excluding
+  // variant so the median the engine sees is "what other operators
+  // see" rather than a value partially regressing toward this
+  // operator's own mean (operator-notes Q2, 2026-04-29).
   const upcomingNames = [...new Set(upcomingEvents.map((e) => e.event_name))];
-  const platformMap = await getPlatformEvents(upcomingNames).catch(
-    () => new Map<string, import("@/lib/database.types").PlatformEvent>()
-  );
+  const platformMap =
+    scope.kind !== "unauthorized"
+      ? await getPlatformEventsExcludingUser(upcomingNames, scope.userId).catch(
+          () => new Map<string, import("@/lib/database.types").PlatformEvent>()
+        )
+      : new Map<string, import("@/lib/database.types").PlatformEvent>();
 
   // Calculate event-type averages from historical data (for What-If panel)
   const eventTypeAvgs: Record<string, number> = {};
