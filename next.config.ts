@@ -20,17 +20,6 @@ const nextConfig: NextConfig = {
         permanent: true,
       },
 
-      // Marketing: /pricing → homepage root. The 2026-04-24 rebuild
-      // removed the on-page pricing section, so the former `#pricing`
-      // anchor no longer exists. Temporary 307 until a real /pricing
-      // page ships (queued in v10). When the real page lands, remove
-      // this rule.
-      {
-        source: "/pricing",
-        destination: "/",
-        permanent: false,
-      },
-
       // Phase 4 IA consolidation — preserve bookmarks + operator muscle memory.
       // Source match is exact (no trailing /:path*) so dynamic sub-routes like
       // /dashboard/forecasts/calculator and /dashboard/performance/[name] still
