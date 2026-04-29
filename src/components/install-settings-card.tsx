@@ -64,7 +64,7 @@ export function InstallSettingsCard() {
       <CardContent>
         {standalone ? (
           <div className="flex items-center gap-2 text-sm">
-            <CheckCircle2 className="h-5 w-5 text-green-600" />
+            <CheckCircle2 className="h-5 w-5 text-brand-teal" />
             <span className="font-medium">VendCast is installed on this device.</span>
           </div>
         ) : (

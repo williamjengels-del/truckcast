@@ -431,12 +431,12 @@ function PlanCards({ profile }: { profile: Profile | null }) {
                   {plan.monthlyPrice}/mo{" "}
                   <span className="text-xs">or {plan.annualPrice}/yr</span>
                 </p>
-                <p className="text-xs text-green-600">save {plan.annualSavings} annually</p>
+                <p className="text-xs font-medium text-brand-orange">save {plan.annualSavings} annually</p>
               </div>
               <ul className="text-xs text-muted-foreground space-y-1">
                 {plan.features.map((f) => (
                   <li key={f} className="flex items-start gap-1">
-                    <span className="text-green-600 mt-0.5">&#10003;</span>
+                    <span className="text-brand-teal mt-0.5">&#10003;</span>
                     {f}
                   </li>
                 ))}
@@ -858,10 +858,10 @@ function ManagerInviteCard({ profile }: { profile: Profile | null }) {
         </p>
 
         {!isPro && (
-          <div className="rounded-md bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 p-3">
-            <p className="text-sm text-amber-800 dark:text-amber-200">
+          <div className="rounded-md border border-brand-orange/40 bg-brand-orange/5 p-3">
+            <p className="text-sm text-foreground">
               Manager access requires a Pro or Premium subscription.{" "}
-              <a href="/dashboard/settings" className="underline font-medium">Upgrade your plan</a>
+              <a href="/dashboard/settings" className="font-medium text-brand-orange underline-offset-2 hover:underline">Upgrade your plan</a>
             </p>
           </div>
         )}
@@ -939,7 +939,7 @@ function ManagerInviteCard({ profile }: { profile: Profile | null }) {
                   </label>
                 </div>
                 {error && <p className="text-sm text-destructive">{error}</p>}
-                {success && <p className="text-sm text-green-700 dark:text-green-400">{success}</p>}
+                {success && <p className="text-sm font-medium text-brand-teal">{success}</p>}
                 <Button type="submit" size="sm" disabled={inviting || !email.trim()}>
                   {inviting ? "Sending invite…" : "Send Invite"}
                 </Button>
@@ -949,7 +949,7 @@ function ManagerInviteCard({ profile }: { profile: Profile | null }) {
             {members.length >= limit && (
               <p className="text-xs text-muted-foreground">
                 You&apos;ve reached the manager limit for your plan.{" "}
-                {tier === "pro" && <a href="/dashboard/settings" className="text-primary hover:underline">Upgrade to Premium for up to 5 managers.</a>}
+                {tier === "pro" && <a href="/dashboard/settings" className="font-medium text-brand-orange underline-offset-2 hover:underline">Upgrade to Premium for up to 5 managers.</a>}
               </p>
             )}
           </>
