@@ -183,14 +183,14 @@ export default async function AdminOverviewPage() {
       </div>
 
       {/* Stripe live mode deadline banner — pre-deadline reads brand-orange
-          (call-to-action), post-deadline stays destructive red (genuine
-          error state, not brand). */}
+          (call-to-action), post-deadline maps to the --destructive role
+          token (genuine error state). */}
       {isStripeTestMode && (
-        <div className={`rounded-lg border p-4 ${deadlinePassed ? "bg-red-50 border-red-300 dark:bg-red-950/20 dark:border-red-800" : "border-brand-orange/40 bg-brand-orange/5"}`}>
+        <div className={`rounded-lg border p-4 ${deadlinePassed ? "bg-destructive/10 border-destructive/30" : "border-brand-orange/40 bg-brand-orange/5"}`}>
           <div className="flex items-start gap-3">
             <span className="text-xl">{deadlinePassed ? "🚨" : "⚠️"}</span>
             <div>
-              <p className={`font-semibold text-sm ${deadlinePassed ? "text-red-800 dark:text-red-300" : "text-foreground"}`}>
+              <p className={`font-semibold text-sm ${deadlinePassed ? "text-destructive" : "text-foreground"}`}>
                 {deadlinePassed
                   ? "Stripe is still in TEST MODE — first trials have expired. Users cannot pay."
                   : `Stripe is in TEST MODE — switch to live keys before April 22 (${daysToDeadline} day${daysToDeadline !== 1 ? "s" : ""} left)`}
@@ -263,7 +263,7 @@ export default async function AdminOverviewPage() {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="text-3xl font-bold text-green-600">{sharingEnabled}</p>
+            <p className="text-3xl font-bold text-primary">{sharingEnabled}</p>
             <p className="text-xs text-muted-foreground">{sharingDisabled} opted out</p>
           </CardContent>
         </Card>
