@@ -220,6 +220,72 @@ export async function updateEvent(id: string, formData: Partial<EventFormData>) 
   return data as Event;
 }
 
+/**
+ * Append a timestamped entry to events.in_service_notes (jsonb array).
+ * Used by the day-of card inline editor — operator drops a quick note
+ * mid-service and it lands on the event record with a timestamp.
+ *
+ * Append-only: the card can only add. Editing or deleting past
+ * entries happens on the events page (advanced section, future).
+ */
+export async function appendInServiceNote(eventId: string, text: string) {
+  const trimmed = text.trim();
+  if (!trimmed) throw new Error("Note text required");
+
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) throw new Error("Not authenticated");
+
+  // Read-modify-write — Supabase doesn't expose jsonb_array_append on
+  // the JS client. RLS keeps this scoped to the operator's own row.
+  const { data: current, error: readErr } = await supabase
+    .from("events")
+    .select("in_service_notes")
+    .eq("id", eventId)
+    .eq("user_id", user.id)
+    .single();
+  if (readErr) throw new Error(readErr.message);
+
+  const existing = Array.isArray(current?.in_service_notes)
+    ? (current.in_service_notes as { timestamp: string; text: string }[])
+    : [];
+  const next = [...existing, { timestamp: new Date().toISOString(), text: trimmed }];
+
+  const { error: writeErr } = await supabase
+    .from("events")
+    .update({ in_service_notes: next })
+    .eq("id", eventId)
+    .eq("user_id", user.id);
+  if (writeErr) throw new Error(writeErr.message);
+
+  revalidatePath("/dashboard");
+  return next;
+}
+
+/**
+ * Set events.content_capture_notes — free-form scratchpad for B-roll
+ * moments, story ideas, photo references. Edited (not appended);
+ * latest write wins.
+ */
+export async function updateContentCapture(eventId: string, text: string) {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) throw new Error("Not authenticated");
+
+  const { error } = await supabase
+    .from("events")
+    .update({ content_capture_notes: text || null })
+    .eq("id", eventId)
+    .eq("user_id", user.id);
+  if (error) throw new Error(error.message);
+
+  revalidatePath("/dashboard");
+}
+
 export async function deleteEvent(id: string) {
   const supabase = await createClient();
   const {

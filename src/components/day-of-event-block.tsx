@@ -27,6 +27,8 @@ import {
 } from "@/lib/weather";
 import { wallclockInZoneToUtcMs } from "@/lib/wallclock-tz";
 import { SetupCountdown } from "@/components/setup-countdown";
+import { InServiceNotes } from "@/components/in-service-notes";
+import { ContentCapture } from "@/components/content-capture";
 
 interface Props {
   events: Event[];
@@ -534,6 +536,23 @@ export async function DayOfEventBlock({
             </div>
           )}
         </div>
+
+        {/* In-service notes + content capture render only on today's
+            event — they're operator-driven during the event itself.
+            Next-event / tomorrow cards strip these. */}
+        {isToday && (
+          <div className="space-y-4 pt-2 border-t border-border/40">
+            <InServiceNotes
+              eventId={event.id}
+              initialNotes={event.in_service_notes ?? []}
+              timezone={timezone}
+            />
+            <ContentCapture
+              eventId={event.id}
+              initialValue={event.content_capture_notes}
+            />
+          </div>
+        )}
         {/* TODO: events table has no organizer_name / organizer_phone /
             organizer_email columns — contact surface is joined from the
             contacts table via linked_event_names. If an event's
