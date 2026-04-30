@@ -52,7 +52,9 @@ export default async function AdminOverviewPage() {
     { count: activeThisWeek },
     { data: allProfiles },
     { data: invites },
+    { count: signupsCountIn30d },
     { data: signupsWithin30d },
+    { count: eventsCountIn30d },
     { data: eventsCreatedWithin30d },
     authListResult,
   ] = await Promise.all([
@@ -74,14 +76,36 @@ export default async function AdminOverviewPage() {
       .from("beta_invites")
       .select("id, redeemed_by"),
     // Platform metrics (Commit 8) — timestamp-only queries kept lean.
+    //
+    // Two queries per metric: a count-only headline (`head: true` so no
+    // rows are transferred) plus a row pull bumped to .limit(50000) for
+    // the daily-series chart. Without an explicit limit Supabase caps
+    // the row response at 1000, which made the headlines + chart
+    // plateau silently once the platform crossed 1000 signups or 1000
+    // events per 30-day window. 50k is generous against the current
+    // operator base but isn't pagination — when the platform genuinely
+    // approaches that ceiling, swap the row pull for a SQL group-by-day
+    // aggregation (or .range() pagination) so the chart computes
+    // server-side. Headline numbers are unaffected by the row cap
+    // because they come from the count queries below.
+    serviceClient
+      .from("profiles")
+      .select("*", { count: "exact", head: true })
+      .gte("created_at", thirtyDaysAgoStr),
     serviceClient
       .from("profiles")
       .select("created_at")
+      .gte("created_at", thirtyDaysAgoStr)
+      .limit(50000),
+    serviceClient
+      .from("events")
+      .select("*", { count: "exact", head: true })
       .gte("created_at", thirtyDaysAgoStr),
     serviceClient
       .from("events")
       .select("created_at")
-      .gte("created_at", thirtyDaysAgoStr),
+      .gte("created_at", thirtyDaysAgoStr)
+      .limit(50000),
     // auth.admin.listUsers for last_sign_in_at — perPage caps at 1000
     // per Supabase API; paginate if the user base ever crosses that.
     serviceClient.auth.admin.listUsers({ perPage: 1000 }),
@@ -125,8 +149,13 @@ export default async function AdminOverviewPage() {
 
   const signupsPerDay = buildDailySeries(signupsWithin30d);
   const eventsPerDay = buildDailySeries(eventsCreatedWithin30d);
-  const totalSignupsIn30d = (signupsWithin30d ?? []).length;
-  const totalEventsLoggedIn30d = (eventsCreatedWithin30d ?? []).length;
+  // Headline counts come from the dedicated count queries (head: true)
+  // so they're correct beyond the row-response cap. The buildDailySeries
+  // calls above still run on rows because per-day buckets need the
+  // timestamps; the row pulls are bumped to .limit(50000) to keep the
+  // chart accurate until pagination/SQL-aggregation is needed.
+  const totalSignupsIn30d = signupsCountIn30d ?? 0;
+  const totalEventsLoggedIn30d = eventsCountIn30d ?? 0;
 
   const activeUsers7d = (authListResult?.data?.users ?? []).filter((u) => {
     if (!u.last_sign_in_at) return false;
