@@ -199,7 +199,7 @@ export function UsersClient() {
         <Card>
           <CardHeader className="pb-2"><CardTitle className="text-sm text-muted-foreground font-normal">Onboarded</CardTitle></CardHeader>
           <CardContent>
-            <p className="text-2xl font-bold text-green-600">{onboardingDone}</p>
+            <p className="text-2xl font-bold text-primary">{onboardingDone}</p>
             <p className="text-xs text-muted-foreground">{totalUsers - onboardingDone} incomplete</p>
           </CardContent>
         </Card>
@@ -257,7 +257,7 @@ export function UsersClient() {
                           {user.business_name ?? <span className="text-muted-foreground italic">Unnamed</span>}
                         </Link>
                         {!user.onboarding_completed && (
-                          <div className="text-xs text-amber-600">Onboarding incomplete</div>
+                          <div className="text-xs text-muted-foreground">Onboarding incomplete</div>
                         )}
                       </td>
                       <td className="p-3 text-muted-foreground text-xs">
@@ -270,7 +270,7 @@ export function UsersClient() {
                         {user.event_count}
                       </td>
                       <td className="p-3 text-right font-mono">
-                        <span className={user.booked_count > 0 ? "text-green-600 font-medium" : "text-muted-foreground"}>
+                        <span className={user.booked_count > 0 ? "text-primary font-medium" : "text-muted-foreground"}>
                           {user.booked_count}
                         </span>
                       </td>
@@ -287,12 +287,12 @@ export function UsersClient() {
                       <td className="p-3">
                         <div className="flex items-center gap-1.5 flex-wrap">
                           {user.data_sharing_enabled ? (
-                            <Badge className="bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400 border-0 text-xs">Sharing</Badge>
+                            <Badge className="bg-primary/10 text-primary border-0 text-xs">Sharing</Badge>
                           ) : (
                             <Badge variant="outline" className="text-xs text-muted-foreground">Opted out</Badge>
                           )}
                           {user.stripe_customer_id && (
-                            <Badge variant="outline" className="text-xs text-blue-600 border-blue-200">Stripe</Badge>
+                            <Badge variant="outline" className="text-xs text-muted-foreground">Stripe</Badge>
                           )}
                           {user.last_payment_status === "payment_failed" && (
                             <Badge
@@ -330,7 +330,7 @@ export function UsersClient() {
                               <SelectItem value="premium">Premium</SelectItem>
                             </SelectContent>
                           </Select>
-                          {saved === user.id && <CheckCircle className="h-4 w-4 text-green-500 shrink-0" />}
+                          {saved === user.id && <CheckCircle className="h-4 w-4 text-primary shrink-0" />}
                         </div>
                       </td>
                       <td className="p-3 text-xs text-muted-foreground whitespace-nowrap">
@@ -342,7 +342,7 @@ export function UsersClient() {
                             <Button
                               variant="ghost"
                               size="sm"
-                              className="h-7 px-2 text-xs text-muted-foreground hover:text-blue-600"
+                              className="h-7 px-2 text-xs text-muted-foreground hover:text-primary"
                               disabled={extending === user.id}
                               title={user.trial_extended_until ? `Extended until ${formatDate(user.trial_extended_until)}` : "Extend trial period"}
                               onClick={() => handleExtendTrial(user.id, user.business_name ?? user.email ?? "")}
