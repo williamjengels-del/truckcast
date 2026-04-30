@@ -63,12 +63,14 @@ export function DunningBanner({ status, failureReason }: DunningBannerProps) {
     }
   }
 
-  // Shared palette — amber for soft-warning (payment_failed), destructive
-  // for hard-warning (past_due means Stripe's retry machinery gave up).
+  // Shared palette — brand-orange for soft-warning (payment_failed) is
+  // closer/urgency per Verdict #25 (operator needs to act before
+  // downgrade). past_due maps to --destructive (Stripe's retries gave
+  // up — genuine error state).
   const palette = isPastDue
     ? "border-destructive/40 bg-destructive/5 text-destructive dark:bg-destructive/10"
-    : "border-amber-300 bg-amber-50 text-amber-900 dark:border-amber-800/60 dark:bg-amber-950/20 dark:text-amber-200";
-  const iconColor = isPastDue ? "text-destructive" : "text-amber-600 dark:text-amber-400";
+    : "border-brand-orange/40 bg-brand-orange/5 text-foreground";
+  const iconColor = isPastDue ? "text-destructive" : "text-brand-orange";
 
   return (
     <div
