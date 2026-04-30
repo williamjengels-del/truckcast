@@ -410,6 +410,16 @@ export function EventForm({
       labor_cost: laborCost !== "" ? Number(laborCost) : undefined,
       other_costs: otherCosts !== "" ? Number(otherCosts) : undefined,
       notes: (form.get("notes") as string) || undefined,
+      // Day-of card v1 fields. parking_loadin_notes and special_menu_details
+      // are intentionally allowed to clear — empty string serializes to null
+      // in updateEvent's generic loop. menu_type defaults to "regular".
+      parking_loadin_notes:
+        (form.get("parking_loadin_notes") as string | null) ?? undefined,
+      menu_type: ((form.get("menu_type") as string) || "regular") as
+        | "regular"
+        | "special",
+      special_menu_details:
+        (form.get("special_menu_details") as string | null) ?? undefined,
       latitude: suggestedLat ?? undefined,
       longitude: suggestedLon ?? undefined,
       cancellation_reason: cancellationReason || null,
@@ -1064,6 +1074,50 @@ export function EventForm({
                   placeholder="Any additional notes..."
                   rows={3}
                 />
+              </div>
+
+              {/* Day-of card v1 fields — surfaced on the dashboard
+                  cockpit. All optional; the form stays light for
+                  first-time operators. */}
+              <div className="space-y-2">
+                <Label htmlFor="parking_loadin_notes">Parking & load-in notes</Label>
+                <Textarea
+                  id="parking_loadin_notes"
+                  name="parking_loadin_notes"
+                  defaultValue={initialData?.parking_loadin_notes ?? ""}
+                  placeholder="Where to pull in, gate codes, who to text on arrival..."
+                  rows={2}
+                />
+                <p className="text-xs text-muted-foreground">
+                  Shows under the address on your day-of dashboard card.
+                </p>
+              </div>
+
+              <div className="grid gap-2 sm:grid-cols-[200px_1fr]">
+                <div className="space-y-2">
+                  <Label htmlFor="menu_type">Menu</Label>
+                  <Select
+                    name="menu_type"
+                    defaultValue={initialData?.menu_type ?? "regular"}
+                  >
+                    <SelectTrigger id="menu_type">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="regular">Regular menu</SelectItem>
+                      <SelectItem value="special">Special menu</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="special_menu_details">Special menu details</Label>
+                  <Input
+                    id="special_menu_details"
+                    name="special_menu_details"
+                    defaultValue={initialData?.special_menu_details ?? ""}
+                    placeholder="Short summary or link (PDF, Google Doc, etc.)"
+                  />
+                </div>
               </div>
             </>
           )}

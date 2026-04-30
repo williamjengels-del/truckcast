@@ -45,6 +45,11 @@ export type EventFormData = {
    *  both create and update flows. Empty string serializes to null in
    *  updateEvent's generic for-loop. */
   caused_by_event_id?: string | null;
+  /** Day-of card v1 (migration 20260430000001). All optional; defaults
+   *  on the column side ('regular' for menu_type, [] for in_service_notes). */
+  parking_loadin_notes?: string | null;
+  menu_type?: "regular" | "special";
+  special_menu_details?: string | null;
 };
 
 export async function createEvent(formData: EventFormData) {
@@ -125,6 +130,15 @@ export async function createEvent(formData: EventFormData) {
   if (formData.pos_source) insertData.pos_source = formData.pos_source;
   if (formData.cancellation_reason) insertData.cancellation_reason = formData.cancellation_reason;
   if (formData.caused_by_event_id) insertData.caused_by_event_id = formData.caused_by_event_id;
+  // Day-of card v1 fields. menu_type column has a NOT NULL DEFAULT
+  // 'regular', so omitting it on insert is fine — only persist when the
+  // operator explicitly picks "special" or fills the textarea.
+  if (formData.parking_loadin_notes)
+    insertData.parking_loadin_notes = formData.parking_loadin_notes;
+  if (formData.menu_type && formData.menu_type !== "regular")
+    insertData.menu_type = formData.menu_type;
+  if (formData.special_menu_details)
+    insertData.special_menu_details = formData.special_menu_details;
 
   const { data, error } = await supabase
     .from("events")
