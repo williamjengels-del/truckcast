@@ -299,6 +299,10 @@ interface ListViewProps {
   sorted: Event[];
   weatherMap: Map<string, WeatherForecast>;
   today: string;
+  // id → event_name lookup so cancelled+sold_out rows that carry a
+  // caused_by_event_id can render "Carry-over from <name>" without
+  // an extra fetch. Built in EventsClient.
+  eventNameById: Map<string, string>;
   // Handlers
   handleTabChange: (tab: TabMode) => void;
   handleSort: (field: SortField) => void;
@@ -331,6 +335,7 @@ function ListView({
   sorted,
   weatherMap,
   today,
+  eventNameById,
   handleTabChange,
   handleSort,
   handleDuplicate,
@@ -338,6 +343,11 @@ function ListView({
   handleQuickBook,
   handleDismiss,
 }: ListViewProps) {
+  function carryOverLabel(event: Event): string | null {
+    if (!event.caused_by_event_id) return null;
+    const name = eventNameById.get(event.caused_by_event_id);
+    return name ? `Carry-over from ${name}` : "Carry-over from earlier event";
+  }
   return (
     <>
       {/* All / Upcoming / Unbooked / Past / Needs Attention Tabs */}
@@ -520,8 +530,15 @@ function ListView({
                           </span>
                           {event.cancellation_reason && (
                             <Badge variant="outline" className="text-[10px] text-red-600 border-red-300 dark:text-red-400 dark:border-red-700">
-                              Cancelled
+                              {event.cancellation_reason === "sold_out" && event.caused_by_event_id
+                                ? "Sold out"
+                                : "Cancelled"}
                             </Badge>
+                          )}
+                          {event.cancellation_reason === "sold_out" && event.caused_by_event_id && (
+                            <span className="text-[10px] text-muted-foreground italic">
+                              {carryOverLabel(event) ?? ""}
+                            </span>
                           )}
                           {!event.booked && !event.cancellation_reason && (
                             <Badge variant="outline" className="text-[10px]">Unbooked</Badge>
@@ -537,12 +554,20 @@ function ListView({
                         <ForecastVsActual event={event} today={today} />
                       </div>
                       <div className="text-right shrink-0">
-                        <div className="text-sm font-semibold tabular-nums">
-                          {formatCurrency(displaySales)}
-                          {isCatering && (event.invoice_revenue ?? 0) > 0 && (
-                            <span className="text-[10px] text-brand-teal ml-1">inv</span>
-                          )}
-                        </div>
+                        {event.cancellation_reason === "sold_out" && event.caused_by_event_id ? (
+                          // Linked carry-over — suppress the "$0" headline; the
+                          // "Sold out · Carry-over from X" line above carries
+                          // the meaning. Stats engine excludes this row from
+                          // accuracy denominators (PR b).
+                          <div className="text-sm font-medium text-muted-foreground">—</div>
+                        ) : (
+                          <div className="text-sm font-semibold tabular-nums">
+                            {formatCurrency(displaySales)}
+                            {isCatering && (event.invoice_revenue ?? 0) > 0 && (
+                              <span className="text-[10px] text-brand-teal ml-1">inv</span>
+                            )}
+                          </div>
+                        )}
                         {event.event_date >= today && event.forecast_sales && (
                           <div className="mt-1">
                             <ForecastInline event={event} />
@@ -683,8 +708,15 @@ function ListView({
                       {formatDate(event.event_date)}
                       {event.cancellation_reason && (
                         <Badge variant="outline" className="ml-2 text-xs text-red-600 border-red-300 dark:text-red-400 dark:border-red-700">
-                          Cancelled
+                          {event.cancellation_reason === "sold_out" && event.caused_by_event_id
+                            ? "Sold out"
+                            : "Cancelled"}
                         </Badge>
+                      )}
+                      {event.cancellation_reason === "sold_out" && event.caused_by_event_id && (
+                        <span className="ml-2 text-xs text-muted-foreground italic">
+                          {carryOverLabel(event) ?? ""}
+                        </span>
                       )}
                       {!event.booked && !event.cancellation_reason && (
                         <Badge variant="outline" className="ml-2 text-xs">
@@ -708,7 +740,9 @@ function ListView({
                       {event.location ?? event.city ?? "—"}
                     </TableCell>
                     <TableCell className="text-right font-medium">
-                      {event.event_mode === "catering" && (event.invoice_revenue ?? 0) > 0 ? (
+                      {event.cancellation_reason === "sold_out" && event.caused_by_event_id ? (
+                        <span className="text-muted-foreground">—</span>
+                      ) : event.event_mode === "catering" && (event.invoice_revenue ?? 0) > 0 ? (
                         <span title={`Invoice: ${formatCurrency(event.invoice_revenue)}\nOn-site: ${formatCurrency(event.net_sales)}`}>
                           {formatCurrency((event.net_sales ?? 0) + (event.invoice_revenue ?? 0))}
                           <span className="text-[10px] text-brand-teal ml-1">inv</span>
@@ -1109,6 +1143,15 @@ export function EventsClient({ initialEvents, userId = "", businessName = "", us
       ].sort((a, b) => b - a),
     [initialEvents]
   );
+
+  // id → event_name lookup so cancelled+sold_out rows that carry a
+  // caused_by_event_id can render "carry-over from <name>" without an
+  // extra fetch. Passed into ListView; the render-side helper lives there.
+  const eventNameById = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const e of initialEvents) m.set(e.id, e.event_name);
+    return m;
+  }, [initialEvents]);
 
   // Split into all / upcoming (booked) / unbooked (future) / past / past_unbooked / flagged / cancelled.
   //
@@ -2115,6 +2158,7 @@ export function EventsClient({ initialEvents, userId = "", businessName = "", us
             sorted={sorted}
             weatherMap={weatherMap}
             today={today}
+            eventNameById={eventNameById}
             handleTabChange={handleTabChange}
             handleSort={handleSort}
             handleDuplicate={handleDuplicate}

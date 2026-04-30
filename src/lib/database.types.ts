@@ -124,7 +124,8 @@ export interface Event {
    *  (e.g., Saturday sold out → Sunday cancelled with sold_out reason and
    *  caused_by_event_id pointing at Saturday). Migration 20260429000004
    *  adds the FK with ON DELETE SET NULL. Stats engine excludes rows
-   *  with this set from forecast accuracy denominators (PR b). */
+   *  with this set from forecast accuracy denominators (PR b). Display
+   *  layer renders "Sold out (carry-over from X)" instead of "$0 sales." */
   caused_by_event_id?: string | null;
   created_at: string;
   updated_at: string;
