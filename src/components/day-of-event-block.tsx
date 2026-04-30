@@ -26,9 +26,11 @@ import {
   type HourlyWeatherEntry,
 } from "@/lib/weather";
 import { wallclockInZoneToUtcMs } from "@/lib/wallclock-tz";
+import { findSalesComparable } from "@/lib/sales-pace";
 import { SetupCountdown } from "@/components/setup-countdown";
 import { InServiceNotes } from "@/components/in-service-notes";
 import { ContentCapture } from "@/components/content-capture";
+import { SalesPaceBar } from "@/components/sales-pace-bar";
 
 interface Props {
   events: Event[];
@@ -197,7 +199,7 @@ export async function DayOfEventBlock({
   const event = isToday ? todaysEvents[0] : bookedFuture[0];
   const additionalTodayCount = isToday ? todaysEvents.length - 1 : 0;
 
-  const [weather, contactsRes, hdrs] = await Promise.all([
+  const [weather, contactsRes, hdrs, comparable] = await Promise.all([
     // Hourly only fetched for paid tiers — Starter sees daily-only.
     resolveWeather(event, supabase, isPaidTier),
     supabase
@@ -212,6 +214,12 @@ export async function DayOfEventBlock({
       .order("quality_score", { ascending: false, nullsFirst: false })
       .order("created_at", { ascending: false }),
     headers(),
+    // Sales pace comparable — only on today's event (live feature per
+    // spec §12). Starter+ — comparison is to operator's own history,
+    // not a paid feature.
+    isToday
+      ? findSalesComparable(supabase, userId, event)
+      : Promise.resolve(null),
   ]);
 
   const allContacts = (contactsRes.data as Contact[] | null) ?? [];
@@ -536,6 +544,17 @@ export async function DayOfEventBlock({
             </div>
           )}
         </div>
+
+        {/* Sales pace bar — only on today's event. Hidden for catering
+            (compare-against-invoice is out of scope for v1). */}
+        {isToday && event.event_mode !== "catering" && (
+          <div className="pt-2 border-t border-border/40">
+            <SalesPaceBar
+              currentSales={event.net_sales ?? 0}
+              comparable={comparable}
+            />
+          </div>
+        )}
 
         {/* In-service notes + content capture render only on today's
             event — they're operator-driven during the event itself.
