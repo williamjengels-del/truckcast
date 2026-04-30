@@ -360,6 +360,7 @@ export default async function DashboardPage() {
           timezone={profile?.timezone ?? "America/Chicago"}
           supabase={scopedClient}
           userId={scopedUserId}
+          subscriptionTier={profile?.subscription_tier ?? "starter"}
         />
       )}
 

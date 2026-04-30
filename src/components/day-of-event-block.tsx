@@ -5,17 +5,26 @@ import {
   Clock,
   CloudRain,
   MapPin,
+  Menu as MenuIcon,
   Phone,
   Mail,
   MessageSquare,
   Plus,
   Thermometer,
+  Wind,
 } from "lucide-react";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import type { Event, Contact } from "@/lib/database.types";
-import { geocodeCity, getWeatherForEvent } from "@/lib/weather";
+import type { Event, Contact, SubscriptionTier } from "@/lib/database.types";
+import {
+  geocodeCity,
+  getWeatherForEvent,
+  getHourlyWeatherForEvent,
+  sliceHourlyToServiceWindow,
+  wmoCodeToCondition,
+  type HourlyWeatherEntry,
+} from "@/lib/weather";
 import { wallclockInZoneToUtcMs } from "@/lib/wallclock-tz";
 import { SetupCountdown } from "@/components/setup-countdown";
 
@@ -25,7 +34,10 @@ interface Props {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   supabase: SupabaseClient<any, "public", any>;
   userId: string;
+  subscriptionTier: SubscriptionTier;
 }
+
+const WIND_ALERT_THRESHOLD_MPH = 20; // Spec §5: canopy threshold.
 
 // "Today" as a YYYY-MM-DD string in the operator's timezone. Using
 // en-CA locale because it formats as ISO (YYYY-MM-DD), matching the
@@ -97,12 +109,14 @@ interface WeatherSnapshot {
   minTempF: number;
   precipitationIn: number;
   classification: string;
+  hourly: HourlyWeatherEntry[] | null;
 }
 
 async function resolveWeather(
   event: Event,
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  supabase: SupabaseClient<any, "public", any>
+  supabase: SupabaseClient<any, "public", any>,
+  fetchHourly: boolean
 ): Promise<WeatherSnapshot | null> {
   let lat = event.latitude;
   let lng = event.longitude;
@@ -113,17 +127,36 @@ async function resolveWeather(
     lng = coords.longitude;
   }
   if (lat == null || lng == null) return null;
-  const result = await getWeatherForEvent(lat, lng, event.event_date, supabase);
-  if (!result) return null;
+  // Daily + hourly run in parallel since both hit Supabase / Open-Meteo
+  // independently. Skipping the hourly call entirely for Starter
+  // saves a Supabase round-trip (and a possible Open-Meteo call) per
+  // dashboard render — this matters because the dashboard is the
+  // most-hit page in the app.
+  const [daily, hourly] = await Promise.all([
+    getWeatherForEvent(lat, lng, event.event_date, supabase),
+    fetchHourly
+      ? getHourlyWeatherForEvent(lat, lng, event.event_date, supabase)
+      : Promise.resolve(null),
+  ]);
+  if (!daily) return null;
   return {
-    maxTempF: result.data.maxTempF,
-    minTempF: result.data.minTempF,
-    precipitationIn: result.data.precipitationIn,
-    classification: result.classification,
+    maxTempF: daily.data.maxTempF,
+    minTempF: daily.data.minTempF,
+    precipitationIn: daily.data.precipitationIn,
+    classification: daily.classification,
+    hourly,
   };
 }
 
-export async function DayOfEventBlock({ events, timezone, supabase, userId }: Props) {
+export async function DayOfEventBlock({
+  events,
+  timezone,
+  supabase,
+  userId,
+  subscriptionTier,
+}: Props) {
+  const isPaidTier = subscriptionTier === "pro" || subscriptionTier === "premium";
+  const isPremium = subscriptionTier === "premium";
   const today = todayInTz(timezone);
 
   const bookedFuture = events
@@ -163,7 +196,8 @@ export async function DayOfEventBlock({ events, timezone, supabase, userId }: Pr
   const additionalTodayCount = isToday ? todaysEvents.length - 1 : 0;
 
   const [weather, contactsRes, hdrs] = await Promise.all([
-    resolveWeather(event, supabase),
+    // Hourly only fetched for paid tiers — Starter sees daily-only.
+    resolveWeather(event, supabase, isPaidTier),
     supabase
       .from("contacts")
       .select("id, name, phone, email, linked_event_names, quality_score, created_at")
@@ -194,6 +228,21 @@ export async function DayOfEventBlock({ events, timezone, supabase, userId }: Pr
     isToday && event.setup_time
       ? wallclockInZoneToUtcMs(event.event_date, event.setup_time, timezone)
       : null;
+  // Service-window-scoped hourly slice + wind alert derivation.
+  // Both depend on the operator having an hourly fetch (Pro+) AND a
+  // start_time on the event (so we know which hours are "service").
+  // Wind alert is Premium-only per the locked tier matrix.
+  const serviceHourly: HourlyWeatherEntry[] | null =
+    weather?.hourly && (event.start_time || event.end_time)
+      ? sliceHourlyToServiceWindow(weather.hourly, event.start_time, event.end_time)
+      : null;
+  const windAlertMaxMph: number | null =
+    isPremium && serviceHourly && serviceHourly.length > 0
+      ? Math.max(...serviceHourly.map((h) => h.windMph))
+      : null;
+  const showWindAlert =
+    windAlertMaxMph !== null && windAlertMaxMph >= WIND_ALERT_THRESHOLD_MPH;
+
   // Match the existing Needs Attention convention: route to the
   // flagged tab, where the SalesEntryDialog opens on row click.
   // Only surface the action when there's something to log — today's
@@ -311,9 +360,11 @@ export async function DayOfEventBlock({ events, timezone, supabase, userId }: Pr
           )}
 
           {weather && (
-            <div className="flex items-start gap-2 text-sm">
+            <div className="flex items-start gap-2 text-sm" data-testid="day-of-event-weather">
               <Thermometer className="h-4 w-4 text-muted-foreground shrink-0 mt-0.5" />
-              <div>
+              <div className="min-w-0">
+                {/* Daily high/low + classification — shown on every tier
+                    as the always-visible summary. */}
                 <p>
                   <span className="font-medium">{Math.round(weather.maxTempF)}°</span>
                   <span className="text-muted-foreground"> / </span>
@@ -326,10 +377,111 @@ export async function DayOfEventBlock({ events, timezone, supabase, userId }: Pr
                     {weather.precipitationIn.toFixed(2)}&quot; precip
                   </p>
                 )}
+
+                {/* Pro+: single-line service-window summary. Hourly
+                    range of temps + most-common condition during
+                    service hours. */}
+                {isPaidTier && serviceHourly && serviceHourly.length > 0 && (
+                  <p
+                    className="text-xs text-muted-foreground mt-1"
+                    data-testid="day-of-event-weather-service-window"
+                  >
+                    Service{" "}
+                    {formatTimeHHMM(event.start_time) ?? "—"}–
+                    {formatTimeHHMM(event.end_time) ?? "—"}:{" "}
+                    {Math.round(Math.min(...serviceHourly.map((h) => h.tempF)))}–
+                    {Math.round(Math.max(...serviceHourly.map((h) => h.tempF)))}°,{" "}
+                    {wmoCodeToCondition(
+                      // Use the modal weather code in the window.
+                      serviceHourly
+                        .map((h) => h.weatherCode)
+                        .sort(
+                          (a, b) =>
+                            serviceHourly.filter((h) => h.weatherCode === b).length -
+                            serviceHourly.filter((h) => h.weatherCode === a).length
+                        )[0] ?? 0
+                    ).toLowerCase()}
+                  </p>
+                )}
+
+                {/* Premium: hour-by-hour breakdown grid. */}
+                {isPremium && serviceHourly && serviceHourly.length > 0 && (
+                  <div
+                    className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-xs"
+                    data-testid="day-of-event-weather-hourly"
+                  >
+                    {serviceHourly.map((h) => (
+                      <div key={h.hour} className="flex flex-col items-center min-w-[2.75rem]">
+                        <span className="text-muted-foreground">
+                          {h.hour === 0
+                            ? "12a"
+                            : h.hour < 12
+                            ? `${h.hour}a`
+                            : h.hour === 12
+                            ? "12p"
+                            : `${h.hour - 12}p`}
+                        </span>
+                        <span className="font-medium">{Math.round(h.tempF)}°</span>
+                        {h.windMph >= WIND_ALERT_THRESHOLD_MPH && (
+                          <span className="text-destructive font-medium">
+                            {Math.round(h.windMph)}mph
+                          </span>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
-              {/* TODO: add forecast at start-time hour when hourly weather
-                  fetch is wired in — current server helper returns daily
-                  high/low/precip only. */}
+            </div>
+          )}
+
+          {/* Wind alert — Premium only, surfaces above weather row
+              when any service hour exceeds the canopy threshold. */}
+          {showWindAlert && (
+            <div
+              className="flex items-start gap-2 text-sm sm:col-span-2 -mt-1 rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2"
+              data-testid="day-of-event-wind-alert"
+            >
+              <Wind className="h-4 w-4 text-destructive shrink-0 mt-0.5" />
+              <p className="text-sm font-medium text-destructive">
+                Wind {Math.round(windAlertMaxMph!)}mph during service — secure canopy
+              </p>
+            </div>
+          )}
+
+          {/* Menu indicator — only surfaces when not the regular menu.
+              "Regular menu" is the default + the assumed state, so
+              showing a "Regular" badge would just be visual noise. */}
+          {event.menu_type === "special" && (
+            <div
+              className="flex items-start gap-2 text-sm min-w-0"
+              data-testid="day-of-event-menu-special"
+            >
+              <MenuIcon className="h-4 w-4 text-orange-700 dark:text-orange-400 shrink-0 mt-0.5" />
+              <div className="min-w-0">
+                <p className="font-medium text-orange-700 dark:text-orange-400">
+                  Special menu
+                </p>
+                {event.special_menu_details && (
+                  // Render as link if it looks like a URL, otherwise
+                  // as plain text. Avoids surprising the operator
+                  // with a tap-target on free-text entries.
+                  /^https?:\/\//i.test(event.special_menu_details) ? (
+                    <a
+                      href={event.special_menu_details}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-xs text-primary hover:underline truncate block"
+                    >
+                      {event.special_menu_details}
+                    </a>
+                  ) : (
+                    <p className="text-xs text-muted-foreground truncate">
+                      {event.special_menu_details}
+                    </p>
+                  )
+                )}
+              </div>
             </div>
           )}
 
