@@ -132,7 +132,14 @@ export default async function DashboardLayout({
               You&apos;re managing <span className="font-bold">{managerBanner.ownerName}</span>&apos;s account
             </div>
           )}
-          <main className="flex-1 overflow-y-auto bg-muted/30 p-4 lg:p-6">
+          {/* min-w-0 + overflow-x-hidden on main: belt-and-suspenders
+              with min-w-0 on the column above. min-w-0 alone wasn't
+              enough on previews — wide content (events table) was
+              still escaping. overflow-x-hidden forces page content
+              to stay within main's width, which then forces nested
+              overflow-x-auto wrappers (the table) to scroll within
+              their card. */}
+          <main className="flex-1 overflow-y-auto overflow-x-hidden bg-muted/30 p-4 lg:p-6 min-w-0">
             <ErrorBoundary>
               {children}
             </ErrorBoundary>
