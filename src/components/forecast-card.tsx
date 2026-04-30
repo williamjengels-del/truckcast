@@ -3,7 +3,6 @@ import type { ForecastResult } from "@/lib/forecast-engine";
 import {
   computeForecastRange,
   dataDensityFromConfidence,
-  dataDensityPill,
   fixedRevenueAmount,
   forecastContextSentence,
   formatDollars,
@@ -39,13 +38,15 @@ export function ForecastCard({ event, forecast }: ForecastCardProps) {
 
   const primary = forecast?.forecast ?? event.forecast_sales ?? 0;
   const confidence = forecast?.confidence ?? event.forecast_confidence ?? null;
+  // Per 2026-04-29 operator decision (Julian): drop ALL three confidence
+  // pills (Calibrated / Building / Learning) for now. No badge ever — the
+  // engine's confidence framing isn't well-calibrated yet, so showing
+  // operators a categorical label that can be wrong does more harm than
+  // good. Density is still computed because the anchor sentence on
+  // low-confidence forecasts uses it. dataDensityPill() helper is kept
+  // in forecast-display.ts (unused here today) for future re-render
+  // when calibration improves.
   const density = dataDensityFromConfidence(confidence);
-  const pill = dataDensityPill(density);
-  // Per 2026-04-29 operator feedback: don't render the "Learning" pill —
-  // it framed thin-data forecasts as the model's failure rather than a
-  // matter-of-fact next step. For "Calibrated" / "Building" the pill still
-  // earns its space; for "learning" we substitute an anchor sentence below.
-  const showPill = density !== "learning";
 
   // Range: prefer live computation when we have a forecast result (so /forecasts
   // stays in sync with events-list without waiting for recalc). Fall back to
@@ -62,7 +63,7 @@ export function ForecastCard({ event, forecast }: ForecastCardProps) {
     high = event.forecast_high;
   }
 
-  // Low-confidence anchor sentence stands in for the dropped "Learning" pill.
+  // Low-confidence anchor sentence — softer landing for thin-data forecasts.
   // Renders below the range; the standard `forecastContextSentence` is hidden
   // in the learning case to avoid stacking two history-grounded sentences.
   const anchor =
@@ -81,21 +82,11 @@ export function ForecastCard({ event, forecast }: ForecastCardProps) {
         {formatDollars(primary)} <span className="text-sm font-normal text-muted-foreground">expected</span>
       </div>
 
-      <div className="flex items-center flex-wrap gap-x-2 gap-y-1 text-sm text-muted-foreground">
-        {low !== null && high !== null && (
-          <span>{formatForecastRange(low, high)}</span>
-        )}
-        {low !== null && high !== null && showPill && (
-          <span aria-hidden>·</span>
-        )}
-        {showPill && (
-          <span
-            className={`inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-medium ${pill.className}`}
-          >
-            {pill.label}
-          </span>
-        )}
-      </div>
+      {low !== null && high !== null && (
+        <div className="text-sm text-muted-foreground">
+          {formatForecastRange(low, high)}
+        </div>
+      )}
 
       {anchor && (
         <p className="text-sm text-muted-foreground">{anchor}</p>
@@ -158,9 +149,10 @@ function FixedRevenueCard({ event }: { event: Event }) {
   );
 }
 
-// Compact single-line variant for dense tables/lists. Shares terms with the
-// full card (same pill labels, same range format) but drops the context
-// sentence, disclosure, and primary-value framing.
+// Compact single-line variant for dense tables/lists. Shares the range
+// format with the full card; drops the context sentence, disclosure, and
+// primary-value framing. With confidence pills dropped fleet-wide
+// (2026-04-29), the inline view is now just the range.
 interface ForecastInlineProps {
   event: Event;
   forecast?: ForecastResult | null;
@@ -181,14 +173,6 @@ export function ForecastInline({ event, forecast }: ForecastInlineProps) {
     return <span className="text-muted-foreground">—</span>;
   }
 
-  const confidence = forecast?.confidence ?? event.forecast_confidence ?? null;
-  const density = dataDensityFromConfidence(confidence);
-  const pill = dataDensityPill(density);
-  // Drop pill in learning state (operator feedback 2026-04-29). Inline
-  // surfaces don't have room for the anchor sentence, so the row stays
-  // clean — just the range, no badge.
-  const showPill = density !== "learning";
-
   let low: number | null = null;
   let high: number | null = null;
   if (forecast) {
@@ -201,7 +185,7 @@ export function ForecastInline({ event, forecast }: ForecastInlineProps) {
   }
 
   return (
-    <div className="leading-tight space-y-0.5">
+    <div className="leading-tight">
       {low !== null && high !== null ? (
         <div className="tabular-nums">
           {formatDollars(low)}–{formatDollars(high)}
@@ -209,15 +193,6 @@ export function ForecastInline({ event, forecast }: ForecastInlineProps) {
       ) : (
         <div className="tabular-nums">
           {formatDollars(forecast?.forecast ?? event.forecast_sales ?? 0)}
-        </div>
-      )}
-      {showPill && (
-        <div className="flex items-center gap-1 flex-wrap">
-          <span
-            className={`inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-medium ${pill.className}`}
-          >
-            {pill.label}
-          </span>
         </div>
       )}
     </div>
