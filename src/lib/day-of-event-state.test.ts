@@ -245,6 +245,29 @@ describe("computeDayOfState", () => {
     expect(state.needsWrapUp).toBeNull();
   });
 
+  it("handles zero-duration event without crashing (Ellisville Concert spec case)", () => {
+    // Spec test case: setup_time = start_time = end_time = 23:02.
+    // VendCast schema can't reproduce the Airtable storage corruption,
+    // but the operator may type all three as the same value. Card
+    // should mark as ended at exactly 23:02 (end >= now), no NaN /
+    // division-by-zero / negative countdown surfacing.
+    const events = [
+      makeEvent({
+        id: "ellisville",
+        event_date: "2026-05-28",
+        setup_time: "23:02",
+        start_time: "23:02",
+        end_time: "23:02",
+      }),
+    ];
+    // Now: 23:03 — one minute past zero-duration end.
+    const nowMs = wallclockInZoneToUtcMs("2026-05-28", "23:03", TZ)!;
+    const state = computeDayOfState(events, "2026-05-28", nowMs, TZ);
+    expect(state.kind).toBe("none");
+    expect(state.needsWrapUp?.id).toBe("ellisville");
+    expect(state.endedTodayIds).toContain("ellisville");
+  });
+
   it("handles events with end_time crossing into next UTC day", () => {
     // Spec test case: Food Truck Friday 2026-05-01 8 PM CDT end =
     // 2026-05-02 01:00 UTC. Event date = 2026-05-01.
