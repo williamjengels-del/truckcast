@@ -66,6 +66,18 @@ import type { Event } from "@/lib/database.types";
 import type { EventFormData } from "@/app/dashboard/events/actions";
 import { DataImportTrigger } from "@/components/data-import-guide";
 import { ForecastInline } from "@/components/forecast-card";
+import {
+  CHIP_CATALOG,
+  TAB_DEFAULT_CHIPS,
+  type EventsTab,
+  applyChips,
+  toggleChip,
+  chipsToParam,
+  chipsFromParam,
+  eventInTabScope,
+  legacyUrlMapping,
+  isValidTab,
+} from "@/lib/events-chips";
 
 type SortField =
   | "event_date"
@@ -79,7 +91,13 @@ type SortField =
   | "net_profit";
 type SortDirection = "asc" | "desc";
 type ViewMode = "list" | "split" | "calendar";
-type TabMode = "all" | "upcoming" | "unbooked" | "past" | "past_unbooked" | "flagged" | "cancelled";
+
+// Chip-foundation refactor (2026-04-30): TabMode collapsed from 7
+// values to 4 (all/upcoming/past/needs_attention). Status filtering
+// (booked/unbooked/cancelled) and field filtering (missing-type, etc.)
+// move to chips. See src/lib/events-chips.ts. Tab type is the EventsTab
+// re-export so existing call sites still type-check.
+type TabMode = EventsTab;
 
 interface WeatherForecast {
   tempHigh: number;
@@ -274,10 +292,84 @@ const ForecastVsActual = React.memo(function ForecastVsActual({
   );
 });
 
+interface TabCounts {
+  all: number;
+  upcoming: number;
+  past: number;
+  needs_attention: number;
+}
+
+// Chip strip — renders below the tab nav. Categories visible per tab:
+//   - Status (Booked / Unbooked / Cancelled): every tab
+//   - Field (Missing type / weather / location / sales): Needs attention only
+// Mutual-exclusivity within Status is enforced at toggle time in the
+// chip module (toggleChip). Multiple field chips compose AND.
+const ChipStrip = React.memo(function ChipStrip({
+  activeTab,
+  selectedChips,
+  onToggle,
+  onClear,
+}: {
+  activeTab: EventsTab;
+  selectedChips: ReadonlySet<string>;
+  onToggle: (chipId: string) => void;
+  onClear: () => void;
+}) {
+  const visibleChips = CHIP_CATALOG.filter((c) => {
+    if (c.category === "status") return true;
+    if (c.category === "field") return activeTab === "needs_attention";
+    return true;
+  }).filter((c) => {
+    // Hide the placeholder cancellation-reason chip — predicate is
+    // structurally vacuous today (see chip module). Surface only when
+    // the schema actually supports the case.
+    return c.id !== "missing-cancellation-reason";
+  });
+
+  const hasAny = selectedChips.size > 0;
+
+  return (
+    <div className="flex flex-wrap items-center gap-1.5 py-2 border-b">
+      {visibleChips.map((c) => {
+        const selected = selectedChips.has(c.id);
+        return (
+          <button
+            key={c.id}
+            type="button"
+            onClick={() => onToggle(c.id)}
+            data-testid={`chip-${c.id}`}
+            data-selected={selected}
+            className={
+              selected
+                ? "px-2.5 py-1 rounded-full text-xs font-medium bg-primary text-primary-foreground transition-colors"
+                : "px-2.5 py-1 rounded-full text-xs font-medium bg-muted text-muted-foreground hover:bg-muted-foreground/15 hover:text-foreground transition-colors"
+            }
+          >
+            {c.label}
+          </button>
+        );
+      })}
+      {hasAny && (
+        <button
+          type="button"
+          onClick={onClear}
+          className="ml-1 px-2 py-1 rounded-full text-xs font-medium text-muted-foreground hover:text-foreground transition-colors"
+          data-testid="chip-strip-clear"
+        >
+          Clear filters
+        </button>
+      )}
+    </div>
+  );
+});
+
 interface ListViewProps {
   // State
   activeTab: TabMode;
   setActiveTab: React.Dispatch<React.SetStateAction<TabMode>>;
+  selectedChips: ReadonlySet<string>;
+  handleChipToggle: (chipId: string) => void;
+  handleClearChips: () => void;
   sortField: SortField;
   setSortField: React.Dispatch<React.SetStateAction<SortField>>;
   sortDirection: SortDirection;
@@ -289,12 +381,7 @@ interface ListViewProps {
   setDuplicatingEvent: React.Dispatch<React.SetStateAction<Event | null>>;
   // Derived / memoized collections
   initialEvents: Event[];
-  upcomingEvents: Event[];
-  unbookedEvents: Event[];
-  pastEvents: Event[];
-  pastUnbookedEvents: Event[];
-  flaggedEvents: Event[];
-  cancelledEvents: Event[];
+  tabCounts: TabCounts;
   filtered: Event[];
   sorted: Event[];
   weatherMap: Map<string, WeatherForecast>;
@@ -315,6 +402,9 @@ interface ListViewProps {
 function ListView({
   activeTab,
   setActiveTab,
+  selectedChips,
+  handleChipToggle,
+  handleClearChips,
   sortField,
   setSortField,
   sortDirection,
@@ -325,12 +415,7 @@ function ListView({
   setSalesEvent,
   setDuplicatingEvent,
   initialEvents,
-  upcomingEvents,
-  unbookedEvents,
-  pastEvents,
-  pastUnbookedEvents,
-  flaggedEvents,
-  cancelledEvents,
+  tabCounts,
   filtered,
   sorted,
   weatherMap,
@@ -350,7 +435,12 @@ function ListView({
   }
   return (
     <>
-      {/* All / Upcoming / Unbooked / Past / Needs Attention Tabs */}
+      {/* 4-tab nav (chip-foundation refactor 2026-04-30):
+          All / Upcoming / Past / Needs attention. Status filtering
+          (booked/unbooked/cancelled) and field filtering moved to
+          chips. Tab counts include all events in tab scope BEFORE
+          chip refinement, so operators can see "how many total" vs
+          "how many after my filters." */}
       <div className="flex gap-1 border-b overflow-x-auto">
         <button
           className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${
@@ -360,7 +450,7 @@ function ListView({
           }`}
           onClick={() => handleTabChange("all")}
         >
-          All ({initialEvents.length})
+          All ({tabCounts.all})
         </button>
         <button
           className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${
@@ -370,17 +460,7 @@ function ListView({
           }`}
           onClick={() => handleTabChange("upcoming")}
         >
-          Upcoming ({upcomingEvents.length})
-        </button>
-        <button
-          className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${
-            activeTab === "unbooked"
-              ? "border-primary text-foreground"
-              : "border-transparent text-muted-foreground hover:text-foreground"
-          }`}
-          onClick={() => handleTabChange("unbooked")}
-        >
-          Unbooked ({unbookedEvents.length})
+          Upcoming ({tabCounts.upcoming})
         </button>
         <button
           className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${
@@ -390,48 +470,35 @@ function ListView({
           }`}
           onClick={() => handleTabChange("past")}
         >
-          Past ({pastEvents.length})
+          Past ({tabCounts.past})
         </button>
-        {pastUnbookedEvents.length > 0 && (
-          <button
-            className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${
-              activeTab === "past_unbooked"
-                ? "border-slate-500 text-slate-700 dark:text-slate-300"
-                : "border-transparent text-muted-foreground hover:text-foreground"
-            }`}
-            onClick={() => handleTabChange("past_unbooked")}
-          >
-            Past Unbooked ({pastUnbookedEvents.length})
-          </button>
-        )}
-        {flaggedEvents.length > 0 && (
+        {tabCounts.needs_attention > 0 && (
           <button
             className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors flex items-center gap-1.5 whitespace-nowrap ${
-              activeTab === "flagged"
+              activeTab === "needs_attention"
                 ? "border-brand-orange text-brand-orange"
                 : "border-transparent text-brand-orange/80 hover:text-brand-orange"
             }`}
-            onClick={() => handleTabChange("flagged")}
+            onClick={() => handleTabChange("needs_attention")}
           >
-            Needs Attention
+            Needs attention
             <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-brand-orange px-1.5 text-[10px] font-bold text-white">
-              {flaggedEvents.length}
+              {tabCounts.needs_attention}
             </span>
           </button>
         )}
-        {cancelledEvents.length > 0 && (
-          <button
-            className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${
-              activeTab === "cancelled"
-                ? "border-slate-500 text-slate-700 dark:text-slate-300"
-                : "border-transparent text-muted-foreground hover:text-foreground"
-            }`}
-            onClick={() => handleTabChange("cancelled")}
-          >
-            Cancelled ({cancelledEvents.length})
-          </button>
-        )}
       </div>
+
+      {/* Chip strip — refines within the active tab. Status chips
+          (Booked / Unbooked inquiry / Cancelled) on every tab; field
+          chips (Missing event type / weather / location / sales) on
+          Needs attention only. */}
+      <ChipStrip
+        activeTab={activeTab}
+        selectedChips={selectedChips}
+        onToggle={handleChipToggle}
+        onClear={handleClearChips}
+      />
 
       {/*
        * Filter bar (search + year + mode + delete all) was lifted out
@@ -448,29 +515,27 @@ function ListView({
        * usable search without that big refactor.
        */}
 
-      {/* Past Unbooked explanation banner */}
-      {activeTab === "past_unbooked" && pastUnbookedEvents.length > 0 && (
-        <div className="rounded-lg border border-slate-200 bg-slate-50 dark:border-slate-700 dark:bg-slate-900/30 px-4 py-3 text-sm text-slate-700 dark:text-slate-300">
-          These events are in your history but were never marked as booked. If they actually happened and you have sales data, click <strong>Edit</strong> → mark as booked → log the sales. If they were tentatives that fell through, you can leave or delete them.
-        </div>
-      )}
-
       {/* Events Table */}
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Calendar className="h-5 w-5" />
-            {activeTab === "all" ? "All Events" : activeTab === "upcoming" ? "Upcoming Events" : activeTab === "unbooked" ? "Unbooked Events" : activeTab === "past_unbooked" ? "Past Unbooked Events" : activeTab === "flagged" ? "Events Needing Sales Data" : "Past Events"}
+            {activeTab === "all"
+              ? "All Events"
+              : activeTab === "upcoming"
+              ? "Upcoming Events"
+              : activeTab === "past"
+              ? "Past Events"
+              : "Events Needing Attention"}
           </CardTitle>
-          {/* Flagged-tab explainer — spells out why events landed
-              here and what the three row-actions mean. Per-row badges
-              aren't needed because all flagged events share the same
-              cause (past + booked + no net_sales, see flaggedEvents
-              filter around line 360). If the filter ever grows to
-              cover other reasons, move the "why" to per-row chips. */}
-          {activeTab === "flagged" && (
+          {/* Needs-attention explainer — surfaces why events land here
+              and what the three row-actions mean. v1 of this tab keeps
+              the original missing-sales messaging since that's the
+              majority case; field chips above the table refine to
+              specific gaps when the operator needs them. */}
+          {activeTab === "needs_attention" && (
             <p className="text-sm text-muted-foreground mt-1">
-              Past events you confirmed but haven&apos;t logged sales for yet. Each row affects forecast accuracy — pick one:
+              Events with at least one missing field (event type, weather, location, sales, or cancellation reason). Use the chips above to narrow.
               <span className="block mt-1.5 space-y-0.5">
                 <span className="block">
                   <DollarSign className="h-3.5 w-3.5 inline-block mr-1 text-green-600 align-text-bottom" />
@@ -490,10 +555,24 @@ function ListView({
         </CardHeader>
         <CardContent>
           {filtered.length === 0 ? (
-            <div className="h-32 flex items-center justify-center text-muted-foreground">
-              {initialEvents.length === 0
-                ? "No events yet. Add your first event to get started."
-                : "No events match your search."}
+            <div className="h-32 flex flex-col items-center justify-center gap-3 text-muted-foreground" data-testid="events-empty-state">
+              {initialEvents.length === 0 ? (
+                <p>No events yet. Add your first event to get started.</p>
+              ) : selectedChips.size > 0 ? (
+                <>
+                  <p>No events match these filters.</p>
+                  <button
+                    type="button"
+                    onClick={handleClearChips}
+                    className="text-sm text-primary hover:underline"
+                    data-testid="events-empty-state-clear"
+                  >
+                    Clear filters
+                  </button>
+                </>
+              ) : (
+                <p>No events match your search.</p>
+              )}
             </div>
           ) : (
             <>
@@ -777,8 +856,19 @@ function ListView({
                     </TableCell>
                     <TableCell>
                       <div className="flex items-center gap-1 justify-end" onClick={(e) => e.stopPropagation()}>
-                        {/* Flagged tab: show dismiss options instead of standard actions */}
-                        {activeTab === "flagged" ? (
+                        {/* Needs-attention rows that match the missing-sales
+                            predicate get the dismiss/log-sales actions
+                            (Enter sales / Disrupted / Charity). Other rows
+                            in needs_attention (missing weather/location/type)
+                            get standard actions; tab change doesn't gate. */}
+                        {activeTab === "needs_attention" &&
+                        event.event_date < today &&
+                        event.booked &&
+                        !event.cancellation_reason &&
+                        event.net_sales === null &&
+                        !(event.event_mode === "catering" && event.invoice_revenue > 0) &&
+                        event.anomaly_flag !== "disrupted" &&
+                        event.fee_type !== "pre_settled" ? (
                           <>
                             <Button
                               variant="ghost"
@@ -917,11 +1007,12 @@ export function EventsClient({ initialEvents, userId = "", businessName = "", us
   const [bookingId, setBookingId] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<ViewMode>("split");
   const [activeTab, setActiveTab] = useState<TabMode>("upcoming");
-  // Optional ?missing= filter — fed by dashboard fill-gaps cards. Keeps the
-  // mental loop from "X events missing event type" → events page filtered to
-  // those rows. Cleared on tab change so chips don't quietly persist across
-  // navigation.
-  const [missingFilter, setMissingFilter] = useState<"type" | "weather" | "location" | null>(null);
+  // Selected chip IDs. Initialized from URL on mount + ?tab= effect
+  // below. Defaults per tab applied only when ?chips= is absent —
+  // operator deep-links preserve their selected chips.
+  const [selectedChips, setSelectedChips] = useState<Set<string>>(
+    () => new Set(TAB_DEFAULT_CHIPS.upcoming)
+  );
   const [calendarMonth, setCalendarMonth] = useState<Date>(() => {
     const now = new Date();
     return new Date(now.getFullYear(), now.getMonth(), 1);
@@ -976,32 +1067,59 @@ export function EventsClient({ initialEvents, userId = "", businessName = "", us
     }
   }, [searchParams]);
 
-  // Auto-switch tab if ?tab= is set in URL. Reset sort alongside so
-  // URL-driven tab changes land on the same default as click-driven ones
-  // (handleTabChange). Without this, direction stays stale when deep-
-  // linking to past/flagged etc. — e.g. ?tab=past on fresh mount keeps
-  // "asc" from the initial useState default and shows oldest first.
+  // URL → state sync. Two paths:
+  //   1. Modern: ?tab=<EventsTab>&chips=<comma list>
+  //   2. Legacy: ?tab=<7-tabmode>, ?missing=<field> (pre-chip URLs)
+  //
+  // Modern URL: parse tab + chips directly. ?chips= absent means "use
+  // tab's defaults" so a fresh /dashboard/events?tab=upcoming still
+  // pre-selects Booked. ?chips= present (even empty) means "operator
+  // explicitly cleared" — preserve as-is so the deep-link survives.
+  //
+  // Legacy URL: legacyUrlMapping returns the right tab + chips. We
+  // do NOT auto-rewrite the URL on legacy reads to avoid history
+  // churn — the next chip toggle will normalize it.
+  //
+  // Sort direction follows the tab default each time the tab actually
+  // changes (handleTabChange writes the URL; this effect re-reads
+  // and re-aligns sort).
   useEffect(() => {
-    const tab = searchParams.get("tab") as TabMode | null;
-    if (tab) {
-      setActiveTab(tab);
-      setSortField("event_date");
-      setSortDirection(
-        tab === "past" ||
-          tab === "past_unbooked" ||
-          tab === "flagged" ||
-          tab === "all" ||
-          tab === "cancelled"
-          ? "desc"
-          : "asc"
-      );
-    }
-    const missing = searchParams.get("missing");
-    if (missing === "type" || missing === "weather" || missing === "location") {
-      setMissingFilter(missing);
+    const rawTab = searchParams.get("tab");
+    const rawChips = searchParams.get("chips");
+    const rawMissing = searchParams.get("missing");
+
+    let tab: EventsTab;
+    let chips: Set<string>;
+
+    if (rawChips !== null) {
+      // Modern: ?chips= is the authoritative chip set.
+      tab = isValidTab(rawTab) ? rawTab : "upcoming";
+      chips = chipsFromParam(rawChips);
+    } else if (isValidTab(rawTab) && rawMissing === null) {
+      // Modern URL with no ?chips=, no legacy hint → apply tab defaults.
+      tab = rawTab;
+      chips = new Set(TAB_DEFAULT_CHIPS[tab]);
     } else {
-      setMissingFilter(null);
+      // Legacy URL — let the mapping resolve.
+      const mapped = legacyUrlMapping(rawTab, rawMissing);
+      if (mapped) {
+        tab = mapped.tab;
+        chips = mapped.chips;
+      } else {
+        // Nothing recognizable; default to upcoming.
+        tab = "upcoming";
+        chips = new Set(TAB_DEFAULT_CHIPS.upcoming);
+      }
     }
+
+    setActiveTab(tab);
+    setSelectedChips(chips);
+    setSortField("event_date");
+    setSortDirection(
+      tab === "past" || tab === "all" || tab === "needs_attention"
+        ? "desc"
+        : "asc"
+    );
   }, [searchParams]);
 
   function handleViewMode(mode: ViewMode) {
@@ -1160,10 +1278,9 @@ export function EventsClient({ initialEvents, userId = "", businessName = "", us
   // for upcoming-focused views, where the operator wants soonest at
   // the top (what's this week, next week, next month) rather than
   // the furthest-future date first. Re-sort upcoming + unbooked asc.
-  const cancelledEvents = useMemo(
-    () => initialEvents.filter((e) => !!e.cancellation_reason),
-    [initialEvents]
-  );
+  // Booked future events, soonest-first. Used externally (calendar
+  // share modal, dashboard nudges) — kept as a separate memo since
+  // those consumers don't need chip filtering.
   const upcomingEvents = useMemo(
     () =>
       initialEvents
@@ -1171,53 +1288,62 @@ export function EventsClient({ initialEvents, userId = "", businessName = "", us
         .sort((a, b) => a.event_date.localeCompare(b.event_date)),
     [initialEvents, today]
   );
-  const unbookedEvents = useMemo(
-    () =>
-      initialEvents
-        .filter((e) => e.event_date >= today && !e.booked && !e.cancellation_reason)
-        .sort((a, b) => a.event_date.localeCompare(b.event_date)),
+
+  // Tab-scoped: every event whose date / status matches the active
+  // tab's hard scope, BEFORE chip refinement. Counts shown in the tab
+  // bar are computed off these so operators see "what's there" not
+  // "what's left after my filters."
+  const tabScopedAll = useMemo(
+    () => initialEvents.filter((e) => eventInTabScope(e, "all", today)),
     [initialEvents, today]
   );
-  const pastEvents = useMemo(
-    () =>
-      initialEvents.filter(
-        (e) => e.event_date < today && e.booked && !e.cancellation_reason
-      ),
+  const tabScopedUpcoming = useMemo(
+    () => initialEvents.filter((e) => eventInTabScope(e, "upcoming", today)),
     [initialEvents, today]
   );
-  const pastUnbookedEvents = useMemo(
-    () =>
-      initialEvents.filter(
-        (e) => e.event_date < today && !e.booked && !e.cancellation_reason
-      ),
+  const tabScopedPast = useMemo(
+    () => initialEvents.filter((e) => eventInTabScope(e, "past", today)),
     [initialEvents, today]
   );
-  const flaggedEvents = useMemo(
+  const tabScopedNeedsAttention = useMemo(
     () =>
-      initialEvents.filter(
-        (e) =>
-          e.event_date < today &&
-          e.booked &&
-          !e.cancellation_reason &&                                   // cancelled events don't need sales logged
-          e.net_sales === null &&                                    // null only — $0 intentional (charity) is cleared by dismiss
-          !(e.event_mode === "catering" && e.invoice_revenue > 0) && // catering with invoice = not missing
-          e.anomaly_flag !== "disrupted" &&                          // disrupted = already dismissed
-          e.fee_type !== "pre_settled"                               // pre-settled = guaranteed payment, no sales entry needed
+      initialEvents.filter((e) =>
+        eventInTabScope(e, "needs_attention", today)
       ),
     [initialEvents, today]
   );
 
-  const activeEvents = useMemo(
-    () =>
-      activeTab === "all" ? initialEvents :
-      activeTab === "upcoming" ? upcomingEvents :
-      activeTab === "unbooked" ? unbookedEvents :
-      activeTab === "past_unbooked" ? pastUnbookedEvents :
-      activeTab === "flagged" ? flaggedEvents :
-      activeTab === "cancelled" ? cancelledEvents :
-      pastEvents,
-    [activeTab, initialEvents, upcomingEvents, unbookedEvents, pastUnbookedEvents, flaggedEvents, cancelledEvents, pastEvents]
+  const tabCounts: TabCounts = useMemo(
+    () => ({
+      all: tabScopedAll.length,
+      upcoming: tabScopedUpcoming.length,
+      past: tabScopedPast.length,
+      needs_attention: tabScopedNeedsAttention.length,
+    }),
+    [tabScopedAll, tabScopedUpcoming, tabScopedPast, tabScopedNeedsAttention]
   );
+
+  // The active list = tab-scoped events filtered through the chip
+  // composition (status chips OR field chips, AND-composed).
+  const activeEvents = useMemo(() => {
+    const scoped =
+      activeTab === "all"
+        ? tabScopedAll
+        : activeTab === "upcoming"
+        ? tabScopedUpcoming
+        : activeTab === "past"
+        ? tabScopedPast
+        : tabScopedNeedsAttention;
+    return applyChips(scoped, selectedChips, today);
+  }, [
+    activeTab,
+    selectedChips,
+    today,
+    tabScopedAll,
+    tabScopedUpcoming,
+    tabScopedPast,
+    tabScopedNeedsAttention,
+  ]);
 
   const filtered = useMemo(
     () =>
@@ -1230,23 +1356,17 @@ export function EventsClient({ initialEvents, userId = "", businessName = "", us
           new Date(e.event_date + "T00:00:00").getFullYear().toString() === yearFilter;
         const matchesMode =
           modeFilter === "all" || (e.event_mode ?? "food_truck") === modeFilter;
-        const matchesMissing =
-          missingFilter === null
-            ? true
-            : missingFilter === "type"
-              ? !e.event_type
-              : missingFilter === "weather"
-                ? !e.event_weather
-                : missingFilter === "location"
-                  ? !e.location && !e.city
-                  : true;
-        return matchesSearch && matchesYear && matchesMode && matchesMissing;
+        return matchesSearch && matchesYear && matchesMode;
       }),
-    [activeEvents, search, yearFilter, modeFilter, missingFilter]
+    [activeEvents, search, yearFilter, modeFilter]
   );
 
-  // Sort: upcoming/unbooked = ascending (soonest first), all/past/flagged = descending (most recent first)
-  const tabDefaultSort: SortDirection = (activeTab === "past" || activeTab === "past_unbooked" || activeTab === "flagged" || activeTab === "all" || activeTab === "cancelled") ? "desc" : "asc";
+  // Default sort direction by tab. Upcoming = soonest-first (asc);
+  // everything else = most-recent-first (desc).
+  const tabDefaultSort: SortDirection =
+    activeTab === "past" || activeTab === "all" || activeTab === "needs_attention"
+      ? "desc"
+      : "asc";
 
   const sorted = [...filtered].sort((a, b) => {
     const dir = sortDirection === "asc" ? 1 : -1;
@@ -1296,15 +1416,52 @@ export function EventsClient({ initialEvents, userId = "", businessName = "", us
     }
   });
 
-  // When switching tabs, reset sort to default for that tab and clear any
-  // active ?missing= filter from the dashboard fill-gaps deep-link — the
-  // filter only makes sense in the context of the deep-link the user clicked
-  // through; persisting it across tab clicks would be confusing.
+  // Build a ?tab=...&chips=... URL. Empty chips → omit the param.
+  function buildEventsUrl(tab: EventsTab, chips: ReadonlySet<string>): string {
+    const params = new URLSearchParams();
+    params.set("tab", tab);
+    const chipsParam = chipsToParam(chips);
+    if (chipsParam.length > 0) params.set("chips", chipsParam);
+    return `/dashboard/events?${params.toString()}`;
+  }
+
+  // Locked rule from the chip composition spec: "Don't auto-clear
+  // chips on tab switch." But we DO apply per-tab defaults when the
+  // operator clicks a tab they don't have explicit chips for.
+  // Heuristic: if the current chip set matches the OLD tab's defaults,
+  // treat it as "operator hasn't customized" and apply the new tab's
+  // defaults. Otherwise preserve.
   function handleTabChange(tab: TabMode) {
     setActiveTab(tab);
     setSortField("event_date");
-    setSortDirection((tab === "past" || tab === "past_unbooked" || tab === "flagged" || tab === "all" || tab === "cancelled") ? "desc" : "asc");
-    setMissingFilter(null);
+    setSortDirection(
+      tab === "past" || tab === "all" || tab === "needs_attention"
+        ? "desc"
+        : "asc"
+    );
+    const oldDefaults = TAB_DEFAULT_CHIPS[activeTab];
+    const matchesOldDefault =
+      selectedChips.size === oldDefaults.length &&
+      oldDefaults.every((c) => selectedChips.has(c));
+    const nextChips: Set<string> = matchesOldDefault
+      ? new Set(TAB_DEFAULT_CHIPS[tab])
+      : new Set(selectedChips);
+    setSelectedChips(nextChips);
+    router.replace(buildEventsUrl(tab, nextChips));
+  }
+
+  function handleChipToggle(chipId: string) {
+    setSelectedChips((prev) => {
+      const next = toggleChip(prev, chipId);
+      router.replace(buildEventsUrl(activeTab, next));
+      return next;
+    });
+  }
+
+  function handleClearChips() {
+    const next = new Set<string>();
+    setSelectedChips(next);
+    router.replace(buildEventsUrl(activeTab, next));
   }
 
   function handleSort(field: SortField) {
@@ -2062,27 +2219,10 @@ export function EventsClient({ initialEvents, userId = "", businessName = "", us
            * inside ListView for the full explanation). Tabs still live
            * inside ListView since they don't host text inputs.
            */}
-          {missingFilter && (
-            <div className="flex items-center justify-between gap-3 rounded-md border border-indigo-200 bg-indigo-50 dark:border-indigo-800/40 dark:bg-indigo-950/20 px-3 py-2 text-sm text-indigo-900 dark:text-indigo-300">
-              <span>
-                Showing only events missing{" "}
-                <strong>
-                  {missingFilter === "type" ? "event type" : missingFilter === "weather" ? "weather" : "location"}
-                </strong>
-              </span>
-              <Button
-                variant="ghost"
-                size="sm"
-                className="text-xs h-7 px-2 text-indigo-700 hover:bg-indigo-100 dark:text-indigo-300 dark:hover:bg-indigo-900/30"
-                onClick={() => {
-                  setMissingFilter(null);
-                  router.replace("/dashboard/events?tab=" + activeTab);
-                }}
-              >
-                Clear
-              </Button>
-            </div>
-          )}
+          {/* (chip-foundation refactor 2026-04-30) The legacy ?missing=
+              banner has been replaced by the chip strip inside ListView.
+              Selected chips are visible directly above the table; the
+              empty state offers a Clear filters button. */}
           <div className="flex items-center gap-3 flex-wrap">
             <div className="relative flex-1 max-w-sm min-w-48">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -2138,6 +2278,9 @@ export function EventsClient({ initialEvents, userId = "", businessName = "", us
           <ListView
             activeTab={activeTab}
             setActiveTab={setActiveTab}
+            selectedChips={selectedChips}
+            handleChipToggle={handleChipToggle}
+            handleClearChips={handleClearChips}
             sortField={sortField}
             setSortField={setSortField}
             sortDirection={sortDirection}
@@ -2148,12 +2291,7 @@ export function EventsClient({ initialEvents, userId = "", businessName = "", us
             setSalesEvent={setSalesEvent}
             setDuplicatingEvent={setDuplicatingEvent}
             initialEvents={initialEvents}
-            upcomingEvents={upcomingEvents}
-            unbookedEvents={unbookedEvents}
-            pastEvents={pastEvents}
-            pastUnbookedEvents={pastUnbookedEvents}
-            flaggedEvents={flaggedEvents}
-            cancelledEvents={cancelledEvents}
+            tabCounts={tabCounts}
             filtered={filtered}
             sorted={sorted}
             weatherMap={weatherMap}
