@@ -237,6 +237,176 @@ export async function fetchWeather(
   }
 }
 
+export interface HourlyWeatherEntry {
+  hour: number; // 0..23 operator-local
+  tempF: number;
+  weatherCode: number; // WMO code
+  windMph: number;
+  precipIn: number;
+}
+
+/**
+ * Fetch hourly weather for a given lat/lon/date from Open-Meteo.
+ *
+ * Open-Meteo's `&timezone=auto` makes the returned `time` array land
+ * in the location's local time, so positions 0-23 in the response
+ * correspond to operator-local hours 0-23. We don't need to do tz
+ * math on the client — the API hands us aligned data.
+ *
+ * Free tier, no API key. Same endpoint as the daily fetch (we just
+ * pass `hourly=...` instead of / alongside `daily=...`).
+ *
+ * Returns null when:
+ *  - The date is > 16 days out (no forecast available)
+ *  - The request fails or returns malformed data
+ *
+ * Cache is populated lazily via getHourlyWeatherForEvent below; this
+ * raw-fetch helper is exported for tests / direct calls but is not
+ * the recommended call path.
+ */
+export async function fetchHourlyWeather(
+  latitude: number,
+  longitude: number,
+  date: string
+): Promise<HourlyWeatherEntry[] | null> {
+  try {
+    const today = new Date();
+    const targetDate = new Date(date);
+    const daysDiff = Math.ceil(
+      (targetDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24)
+    );
+    if (daysDiff > 16 || daysDiff < -7) {
+      // Forecast horizon is 16 days; archive API supports historical
+      // hourly but we don't need it for the day-of card. Cap at -7
+      // days to give a small grace window for stale-cache reads.
+      return null;
+    }
+
+    const url =
+      `https://api.open-meteo.com/v1/forecast` +
+      `?latitude=${latitude}` +
+      `&longitude=${longitude}` +
+      `&hourly=temperature_2m,weather_code,wind_speed_10m,precipitation` +
+      `&temperature_unit=fahrenheit` +
+      `&wind_speed_unit=mph` +
+      `&precipitation_unit=inch` +
+      `&start_date=${date}` +
+      `&end_date=${date}` +
+      `&timezone=auto`;
+
+    const res = await fetch(url);
+    if (!res.ok) return null;
+    const data = await res.json();
+    const h = data.hourly;
+    if (!h || !Array.isArray(h.time) || h.time.length === 0) return null;
+
+    const out: HourlyWeatherEntry[] = [];
+    for (let i = 0; i < h.time.length; i++) {
+      const ts = String(h.time[i] ?? "");
+      // h.time entries look like "2026-04-29T11:00"; the hour is at
+      // position 11-12 in that string. timezone=auto puts these in
+      // operator-local time so direct slicing is correct.
+      const hourPart = ts.slice(11, 13);
+      const hour = Number.parseInt(hourPart, 10);
+      if (Number.isNaN(hour) || hour < 0 || hour > 23) continue;
+      out.push({
+        hour,
+        tempF: Number(h.temperature_2m?.[i] ?? 0),
+        weatherCode: Number(h.weather_code?.[i] ?? 0),
+        windMph: Number(h.wind_speed_10m?.[i] ?? 0),
+        precipIn: Number(h.precipitation?.[i] ?? 0),
+      });
+    }
+    if (out.length === 0) return null;
+    return out;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Fetch hourly weather with caching via the weather_cache.hourly_data
+ * jsonb column (migration 20260430000002). Reuses the same
+ * (date, lat, lon) row as the daily cache.
+ */
+export async function getHourlyWeatherForEvent(
+  latitude: number,
+  longitude: number,
+  date: string,
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  supabase: any
+): Promise<HourlyWeatherEntry[] | null> {
+  // Reuse the same geographic-radius match as getWeatherForEvent.
+  const { data: cached } = await supabase
+    .from("weather_cache")
+    .select("hourly_data")
+    .eq("date", date)
+    .gte("latitude", latitude - 0.1)
+    .lte("latitude", latitude + 0.1)
+    .gte("longitude", longitude - 0.1)
+    .lte("longitude", longitude + 0.1)
+    .maybeSingle();
+
+  if (cached?.hourly_data && Array.isArray(cached.hourly_data) && cached.hourly_data.length > 0) {
+    return cached.hourly_data as HourlyWeatherEntry[];
+  }
+
+  const fetched = await fetchHourlyWeather(latitude, longitude, date);
+  if (!fetched) return null;
+
+  // Upsert. If the row exists from an earlier daily fetch, we just
+  // populate the new column; if not, the daily fields stay null and
+  // a future daily fetch will fill them. The unique constraint is on
+  // (date, latitude, longitude), so the upsert key matches.
+  await supabase.from("weather_cache").upsert(
+    {
+      date,
+      latitude: Math.round(latitude * 100) / 100,
+      longitude: Math.round(longitude * 100) / 100,
+      hourly_data: fetched,
+      fetched_hourly_at: new Date().toISOString(),
+    },
+    { onConflict: "date,latitude,longitude" }
+  );
+
+  return fetched;
+}
+
+/**
+ * Map a WMO weather code to a short condition label.
+ * https://open-meteo.com/en/docs#weathervariables — WMO Weather
+ * interpretation codes. We collapse to 6 short buckets so the UI
+ * label stays compact at small widths.
+ */
+export function wmoCodeToCondition(code: number): string {
+  if (code === 0) return "Clear";
+  if (code === 1 || code === 2) return "Partly cloudy";
+  if (code === 3) return "Cloudy";
+  if (code >= 45 && code <= 48) return "Fog";
+  if ((code >= 51 && code <= 67) || (code >= 80 && code <= 82)) return "Rain";
+  if ((code >= 71 && code <= 77) || code === 85 || code === 86) return "Snow";
+  if (code >= 95) return "Storm";
+  return "—";
+}
+
+/**
+ * Slice an hourly array down to the operator's service window.
+ * start/end are HH:MM wall-clock strings (events.start_time /
+ * end_time). Inclusive of both endpoints' hour bucket — i.e. an
+ * 11:30-13:30 service window returns hours 11, 12, 13.
+ */
+export function sliceHourlyToServiceWindow(
+  hourly: HourlyWeatherEntry[],
+  startTime: string | null,
+  endTime: string | null
+): HourlyWeatherEntry[] {
+  if (!startTime && !endTime) return hourly;
+  const startHour = startTime ? Number(startTime.split(":")[0]) : 0;
+  const endHour = endTime ? Number(endTime.split(":")[0]) : 23;
+  if (Number.isNaN(startHour) || Number.isNaN(endHour)) return hourly;
+  return hourly.filter((h) => h.hour >= startHour && h.hour <= endHour);
+}
+
 /**
  * Fetch weather and classify it, with caching via Supabase.
  */
