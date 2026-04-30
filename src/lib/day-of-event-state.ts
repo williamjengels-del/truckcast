@@ -17,6 +17,10 @@ export interface DayOfState {
   /** Today events whose end_time has passed (and were not the current
    *  picked one). Used to drive lazy auto_ended_at audit writes. */
   endedTodayIds: string[];
+  /** Most recently-ended today event that hasn't been wrapped up yet
+   *  (after_event_summary IS NULL). Surfaces the wrap-up form
+   *  prominently on the card. Null when nothing needs wrap-up. */
+  needsWrapUp: Event | null;
 }
 
 /**
@@ -61,15 +65,24 @@ export function computeDayOfState(
 
   const todays = bookedFuture.filter((e) => e.event_date === today);
   const activeToday = todays.filter(isStillActive);
-  const endedTodayIds = todays
-    .filter(
-      (e) =>
-        !e.auto_ended_at &&
-        e.end_time !== null &&
-        endMs(e) !== null &&
-        (endMs(e) as number) <= nowMs
-    )
+  const endedToday = todays.filter(
+    (e) =>
+      e.end_time !== null &&
+      endMs(e) !== null &&
+      (endMs(e) as number) <= nowMs
+  );
+  const endedTodayIds = endedToday
+    .filter((e) => !e.auto_ended_at)
     .map((e) => e.id);
+  // Pick the most-recently-ended today event without a wrap-up.
+  // Spec §9: "Surfaces during the auto-end transition (and remains
+  // accessible after)." We sort by end_time desc so operators see
+  // the most recent first; older un-wrapped events live in the
+  // events page for catch-up.
+  const needsWrapUp =
+    endedToday
+      .filter((e) => !e.after_event_summary)
+      .sort((a, b) => (a.end_time ?? "").localeCompare(b.end_time ?? "") * -1)[0] ?? null;
 
   if (activeToday.length > 0) {
     return {
@@ -77,6 +90,7 @@ export function computeDayOfState(
       current: activeToday[0],
       upcomingToday: activeToday.slice(1),
       endedTodayIds,
+      needsWrapUp,
     };
   }
 
@@ -89,6 +103,7 @@ export function computeDayOfState(
       current: null,
       upcomingToday: [],
       endedTodayIds,
+      needsWrapUp,
     };
   }
 
@@ -100,6 +115,7 @@ export function computeDayOfState(
       current: next,
       upcomingToday: [],
       endedTodayIds,
+      needsWrapUp,
     };
   }
   return {
@@ -107,6 +123,7 @@ export function computeDayOfState(
     current: next,
     upcomingToday: [],
     endedTodayIds,
+    needsWrapUp,
   };
 }
 
