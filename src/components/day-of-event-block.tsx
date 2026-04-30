@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { headers } from "next/headers";
 import {
   Calendar,
   Clock,
@@ -15,6 +16,8 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import type { Event, Contact } from "@/lib/database.types";
 import { geocodeCity, getWeatherForEvent } from "@/lib/weather";
+import { wallclockInZoneToUtcMs } from "@/lib/wallclock-tz";
+import { SetupCountdown } from "@/components/setup-countdown";
 
 interface Props {
   events: Event[];
@@ -65,8 +68,24 @@ function composeAddress(event: Event): string | null {
   return parts.join(", ");
 }
 
-function mapsHref(address: string): string {
-  return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(address)}`;
+function mapsHref(address: string, isIOS: boolean): string {
+  const q = encodeURIComponent(address);
+  // iOS: maps.apple.com universal link. Opens native Apple Maps when
+  // clicked from Safari/Mobile Chrome on iOS, falls back to web view
+  // on desktop Safari. Other platforms get the Google Maps universal
+  // link (opens Google Maps app on Android via intent, web elsewhere).
+  return isIOS
+    ? `https://maps.apple.com/?q=${q}`
+    : `https://www.google.com/maps/search/?api=1&query=${q}`;
+}
+
+function detectIOSFromUserAgent(ua: string | null): boolean {
+  if (!ua) return false;
+  // iPad/iPhone/iPod cover historical iOS devices; iPad on iPadOS 13+
+  // reports as Macintosh — operators in the field tend to use iPhone,
+  // so the desktop-Mac false-negative is fine. Apple Maps web link
+  // works on desktop Safari anyway, so misclassification is low-cost.
+  return /iPad|iPhone|iPod/.test(ua);
 }
 
 function onlyDigits(phone: string): string {
@@ -143,22 +162,38 @@ export async function DayOfEventBlock({ events, timezone, supabase, userId }: Pr
   const event = isToday ? todaysEvents[0] : bookedFuture[0];
   const additionalTodayCount = isToday ? todaysEvents.length - 1 : 0;
 
-  const [weather, contactsRes] = await Promise.all([
+  const [weather, contactsRes, hdrs] = await Promise.all([
     resolveWeather(event, supabase),
     supabase
       .from("contacts")
-      .select("id, name, phone, email, linked_event_names")
+      .select("id, name, phone, email, linked_event_names, quality_score, created_at")
       .eq("user_id", userId)
       .contains("linked_event_names", [event.event_name])
-      .limit(1),
+      // Highest-quality contact first; fall back to most-recently-created.
+      // Spec: "If multiple contacts on the event, show primary with small
+      // 'view all' link." quality_score is the closest existing proxy
+      // for "primary."
+      .order("quality_score", { ascending: false, nullsFirst: false })
+      .order("created_at", { ascending: false }),
+    headers(),
   ]);
 
-  const contact = (contactsRes.data as Contact[] | null)?.[0] ?? null;
+  const allContacts = (contactsRes.data as Contact[] | null) ?? [];
+  const contact = allContacts[0] ?? null;
+  const additionalContactCount = Math.max(0, allContacts.length - 1);
+  const isIOS = detectIOSFromUserAgent(hdrs.get("user-agent"));
 
   const setupDisplay = formatTimeHHMM(event.setup_time);
   const startDisplay = formatTimeHHMM(event.start_time);
   const endDisplay = formatTimeHHMM(event.end_time);
   const address = composeAddress(event);
+  // Setup countdown — only on today's event (next-day cards strip
+  // live-only features per spec §12). Compute the UTC instant
+  // server-side so the client island doesn't have to know zone math.
+  const setupInstantMs =
+    isToday && event.setup_time
+      ? wallclockInZoneToUtcMs(event.event_date, event.setup_time, timezone)
+      : null;
   // Match the existing Needs Attention convention: route to the
   // flagged tab, where the SalesEntryDialog opens on row click.
   // Only surface the action when there's something to log — today's
@@ -204,32 +239,53 @@ export async function DayOfEventBlock({ events, timezone, supabase, userId }: Pr
         </div>
 
         <div className="grid gap-3 sm:grid-cols-2">
-          <div className="flex items-start gap-2 text-sm">
-            <Clock className="h-4 w-4 text-muted-foreground shrink-0 mt-0.5" />
-            <div className="min-w-0">
-              {setupDisplay && (
-                <p className="text-xs text-muted-foreground">
-                  Setup <span className="text-foreground font-medium">{setupDisplay}</span>
-                </p>
-              )}
-              {(startDisplay || endDisplay) && (
-                <p>
-                  {startDisplay && <span className="font-medium">{startDisplay}</span>}
-                  {startDisplay && endDisplay && <span className="text-muted-foreground"> – </span>}
-                  {endDisplay && <span className="font-medium">{endDisplay}</span>}
-                </p>
-              )}
-              {!setupDisplay && !startDisplay && !endDisplay && (
-                <p className="text-muted-foreground">Times not set</p>
-              )}
+          {setupInstantMs !== null && setupDisplay ? (
+            <SetupCountdown
+              setupInstantMs={setupInstantMs}
+              setupDisplay={setupDisplay}
+            />
+          ) : (
+            <div className="flex items-start gap-2 text-sm">
+              <Clock className="h-4 w-4 text-muted-foreground shrink-0 mt-0.5" />
+              <div className="min-w-0">
+                {setupDisplay && (
+                  <p className="text-xs text-muted-foreground">
+                    Setup <span className="text-foreground font-medium">{setupDisplay}</span>
+                  </p>
+                )}
+                {(startDisplay || endDisplay) && (
+                  <p>
+                    {startDisplay && <span className="font-medium">{startDisplay}</span>}
+                    {startDisplay && endDisplay && <span className="text-muted-foreground"> – </span>}
+                    {endDisplay && <span className="font-medium">{endDisplay}</span>}
+                  </p>
+                )}
+                {!setupDisplay && !startDisplay && !endDisplay && (
+                  <p className="text-muted-foreground">Times not set</p>
+                )}
+              </div>
             </div>
-          </div>
+          )}
+
+          {/* When the countdown takes the time slot, surface
+              start–end on its own row so service hours stay visible. */}
+          {setupInstantMs !== null && (startDisplay || endDisplay) && (
+            <div className="flex items-start gap-2 text-sm">
+              <Clock className="h-4 w-4 text-muted-foreground shrink-0 mt-0.5" />
+              <p>
+                <span className="text-xs text-muted-foreground">Service </span>
+                {startDisplay && <span className="font-medium">{startDisplay}</span>}
+                {startDisplay && endDisplay && <span className="text-muted-foreground"> – </span>}
+                {endDisplay && <span className="font-medium">{endDisplay}</span>}
+              </p>
+            </div>
+          )}
 
           {address && (
             <div className="flex items-start gap-2 text-sm min-w-0">
               <MapPin className="h-4 w-4 text-muted-foreground shrink-0 mt-0.5" />
               <a
-                href={mapsHref(address)}
+                href={mapsHref(address, isIOS)}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="text-primary hover:underline truncate"
@@ -237,6 +293,20 @@ export async function DayOfEventBlock({ events, timezone, supabase, userId }: Pr
               >
                 {address}
               </a>
+            </div>
+          )}
+
+          {event.parking_loadin_notes && (
+            <div className="flex items-start gap-2 text-sm min-w-0 sm:col-span-2 -mt-1">
+              <span className="text-xs uppercase tracking-wide text-muted-foreground shrink-0 pt-0.5">
+                Load-in
+              </span>
+              <p
+                className="text-sm text-muted-foreground whitespace-pre-line min-w-0"
+                data-testid="day-of-event-parking-notes"
+              >
+                {event.parking_loadin_notes}
+              </p>
             </div>
           )}
 
@@ -297,6 +367,15 @@ export async function DayOfEventBlock({ events, timezone, supabase, userId }: Pr
                       <Mail className="h-3 w-3" />
                       {contact.email}
                     </a>
+                  )}
+                  {additionalContactCount > 0 && (
+                    <Link
+                      href={`/dashboard/contacts?event=${encodeURIComponent(event.event_name)}`}
+                      className="text-muted-foreground hover:text-primary hover:underline inline-flex items-center"
+                      data-testid="day-of-event-view-all-contacts"
+                    >
+                      +{additionalContactCount} more
+                    </Link>
                   )}
                 </div>
               </div>
