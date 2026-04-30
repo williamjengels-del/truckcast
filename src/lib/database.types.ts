@@ -132,6 +132,22 @@ export interface Event {
    *  with this set from forecast accuracy denominators (PR b). Display
    *  layer renders "Sold out (carry-over from X)" instead of "$0 sales." */
   caused_by_event_id?: string | null;
+  /** Day-of card v1 (migration 20260430000001). All operator-edited
+   *  per-event cockpit fields. RLS-scoped via existing user_id policy. */
+  parking_loadin_notes: string | null;
+  menu_type: "regular" | "special";
+  special_menu_details: string | null;
+  in_service_notes: { timestamp: string; text: string }[];
+  content_capture_notes: string | null;
+  after_event_summary: {
+    final_sales: number | null;
+    wrap_up_note: string | null;
+    what_id_change: string | null;
+  } | null;
+  /** Audit field — set by server-side auto-end when end_time passes
+   *  without operator action. Null = still active OR operator-marked
+   *  complete OR not yet ended. */
+  auto_ended_at: string | null;
   created_at: string;
   updated_at: string;
 }
