@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useState, useEffect } from "react";
+import { Suspense, useState, useEffect, useCallback } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { useImpersonation } from "@/components/impersonation-context";
@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Check } from "lucide-react";
 import { EmbedWidgetSection } from "@/components/embed-widget-section";
 import { InstallSettingsCard } from "@/components/install-settings-card";
@@ -18,6 +19,26 @@ import type { Profile } from "@/lib/database.types";
 import { PRICING_PLANS } from "@/lib/pricing-plans";
 import { PublicSlugPicker } from "@/components/public-slug-picker";
 import { TwoFactorCard } from "@/components/two-factor-card";
+
+type SettingsTab = "profile" | "plan" | "customers" | "notifications" | "security";
+
+const SETTINGS_TABS: { value: SettingsTab; label: string }[] = [
+  { value: "profile", label: "Profile" },
+  { value: "plan", label: "Plan" },
+  { value: "customers", label: "Customers" },
+  { value: "notifications", label: "Notifications" },
+  { value: "security", label: "Security & Privacy" },
+];
+
+function isSettingsTab(v: string | null): v is SettingsTab {
+  return (
+    v === "profile" ||
+    v === "plan" ||
+    v === "customers" ||
+    v === "notifications" ||
+    v === "security"
+  );
+}
 
 const US_TIMEZONES = [
   "America/New_York",
@@ -93,12 +114,51 @@ function SettingsContent() {
     loadProfile();
   }, [effectiveUserId]);
 
-  // Auto-sync when returning from Stripe checkout
+  // URL-driven tabs (?tab=profile|plan|customers|notifications|security).
+  // Reading the URL (rather than only useState) means deep-links and refresh
+  // both land on the right tab. Writing it back means each tab change is a
+  // shareable URL — useful for support flows ("open this URL to find the
+  // toggle"). Default = profile when ?tab= is missing or unrecognized.
+  //
+  // Hooks order note (regression caught during review of #77, fixed here):
+  // these MUST live above the `if (loading)` early-return below. React's
+  // Rules of Hooks require the same call sequence on every render; placing
+  // hooks below an early-return causes the post-load render to add hooks
+  // and trip "Rendered more hooks than during the previous render."
+  const initialTab = ((): SettingsTab => {
+    const t = searchParams.get("tab");
+    return isSettingsTab(t) ? t : "profile";
+  })();
+  const [activeTab, setActiveTab] = useState<SettingsTab>(initialTab);
+
+  // Keep state in sync if the URL changes (back/forward, support deep-link).
+  useEffect(() => {
+    const t = searchParams.get("tab");
+    if (isSettingsTab(t) && t !== activeTab) {
+      setActiveTab(t);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams]);
+
+  const handleTabChange = useCallback(
+    (value: unknown) => {
+      if (typeof value !== "string" || !isSettingsTab(value)) return;
+      setActiveTab(value);
+      const params = new URLSearchParams(searchParams.toString());
+      params.set("tab", value);
+      router.replace(`/dashboard/settings?${params.toString()}`, { scroll: false });
+    },
+    [router, searchParams]
+  );
+
+  // Auto-sync when returning from Stripe checkout. Land back on the Plan
+  // tab so the operator sees their freshly-upgraded tier — pre-tabs this
+  // didn't matter (single scroll), post-tabs the default ?tab=profile
+  // landing made the verify-the-upgrade step require an extra click.
   useEffect(() => {
     if (searchParams.get("upgraded") === "true" && !syncing && !loading) {
       syncTier().then(() => {
-        // Remove the query param so it doesn't re-sync on refresh
-        router.replace("/dashboard/settings");
+        router.replace("/dashboard/settings?tab=plan");
       });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -137,229 +197,252 @@ function SettingsContent() {
         <p className="text-muted-foreground">Manage your business profile</p>
       </div>
 
-      <Card className="max-w-2xl">
-        <CardHeader>
-          <CardTitle>Business Profile</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <form onSubmit={handleSave} className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="businessName">Business Name</Label>
-              <Input
-                id="businessName"
-                value={profile?.business_name ?? ""}
-                onChange={(e) =>
-                  setProfile((p) =>
-                    p ? { ...p, business_name: e.target.value } : p
-                  )
-                }
-                placeholder="Enter your business name"
-              />
-            </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="city">City</Label>
-                <Input
-                  id="city"
-                  value={profile?.city ?? ""}
-                  onChange={(e) =>
-                    setProfile((p) =>
-                      p ? { ...p, city: e.target.value } : p
-                    )
-                  }
-                  placeholder="e.g. St. Louis"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="state">State</Label>
-                <Input
-                  id="state"
-                  value={profile?.state ?? ""}
-                  onChange={(e) =>
-                    setProfile((p) =>
-                      p ? { ...p, state: e.target.value } : p
-                    )
-                  }
-                  placeholder="MO"
-                  maxLength={2}
-                />
-              </div>
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="timezone">Timezone</Label>
-              <Select
-                value={profile?.timezone ?? "America/Chicago"}
-                onValueChange={(val) =>
-                  setProfile((p) => (p ? { ...p, timezone: val ?? "America/Chicago" } : p))
-                }
-              >
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {US_TIMEZONES.map((tz) => (
-                    <SelectItem key={tz} value={tz}>
-                      {tz.replace("_", " ").replace("America/", "")}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <Button type="submit" disabled={saving}>
-              {saving ? "Saving..." : "Save Changes"}
-            </Button>
-          </form>
-        </CardContent>
-      </Card>
+      <Tabs value={activeTab} onValueChange={handleTabChange} className="space-y-6">
+        <TabsList className="flex flex-wrap h-auto p-1 w-full sm:w-fit">
+          {SETTINGS_TABS.map((tab) => (
+            <TabsTrigger key={tab.value} value={tab.value} className="text-sm">
+              {tab.label}
+            </TabsTrigger>
+          ))}
+        </TabsList>
 
-      <Card className="max-w-2xl">
-        <CardHeader>
-          <CardTitle>Subscription</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="flex items-center gap-3">
-            <p className="text-sm text-muted-foreground">
-              Current plan:{" "}
-              <span className="font-medium text-foreground capitalize">
-                {profile?.subscription_tier ?? "starter"}
-              </span>
-            </p>
-            {syncing && (
-              <span className="text-xs text-muted-foreground animate-pulse">
-                Syncing...
-              </span>
-            )}
+        {/* PROFILE — business identity + team / managers. v25 §2e: account-
+            management cards belong with profile (single locus for "who can
+            touch this account"). */}
+        <TabsContent value="profile" className="space-y-6">
+          <Card className="max-w-2xl">
+            <CardHeader>
+              <CardTitle>Business Profile</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <form onSubmit={handleSave} className="space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="businessName">Business Name</Label>
+                  <Input
+                    id="businessName"
+                    value={profile?.business_name ?? ""}
+                    onChange={(e) =>
+                      setProfile((p) =>
+                        p ? { ...p, business_name: e.target.value } : p
+                      )
+                    }
+                    placeholder="Enter your business name"
+                  />
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="city">City</Label>
+                    <Input
+                      id="city"
+                      value={profile?.city ?? ""}
+                      onChange={(e) =>
+                        setProfile((p) =>
+                          p ? { ...p, city: e.target.value } : p
+                        )
+                      }
+                      placeholder="e.g. St. Louis"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="state">State</Label>
+                    <Input
+                      id="state"
+                      value={profile?.state ?? ""}
+                      onChange={(e) =>
+                        setProfile((p) =>
+                          p ? { ...p, state: e.target.value } : p
+                        )
+                      }
+                      placeholder="MO"
+                      maxLength={2}
+                    />
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="timezone">Timezone</Label>
+                  <Select
+                    value={profile?.timezone ?? "America/Chicago"}
+                    onValueChange={(val) =>
+                      setProfile((p) => (p ? { ...p, timezone: val ?? "America/Chicago" } : p))
+                    }
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {US_TIMEZONES.map((tz) => (
+                        <SelectItem key={tz} value={tz}>
+                          {tz.replace("_", " ").replace("America/", "")}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <Button type="submit" disabled={saving}>
+                  {saving ? "Saving..." : "Save Changes"}
+                </Button>
+              </form>
+            </CardContent>
+          </Card>
+
+          <TeamAccessCard profile={profile} />
+          <ManagerInviteCard profile={profile} />
+        </TabsContent>
+
+        {/* PLAN — subscription tier picker + Stripe billing portal */}
+        <TabsContent value="plan" className="space-y-6">
+          <Card className="max-w-2xl">
+            <CardHeader>
+              <CardTitle>Subscription</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="flex items-center gap-3">
+                <p className="text-sm text-muted-foreground">
+                  Current plan:{" "}
+                  <span className="font-medium text-foreground capitalize">
+                    {profile?.subscription_tier ?? "starter"}
+                  </span>
+                </p>
+                {syncing && (
+                  <span className="text-xs text-muted-foreground animate-pulse">
+                    Syncing...
+                  </span>
+                )}
+              </div>
+
+              <PlanCards profile={profile} />
+
+              {profile?.stripe_customer_id && (
+                <div className="flex gap-2">
+                  <Button
+                    variant="outline"
+                    onClick={async () => {
+                      const res = await fetch("/api/stripe/portal", {
+                        method: "POST",
+                      });
+                      const data = await res.json();
+                      if (data.url) {
+                        window.location.href = data.url;
+                      } else {
+                        alert("Billing portal error: " + (data.error ?? "Unknown error"));
+                      }
+                    }}
+                  >
+                    Manage Billing & Invoices
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    disabled={syncing}
+                    onClick={syncTier}
+                  >
+                    {syncing ? "Syncing..." : "Sync Plan"}
+                  </Button>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* CUSTOMERS — surfaces the operator points the public at */}
+        <TabsContent value="customers" className="space-y-6">
+          <Card className="max-w-2xl">
+            <CardHeader>
+              <CardTitle>Public Schedule</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              {profile?.subscription_tier === "starter" ? (
+                <p className="text-sm text-muted-foreground">
+                  Upgrade to Pro to get a shareable public schedule page.
+                </p>
+              ) : (
+                <>
+                  {/* Custom slug picker — Stage 2 of the custom-vendor-profile
+                      workstream. Once Stage 3 ships the public /<slug>
+                      route, an operator's claimed slug is the URL they
+                      share publicly. Falls back to the UUID-based link
+                      below until a slug is set. */}
+                  {profile && (
+                    <PublicSlugPicker
+                      initialSlug={profile.public_slug ?? null}
+                      businessName={profile.business_name ?? null}
+                      onSaved={(next) =>
+                        setProfile((p) => (p ? { ...p, public_slug: next } : p))
+                      }
+                    />
+                  )}
+
+                  {/* UUID fallback — always shown so the operator has a
+                      permanent link even before they pick a slug. Will keep
+                      working after Stage 3 ships (the /<slug> route is
+                      additive, not a replacement). */}
+                  <div className="space-y-2">
+                    <p className="text-xs uppercase tracking-wider font-semibold text-muted-foreground">
+                      {profile?.public_slug ? "Or share the permanent UUID link:" : "Permanent link:"}
+                    </p>
+                    <code className="text-sm bg-muted p-2 rounded block break-all">
+                      {typeof window !== "undefined"
+                        ? `${window.location.origin}/schedule/${profile?.id}`
+                        : `/schedule/${profile?.id}`}
+                    </code>
+                  </div>
+                </>
+              )}
+            </CardContent>
+          </Card>
+
+          <FollowMyTruckSection profile={profile} />
+
+          {profile && (
+            <EmbedWidgetSection
+              userId={profile.id}
+              subscriptionTier={profile.subscription_tier ?? "starter"}
+            />
+          )}
+        </TabsContent>
+
+        {/* NOTIFICATIONS — email reminders + new-device login alerts + push */}
+        <TabsContent value="notifications" className="space-y-6">
+          <NotificationsCard
+            profile={profile}
+            onToggle={(val) =>
+              setProfile((p) => (p ? { ...p, email_reminders_enabled: val } : p))
+            }
+            onLoginAlertToggle={(val) =>
+              setProfile((p) =>
+                p ? { ...p, login_notifications_enabled: val } : p
+              )
+            }
+          />
+          <PushNotificationsCard />
+        </TabsContent>
+
+        {/* SECURITY & PRIVACY — auth, data sharing, install/PWA, destructive */}
+        <TabsContent value="security" className="space-y-6">
+          <TwoFactorCard />
+          <DataPrivacyCard
+            profile={profile}
+            onToggle={(val) =>
+              setProfile((p) => (p ? { ...p, data_sharing_enabled: val } : p))
+            }
+          />
+          <InstallSettingsCard />
+
+          {/* Support link — small muted block above Danger Zone so
+              operators always have a visible path to contact us without
+              hunting through footer nav. Intentionally understated to
+              keep Settings readable. */}
+          <div className="text-center text-sm text-muted-foreground py-2">
+            Need help?{" "}
+            <a href="/contact" className="text-primary hover:underline">
+              Contact support
+            </a>
           </div>
 
-          <PlanCards profile={profile} />
-
-          {/* Manage existing billing */}
-          {profile?.stripe_customer_id && (
-            <div className="flex gap-2">
-              <Button
-                variant="outline"
-                onClick={async () => {
-                  const res = await fetch("/api/stripe/portal", {
-                    method: "POST",
-                  });
-                  const data = await res.json();
-                  if (data.url) {
-                    window.location.href = data.url;
-                  } else {
-                    alert("Billing portal error: " + (data.error ?? "Unknown error"));
-                  }
-                }}
-              >
-                Manage Billing & Invoices
-              </Button>
-              <Button
-                variant="ghost"
-                size="sm"
-                disabled={syncing}
-                onClick={syncTier}
-              >
-                {syncing ? "Syncing..." : "Sync Plan"}
-              </Button>
-            </div>
-          )}
-        </CardContent>
-      </Card>
-
-      <Card className="max-w-2xl">
-        <CardHeader>
-          <CardTitle>Public Schedule</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-6">
-          {profile?.subscription_tier === "starter" ? (
-            <p className="text-sm text-muted-foreground">
-              Upgrade to Pro to get a shareable public schedule page.
-            </p>
-          ) : (
-            <>
-              {/* Custom slug picker — Stage 2 of the custom-vendor-profile
-                  workstream. Once Stage 3 ships the public /<slug>
-                  route, an operator's claimed slug is the URL they
-                  share publicly. Falls back to the UUID-based link
-                  below until a slug is set. */}
-              {profile && (
-                <PublicSlugPicker
-                  initialSlug={profile.public_slug ?? null}
-                  businessName={profile.business_name ?? null}
-                  onSaved={(next) =>
-                    setProfile((p) => (p ? { ...p, public_slug: next } : p))
-                  }
-                />
-              )}
-
-              {/* UUID fallback — always shown so the operator has a
-                  permanent link even before they pick a slug. Will keep
-                  working after Stage 3 ships (the /<slug> route is
-                  additive, not a replacement). */}
-              <div className="space-y-2">
-                <p className="text-xs uppercase tracking-wider font-semibold text-muted-foreground">
-                  {profile?.public_slug ? "Or share the permanent UUID link:" : "Permanent link:"}
-                </p>
-                <code className="text-sm bg-muted p-2 rounded block break-all">
-                  {typeof window !== "undefined"
-                    ? `${window.location.origin}/schedule/${profile?.id}`
-                    : `/schedule/${profile?.id}`}
-                </code>
-              </div>
-            </>
-          )}
-        </CardContent>
-      </Card>
-
-      <FollowMyTruckSection profile={profile} />
-
-      {profile && (
-        <EmbedWidgetSection
-          userId={profile.id}
-          subscriptionTier={profile.subscription_tier ?? "starter"}
-        />
-      )}
-
-      <InstallSettingsCard />
-
-      <PushNotificationsCard />
-
-      <NotificationsCard
-        profile={profile}
-        onToggle={(val) =>
-          setProfile((p) => (p ? { ...p, email_reminders_enabled: val } : p))
-        }
-        onLoginAlertToggle={(val) =>
-          setProfile((p) =>
-            p ? { ...p, login_notifications_enabled: val } : p
-          )
-        }
-      />
-
-      <DataPrivacyCard
-        profile={profile}
-        onToggle={(val) =>
-          setProfile((p) => (p ? { ...p, data_sharing_enabled: val } : p))
-        }
-      />
-
-      <TeamAccessCard profile={profile} />
-      <ManagerInviteCard profile={profile} />
-
-      <TwoFactorCard />
-
-      {/* Support link — small muted block above Danger Zone so
-          operators always have a visible path to contact us without
-          hunting through footer nav. Intentionally understated to
-          keep Settings readable. */}
-      <div className="text-center text-sm text-muted-foreground py-2">
-        Need help?{" "}
-        <a href="/contact" className="text-primary hover:underline">
-          Contact support
-        </a>
-      </div>
-
-      {/* Destructive actions — keep at the end of the page. */}
-      <DangerZoneCard />
+          {/* Destructive actions — keep at the end of the security tab. */}
+          <DangerZoneCard />
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }

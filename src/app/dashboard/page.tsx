@@ -113,9 +113,13 @@ export default async function DashboardPage() {
   );
 
   // KPI calculations
+  // Linked carry-over events (e.g., Sunday cancelled because Saturday sold
+  // out — carries caused_by_event_id pointing at Saturday) drop out at the
+  // completed-events filter so they don't drag down forecast accuracy or
+  // YTD totals. Saturday's overrun is the credited outcome.
   const bookedEvents = events.filter((e) => e.booked);
   const completedEvents = bookedEvents.filter(
-    (e) => e.event_date <= today && hasRevenue(e)
+    (e) => e.event_date <= today && !e.caused_by_event_id && hasRevenue(e)
   );
   const ytdEvents = completedEvents.filter(
     (e) => new Date(e.event_date + "T00:00:00").getFullYear() === currentYear
@@ -313,18 +317,19 @@ export default async function DashboardPage() {
     });
   }
 
-  // Data completeness — only shown when user has 5+ past events
+  // Data completeness — only shown when user has 5+ past events.
+  // event_tier is intentionally NOT scored: the EventForm doesn't surface it
+  // as an input, so flagging it as "missing" is operationally meaningless.
+  // Re-include if/when tier becomes user-editable.
   const pastBookedEvents = events.filter((e) => e.booked && e.event_date <= today);
   const dataQualityGaps: { label: string; count: number; href: string; field: string }[] = [];
   if (pastBookedEvents.length >= 5) {
     const missingType = pastBookedEvents.filter((e) => !e.event_type).length;
     const missingWeather = pastBookedEvents.filter((e) => !e.event_weather).length;
-    const missingTier = pastBookedEvents.filter((e) => !e.event_tier).length;
     const missingLocation = pastBookedEvents.filter((e) => !e.location && !e.city).length;
-    if (missingType > 0) dataQualityGaps.push({ label: "Event Type", count: missingType, href: "/dashboard/events?tab=past", field: "type" });
-    if (missingWeather > 0) dataQualityGaps.push({ label: "Weather", count: missingWeather, href: "/dashboard/events?tab=past", field: "weather" });
-    if (missingTier > 0) dataQualityGaps.push({ label: "Tier (A/B/C/D)", count: missingTier, href: "/dashboard/events?tab=past", field: "tier" });
-    if (missingLocation > 0) dataQualityGaps.push({ label: "Location", count: missingLocation, href: "/dashboard/events?tab=past", field: "location" });
+    if (missingType > 0) dataQualityGaps.push({ label: "Event Type", count: missingType, href: "/dashboard/events?tab=past&missing=type", field: "type" });
+    if (missingWeather > 0) dataQualityGaps.push({ label: "Weather", count: missingWeather, href: "/dashboard/events?tab=past&missing=weather", field: "weather" });
+    if (missingLocation > 0) dataQualityGaps.push({ label: "Location", count: missingLocation, href: "/dashboard/events?tab=past&missing=location", field: "location" });
     dataQualityGaps.sort((a, b) => b.count - a.count);
   }
   const filledFields = pastBookedEvents.length >= 5
@@ -332,12 +337,11 @@ export default async function DashboardPage() {
         let score = 0;
         if (e.event_type) score++;
         if (e.event_weather) score++;
-        if (e.event_tier) score++;
         if (e.location || e.city) score++;
         return sum + score;
       }, 0)
     : 0;
-  const totalFields = pastBookedEvents.length * 4;
+  const totalFields = pastBookedEvents.length * 3;
   const dataScore = totalFields > 0 ? Math.round((filledFields / totalFields) * 100) : 100;
   const showDataQuality = pastBookedEvents.length >= 5 && dataScore < 85 && dataQualityGaps.length > 0;
 

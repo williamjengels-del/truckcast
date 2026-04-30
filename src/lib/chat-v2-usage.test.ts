@@ -69,9 +69,15 @@ describe("chatV2MonthlyCapCents", () => {
   });
 });
 
-// Minimal Supabase mock shaped just enough for the two helpers under
-// test. Captures the gte filter so we can assert the month boundary.
-function makeMockSupabase(rows: Array<{ cost_cents: number }>) {
+// Minimal Supabase mock shaped just enough for the helpers under test.
+// Captures the gte filter so we can assert the month boundary. Returns
+// `rows` on the .then() (chat_v2_usage queries) and a single profile
+// row with override = profileOverride on .maybeSingle() (the
+// checkMonthlyCap profile read).
+function makeMockSupabase(
+  rows: Array<{ cost_cents: number }>,
+  profileOverride: number | null = null
+) {
   let lastGteValue: string | null = null;
   const builder = {
     select: () => builder,
@@ -80,6 +86,11 @@ function makeMockSupabase(rows: Array<{ cost_cents: number }>) {
       lastGteValue = value;
       return builder;
     },
+    maybeSingle: () =>
+      Promise.resolve({
+        data: { chat_v2_monthly_cap_cents_override: profileOverride },
+        error: null,
+      }),
     then: (resolve: (v: { data: typeof rows; error: null }) => void) => {
       resolve({ data: rows, error: null });
       return Promise.resolve({ data: rows, error: null });
@@ -165,6 +176,30 @@ describe("checkMonthlyCap", () => {
     expect(result.ok).toBe(false);
     if (!result.ok) {
       expect(result.reason).toContain("$25.00");
+    }
+  });
+
+  it("per-operator override on profile beats env + default", async () => {
+    // Env says $25; override on profile says $50. Spent $30 should be
+    // under the override but over the env value — should report ok: true
+    // with capCents = 5000 (the override).
+    process.env.CHAT_V2_MONTHLY_CAP_CENTS = "2500";
+    const mock = makeMockSupabase([{ cost_cents: 3000 }], 5000);
+    const result = await checkMonthlyCap(mock.client, "user-1");
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.capCents).toBe(5000);
+      expect(result.spentCents).toBe(3000);
+    }
+  });
+
+  it("falls through to env default when override is null", async () => {
+    delete process.env.CHAT_V2_MONTHLY_CAP_CENTS;
+    const mock = makeMockSupabase([{ cost_cents: 200 }], null);
+    const result = await checkMonthlyCap(mock.client, "user-1");
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.capCents).toBe(1000); // CHAT_V2_DEFAULT_CAP_CENTS
     }
   });
 });

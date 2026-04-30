@@ -65,6 +65,15 @@ interface EventFormProps {
    * alphabetical list.
    */
   recentStates?: string[];
+  /**
+   * Operator's events used to populate the "caused by an earlier event"
+   * picker that surfaces when cancellation_reason = sold_out (v25 §2c).
+   * Caller passes the already-loaded events list — we don't fetch from
+   * inside the form. The picker shows recent past events; auto-suggest
+   * highlights ones that overran (net_sales > 1.5 * forecast_sales) in
+   * the prior 3 days.
+   */
+  recentEventsForLinkage?: Event[];
 }
 
 export function EventForm({
@@ -75,12 +84,19 @@ export function EventForm({
   title = "Add Event",
   profileState,
   recentStates = [],
+  recentEventsForLinkage = [],
 }: EventFormProps) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isPrivate, setIsPrivate] = useState<boolean>(initialData?.is_private ?? false);
   const [bookedValue, setBookedValue] = useState<string>(initialData?.booked === false ? "false" : "true");
   const [cancellationReason, setCancellationReason] = useState<string>(initialData?.cancellation_reason ?? "");
+  // Empty string sentinel when no prior event is linked. Persisted into
+  // events.caused_by_event_id only when the operator picks one and the
+  // cancellation reason is sold_out (the picker is hidden otherwise).
+  const [causedByEventId, setCausedByEventId] = useState<string>(
+    initialData?.caused_by_event_id ?? ""
+  );
   const [eventMode, setEventMode] = useState<string>(initialData?.event_mode ?? "food_truck");
   const [feeType, setFeeType] = useState<string>(initialData?.fee_type ?? "none");
   const [feeRate, setFeeRate] = useState<number | "">(initialData?.fee_rate ?? "");
@@ -222,6 +238,7 @@ export function EventForm({
     setIsPrivate(initialData?.is_private ?? false);
     setBookedValue(initialData?.booked === false ? "false" : "true");
     setCancellationReason(initialData?.cancellation_reason ?? "");
+    setCausedByEventId(initialData?.caused_by_event_id ?? "");
     setEventMode(initialData?.event_mode ?? "food_truck");
     setFeeType(initialData?.fee_type ?? "none");
     setFeeRate(initialData?.fee_rate ?? "");
@@ -287,6 +304,37 @@ export function EventForm({
   }
 
   const afterFeeAmount = calcAfterFee();
+
+  // Sold-out linkage candidates — events from the prior 3 days relative to
+  // the cancellation date. We surface ALL prior-3-day events (not just the
+  // ones that strictly meet the suggested-trigger threshold of net_sales >
+  // 1.5 * forecast_sales) so the operator can still link, e.g., a Saturday
+  // that beat forecast moderately. The "suggested" badge separates the
+  // strict matches from the also-eligible.
+  //
+  // Deliberately scoped to prior 3 days — beyond that and the carry-over
+  // story is implausible. Excludes the event being edited (no self-link).
+  const linkageCandidates = useMemo(() => {
+    if (!dateValue) return [] as { event: Event; suggested: boolean }[];
+    const cancelDate = new Date(dateValue + "T00:00:00").getTime();
+    const threeDaysMs = 3 * 24 * 60 * 60 * 1000;
+    const out: { event: Event; suggested: boolean }[] = [];
+    for (const e of recentEventsForLinkage) {
+      if (initialData && e.id === initialData.id) continue;
+      const eventDate = new Date(e.event_date + "T00:00:00").getTime();
+      const delta = cancelDate - eventDate;
+      if (delta <= 0 || delta > threeDaysMs) continue;
+      const sales = e.net_sales ?? 0;
+      const forecast = e.forecast_sales ?? 0;
+      const suggested = forecast > 0 && sales > 1.5 * forecast;
+      out.push({ event: e, suggested });
+    }
+    out.sort((a, b) => {
+      if (a.suggested !== b.suggested) return a.suggested ? -1 : 1;
+      return b.event.event_date.localeCompare(a.event.event_date);
+    });
+    return out;
+  }, [dateValue, recentEventsForLinkage, initialData]);
 
   // Dropdown sort order: profile state first, then recently-used,
   // then alphabetical rest, then "Other/International" last.
@@ -365,6 +413,13 @@ export function EventForm({
       latitude: suggestedLat ?? undefined,
       longitude: suggestedLon ?? undefined,
       cancellation_reason: cancellationReason || null,
+      // Only persist the linkage when the cancellation is actually sold-out.
+      // Empty string serializes to null in updateEvent's generic loop, and
+      // is filtered out by createEvent's truthy check.
+      caused_by_event_id:
+        cancellationReason === "sold_out" && causedByEventId
+          ? causedByEventId
+          : null,
     };
 
     try {
@@ -479,7 +534,14 @@ export function EventForm({
                   <Label>Cancellation Reason</Label>
                   <Select
                     value={cancellationReason}
-                    onValueChange={(v) => setCancellationReason(v ?? "other")}
+                    onValueChange={(v) => {
+                      const next = v ?? "other";
+                      setCancellationReason(next);
+                      // Clear the linkage when the reason isn't sold_out —
+                      // the picker is only meaningful for carry-over and
+                      // we don't want stale links surviving a reason change.
+                      if (next !== "sold_out") setCausedByEventId("");
+                    }}
                   >
                     <SelectTrigger>
                       <SelectValue />
@@ -490,6 +552,42 @@ export function EventForm({
                       ))}
                     </SelectContent>
                   </Select>
+                </div>
+              )}
+              {cancellationReason === "sold_out" && (
+                <div className="space-y-2 sm:col-span-2">
+                  <Label htmlFor="caused_by_event">
+                    Caused by an earlier event?{" "}
+                    <span className="text-muted-foreground font-normal">
+                      (optional)
+                    </span>
+                  </Label>
+                  <Select
+                    value={causedByEventId || "__none__"}
+                    onValueChange={(v) =>
+                      setCausedByEventId(v === "__none__" ? "" : (v ?? ""))
+                    }
+                  >
+                    <SelectTrigger id="caused_by_event">
+                      <SelectValue placeholder="Skip — wasn't carry-over from another event" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="__none__">
+                        Skip — wasn&apos;t carry-over
+                      </SelectItem>
+                      {linkageCandidates.map(({ event: e, suggested }) => (
+                        <SelectItem key={e.id} value={e.id}>
+                          {suggested ? "★ " : ""}
+                          {e.event_name} · {e.event_date}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-muted-foreground">
+                    {linkageCandidates.length === 0
+                      ? "No events in the prior 3 days to link to. Skip is fine."
+                      : "★ marks events that overran their forecast — likely sold-out triggers. Linked carry-overs are excluded from forecast accuracy stats."}
+                  </p>
                 </div>
               )}
               <div className="col-span-2 grid grid-cols-3 gap-3">

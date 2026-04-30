@@ -77,6 +77,11 @@ export interface Profile {
   team_share_token?: string | null;
   owner_user_id?: string | null;
   trial_extended_until?: string | null;
+  /** Per-operator override (cents) of the Tier-B chatbot monthly cap.
+   *  NULL = use env default (CHAT_V2_MONTHLY_CAP_CENTS, fallback $10).
+   *  Mutated only via the admin tool on /dashboard/admin/users/[userId].
+   *  Migration 20260429000005. */
+  chat_v2_monthly_cap_cents_override?: number | null;
   created_at: string;
   updated_at: string;
 }
@@ -120,6 +125,13 @@ export interface Event {
   notes: string | null;
   pos_source: PosSource;
   cancellation_reason: CancellationReason | null;
+  /** Optional link to a prior event whose outcome caused this cancellation
+   *  (e.g., Saturday sold out → Sunday cancelled with sold_out reason and
+   *  caused_by_event_id pointing at Saturday). Migration 20260429000004
+   *  adds the FK with ON DELETE SET NULL. Stats engine excludes rows
+   *  with this set from forecast accuracy denominators (PR b). Display
+   *  layer renders "Sold out (carry-over from X)" instead of "$0 sales." */
+  caused_by_event_id?: string | null;
   created_at: string;
   updated_at: string;
 }

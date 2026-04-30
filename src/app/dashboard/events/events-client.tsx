@@ -299,6 +299,10 @@ interface ListViewProps {
   sorted: Event[];
   weatherMap: Map<string, WeatherForecast>;
   today: string;
+  // id → event_name lookup so cancelled+sold_out rows that carry a
+  // caused_by_event_id can render "Carry-over from <name>" without
+  // an extra fetch. Built in EventsClient.
+  eventNameById: Map<string, string>;
   // Handlers
   handleTabChange: (tab: TabMode) => void;
   handleSort: (field: SortField) => void;
@@ -331,6 +335,7 @@ function ListView({
   sorted,
   weatherMap,
   today,
+  eventNameById,
   handleTabChange,
   handleSort,
   handleDuplicate,
@@ -338,6 +343,11 @@ function ListView({
   handleQuickBook,
   handleDismiss,
 }: ListViewProps) {
+  function carryOverLabel(event: Event): string | null {
+    if (!event.caused_by_event_id) return null;
+    const name = eventNameById.get(event.caused_by_event_id);
+    return name ? `Carry-over from ${name}` : "Carry-over from earlier event";
+  }
   return (
     <>
       {/* All / Upcoming / Unbooked / Past / Needs Attention Tabs */}
@@ -520,8 +530,15 @@ function ListView({
                           </span>
                           {event.cancellation_reason && (
                             <Badge variant="outline" className="text-[10px] text-red-600 border-red-300 dark:text-red-400 dark:border-red-700">
-                              Cancelled
+                              {event.cancellation_reason === "sold_out" && event.caused_by_event_id
+                                ? "Sold out"
+                                : "Cancelled"}
                             </Badge>
+                          )}
+                          {event.cancellation_reason === "sold_out" && event.caused_by_event_id && (
+                            <span className="text-[10px] text-muted-foreground italic">
+                              {carryOverLabel(event) ?? ""}
+                            </span>
                           )}
                           {!event.booked && !event.cancellation_reason && (
                             <Badge variant="outline" className="text-[10px]">Unbooked</Badge>
@@ -537,12 +554,20 @@ function ListView({
                         <ForecastVsActual event={event} today={today} />
                       </div>
                       <div className="text-right shrink-0">
-                        <div className="text-sm font-semibold tabular-nums">
-                          {formatCurrency(displaySales)}
-                          {isCatering && (event.invoice_revenue ?? 0) > 0 && (
-                            <span className="text-[10px] text-brand-teal ml-1">inv</span>
-                          )}
-                        </div>
+                        {event.cancellation_reason === "sold_out" && event.caused_by_event_id ? (
+                          // Linked carry-over — suppress the "$0" headline; the
+                          // "Sold out · Carry-over from X" line above carries
+                          // the meaning. Stats engine excludes this row from
+                          // accuracy denominators (PR b).
+                          <div className="text-sm font-medium text-muted-foreground">—</div>
+                        ) : (
+                          <div className="text-sm font-semibold tabular-nums">
+                            {formatCurrency(displaySales)}
+                            {isCatering && (event.invoice_revenue ?? 0) > 0 && (
+                              <span className="text-[10px] text-brand-teal ml-1">inv</span>
+                            )}
+                          </div>
+                        )}
                         {event.event_date >= today && event.forecast_sales && (
                           <div className="mt-1">
                             <ForecastInline event={event} />
@@ -683,8 +708,15 @@ function ListView({
                       {formatDate(event.event_date)}
                       {event.cancellation_reason && (
                         <Badge variant="outline" className="ml-2 text-xs text-red-600 border-red-300 dark:text-red-400 dark:border-red-700">
-                          Cancelled
+                          {event.cancellation_reason === "sold_out" && event.caused_by_event_id
+                            ? "Sold out"
+                            : "Cancelled"}
                         </Badge>
+                      )}
+                      {event.cancellation_reason === "sold_out" && event.caused_by_event_id && (
+                        <span className="ml-2 text-xs text-muted-foreground italic">
+                          {carryOverLabel(event) ?? ""}
+                        </span>
                       )}
                       {!event.booked && !event.cancellation_reason && (
                         <Badge variant="outline" className="ml-2 text-xs">
@@ -708,7 +740,9 @@ function ListView({
                       {event.location ?? event.city ?? "—"}
                     </TableCell>
                     <TableCell className="text-right font-medium">
-                      {event.event_mode === "catering" && (event.invoice_revenue ?? 0) > 0 ? (
+                      {event.cancellation_reason === "sold_out" && event.caused_by_event_id ? (
+                        <span className="text-muted-foreground">—</span>
+                      ) : event.event_mode === "catering" && (event.invoice_revenue ?? 0) > 0 ? (
                         <span title={`Invoice: ${formatCurrency(event.invoice_revenue)}\nOn-site: ${formatCurrency(event.net_sales)}`}>
                           {formatCurrency((event.net_sales ?? 0) + (event.invoice_revenue ?? 0))}
                           <span className="text-[10px] text-brand-teal ml-1">inv</span>
@@ -883,6 +917,11 @@ export function EventsClient({ initialEvents, userId = "", businessName = "", us
   const [bookingId, setBookingId] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<ViewMode>("split");
   const [activeTab, setActiveTab] = useState<TabMode>("upcoming");
+  // Optional ?missing= filter — fed by dashboard fill-gaps cards. Keeps the
+  // mental loop from "X events missing event type" → events page filtered to
+  // those rows. Cleared on tab change so chips don't quietly persist across
+  // navigation.
+  const [missingFilter, setMissingFilter] = useState<"type" | "weather" | "location" | null>(null);
   const [calendarMonth, setCalendarMonth] = useState<Date>(() => {
     const now = new Date();
     return new Date(now.getFullYear(), now.getMonth(), 1);
@@ -956,6 +995,12 @@ export function EventsClient({ initialEvents, userId = "", businessName = "", us
           ? "desc"
           : "asc"
       );
+    }
+    const missing = searchParams.get("missing");
+    if (missing === "type" || missing === "weather" || missing === "location") {
+      setMissingFilter(missing);
+    } else {
+      setMissingFilter(null);
     }
   }, [searchParams]);
 
@@ -1099,6 +1144,15 @@ export function EventsClient({ initialEvents, userId = "", businessName = "", us
     [initialEvents]
   );
 
+  // id → event_name lookup so cancelled+sold_out rows that carry a
+  // caused_by_event_id can render "carry-over from <name>" without an
+  // extra fetch. Passed into ListView; the render-side helper lives there.
+  const eventNameById = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const e of initialEvents) m.set(e.id, e.event_name);
+    return m;
+  }, [initialEvents]);
+
   // Split into all / upcoming (booked) / unbooked (future) / past / past_unbooked / flagged / cancelled.
   //
   // initialEvents arrives sorted desc by event_date from the server.
@@ -1176,9 +1230,19 @@ export function EventsClient({ initialEvents, userId = "", businessName = "", us
           new Date(e.event_date + "T00:00:00").getFullYear().toString() === yearFilter;
         const matchesMode =
           modeFilter === "all" || (e.event_mode ?? "food_truck") === modeFilter;
-        return matchesSearch && matchesYear && matchesMode;
+        const matchesMissing =
+          missingFilter === null
+            ? true
+            : missingFilter === "type"
+              ? !e.event_type
+              : missingFilter === "weather"
+                ? !e.event_weather
+                : missingFilter === "location"
+                  ? !e.location && !e.city
+                  : true;
+        return matchesSearch && matchesYear && matchesMode && matchesMissing;
       }),
-    [activeEvents, search, yearFilter, modeFilter]
+    [activeEvents, search, yearFilter, modeFilter, missingFilter]
   );
 
   // Sort: upcoming/unbooked = ascending (soonest first), all/past/flagged = descending (most recent first)
@@ -1232,11 +1296,15 @@ export function EventsClient({ initialEvents, userId = "", businessName = "", us
     }
   });
 
-  // When switching tabs, reset sort to default for that tab
+  // When switching tabs, reset sort to default for that tab and clear any
+  // active ?missing= filter from the dashboard fill-gaps deep-link — the
+  // filter only makes sense in the context of the deep-link the user clicked
+  // through; persisting it across tab clicks would be confusing.
   function handleTabChange(tab: TabMode) {
     setActiveTab(tab);
     setSortField("event_date");
     setSortDirection((tab === "past" || tab === "past_unbooked" || tab === "flagged" || tab === "all" || tab === "cancelled") ? "desc" : "asc");
+    setMissingFilter(null);
   }
 
   function handleSort(field: SortField) {
@@ -1994,6 +2062,27 @@ export function EventsClient({ initialEvents, userId = "", businessName = "", us
            * inside ListView for the full explanation). Tabs still live
            * inside ListView since they don't host text inputs.
            */}
+          {missingFilter && (
+            <div className="flex items-center justify-between gap-3 rounded-md border border-indigo-200 bg-indigo-50 dark:border-indigo-800/40 dark:bg-indigo-950/20 px-3 py-2 text-sm text-indigo-900 dark:text-indigo-300">
+              <span>
+                Showing only events missing{" "}
+                <strong>
+                  {missingFilter === "type" ? "event type" : missingFilter === "weather" ? "weather" : "location"}
+                </strong>
+              </span>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="text-xs h-7 px-2 text-indigo-700 hover:bg-indigo-100 dark:text-indigo-300 dark:hover:bg-indigo-900/30"
+                onClick={() => {
+                  setMissingFilter(null);
+                  router.replace("/dashboard/events?tab=" + activeTab);
+                }}
+              >
+                Clear
+              </Button>
+            </div>
+          )}
           <div className="flex items-center gap-3 flex-wrap">
             <div className="relative flex-1 max-w-sm min-w-48">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -2069,6 +2158,7 @@ export function EventsClient({ initialEvents, userId = "", businessName = "", us
             sorted={sorted}
             weatherMap={weatherMap}
             today={today}
+            eventNameById={eventNameById}
             handleTabChange={handleTabChange}
             handleSort={handleSort}
             handleDuplicate={handleDuplicate}
@@ -2131,6 +2221,7 @@ export function EventsClient({ initialEvents, userId = "", businessName = "", us
         onSubmit={handleCreate}
         profileState={userState}
         recentStates={recentStates}
+        recentEventsForLinkage={initialEvents}
       />
 
       {/* Edit Event Dialog — always mounted so Base UI dialog can open/close correctly */}
@@ -2142,6 +2233,7 @@ export function EventsClient({ initialEvents, userId = "", businessName = "", us
         title="Edit Event"
         profileState={userState}
         recentStates={recentStates}
+        recentEventsForLinkage={initialEvents}
       />
 
       {/* Duplicate Event Dialog — opens a pre-filled create form with cleared sales/dates */}
@@ -2153,6 +2245,7 @@ export function EventsClient({ initialEvents, userId = "", businessName = "", us
         title="Duplicate Event"
         profileState={userState}
         recentStates={recentStates}
+        recentEventsForLinkage={initialEvents}
       />
 
       {/* Sales Entry Dialog — always mounted for same reason */}

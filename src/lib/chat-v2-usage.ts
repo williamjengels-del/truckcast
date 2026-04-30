@@ -20,7 +20,27 @@ export const SONNET_OUTPUT_CENTS_PER_MTOK = 1500; // $15.00 / MTok output
 
 export const CHAT_V2_DEFAULT_CAP_CENTS = 1000; // $10.00 / operator / month
 
-export function chatV2MonthlyCapCents(): number {
+/**
+ * Resolve the effective monthly cap (in cents) for an operator.
+ *
+ * Resolution order (per-operator override beats env beats default):
+ *   1. `override` argument — when caller has already loaded the profile
+ *      and wants to pass profiles.chat_v2_monthly_cap_cents_override.
+ *      Positive integers win; NULL / undefined / non-positive falls
+ *      through.
+ *   2. `CHAT_V2_MONTHLY_CAP_CENTS` env var — fleet-wide override.
+ *      Same parse-or-fallback rules as before.
+ *   3. CHAT_V2_DEFAULT_CAP_CENTS ($10).
+ */
+export function chatV2MonthlyCapCents(override?: number | null): number {
+  if (
+    override !== undefined &&
+    override !== null &&
+    Number.isFinite(override) &&
+    override > 0
+  ) {
+    return override;
+  }
   const env = process.env.CHAT_V2_MONTHLY_CAP_CENTS;
   if (!env) return CHAT_V2_DEFAULT_CAP_CENTS;
   const parsed = Number.parseInt(env, 10);
@@ -92,8 +112,24 @@ export async function checkMonthlyCap(
   supabase: SupabaseClient,
   userId: string
 ): Promise<CapCheckResult> {
-  const cap = chatV2MonthlyCapCents();
-  const spent = await monthToDateCostCents(supabase, userId);
+  // Read the per-operator override alongside the spend query. Two reads
+  // is fine — both are small and indexed; bundling into one is a future
+  // perf cleanup if it shows up in traces.
+  const [{ data: profile }, spent] = await Promise.all([
+    supabase
+      .from("profiles")
+      .select("chat_v2_monthly_cap_cents_override")
+      .eq("id", userId)
+      .maybeSingle(),
+    monthToDateCostCents(supabase, userId),
+  ]);
+  const override =
+    (
+      profile as {
+        chat_v2_monthly_cap_cents_override?: number | null;
+      } | null
+    )?.chat_v2_monthly_cap_cents_override ?? null;
+  const cap = chatV2MonthlyCapCents(override);
   if (spent >= cap) {
     return {
       ok: false,

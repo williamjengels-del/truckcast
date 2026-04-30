@@ -2,8 +2,11 @@ import type { Event } from "./database.types";
 import type { ForecastResult } from "./forecast-engine";
 
 // Data-density framing: we're describing how well-fed the model is by the
-// user's history, not a probability. "Learning" positions thin data as the
-// system doing its job, not failing.
+// user's history, not a probability. "learning" originally surfaced as a
+// "Learning" pill; per 2026-04-29 operator feedback the pill is no longer
+// rendered (UI now substitutes a comparison-anchor sentence — see
+// lowConfidenceAnchorSentence below). The DataDensity union and helpers stay
+// so the framing is reachable if/when we revisit the reframing later.
 export type DataDensity = "calibrated" | "building" | "learning";
 
 export function dataDensityFromConfidence(
@@ -123,6 +126,29 @@ export function forecastContextSentence(
 function pluralize(dayName: string): string {
   // "Saturday" → "Saturdays"
   return dayName.endsWith("s") ? dayName : `${dayName}s`;
+}
+
+// Replacement copy for the dropped "Learning" pill (operator feedback,
+// 2026-04-29). Surfaces a comparison anchor when there's any history to
+// compare against, and a "no forecast yet" prompt for true cold-starts.
+//
+// The engine still computes a confidence score under the hood — this
+// helper just gives the UI a softer landing for low-confidence cases
+// than a generic badge.
+export function lowConfidenceAnchorSentence(
+  forecast: ForecastResult,
+  event: Event
+): string {
+  // L0 cold-start: no personal history; the platform-blend isn't enough to
+  // anchor with a personal-history sentence. Spell out the next step.
+  if (forecast.level === 0 || forecast.dataPoints === 0) {
+    return "No forecast yet — need 2-3 prior bookings of this event before we can predict";
+  }
+  const eventNoun = event.event_type
+    ? pluralize(event.event_type)
+    : "events";
+  const avg = formatDollars(forecast.baseForecast || forecast.forecast);
+  return `Similar ${eventNoun} averaged ${avg} in your history`;
 }
 
 // Possessive form for "operator" — apostrophe placement depends on count.
