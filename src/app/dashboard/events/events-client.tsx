@@ -2177,6 +2177,7 @@ export function EventsClient({ initialEvents, userId = "", businessName = "", us
         onSubmit={handleCreate}
         profileState={userState}
         recentStates={recentStates}
+        recentEventsForLinkage={initialEvents}
       />
 
       {/* Edit Event Dialog — always mounted so Base UI dialog can open/close correctly */}
@@ -2188,6 +2189,7 @@ export function EventsClient({ initialEvents, userId = "", businessName = "", us
         title="Edit Event"
         profileState={userState}
         recentStates={recentStates}
+        recentEventsForLinkage={initialEvents}
       />
 
       {/* Duplicate Event Dialog — opens a pre-filled create form with cleared sales/dates */}
@@ -2199,6 +2201,7 @@ export function EventsClient({ initialEvents, userId = "", businessName = "", us
         title="Duplicate Event"
         profileState={userState}
         recentStates={recentStates}
+        recentEventsForLinkage={initialEvents}
       />
 
       {/* Sales Entry Dialog — always mounted for same reason */}
