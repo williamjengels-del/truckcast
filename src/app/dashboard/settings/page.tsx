@@ -114,12 +114,51 @@ function SettingsContent() {
     loadProfile();
   }, [effectiveUserId]);
 
-  // Auto-sync when returning from Stripe checkout
+  // URL-driven tabs (?tab=profile|plan|customers|notifications|security).
+  // Reading the URL (rather than only useState) means deep-links and refresh
+  // both land on the right tab. Writing it back means each tab change is a
+  // shareable URL — useful for support flows ("open this URL to find the
+  // toggle"). Default = profile when ?tab= is missing or unrecognized.
+  //
+  // Hooks order note (regression caught during review of #77, fixed here):
+  // these MUST live above the `if (loading)` early-return below. React's
+  // Rules of Hooks require the same call sequence on every render; placing
+  // hooks below an early-return causes the post-load render to add hooks
+  // and trip "Rendered more hooks than during the previous render."
+  const initialTab = ((): SettingsTab => {
+    const t = searchParams.get("tab");
+    return isSettingsTab(t) ? t : "profile";
+  })();
+  const [activeTab, setActiveTab] = useState<SettingsTab>(initialTab);
+
+  // Keep state in sync if the URL changes (back/forward, support deep-link).
+  useEffect(() => {
+    const t = searchParams.get("tab");
+    if (isSettingsTab(t) && t !== activeTab) {
+      setActiveTab(t);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams]);
+
+  const handleTabChange = useCallback(
+    (value: unknown) => {
+      if (typeof value !== "string" || !isSettingsTab(value)) return;
+      setActiveTab(value);
+      const params = new URLSearchParams(searchParams.toString());
+      params.set("tab", value);
+      router.replace(`/dashboard/settings?${params.toString()}`, { scroll: false });
+    },
+    [router, searchParams]
+  );
+
+  // Auto-sync when returning from Stripe checkout. Land back on the Plan
+  // tab so the operator sees their freshly-upgraded tier — pre-tabs this
+  // didn't matter (single scroll), post-tabs the default ?tab=profile
+  // landing made the verify-the-upgrade step require an extra click.
   useEffect(() => {
     if (searchParams.get("upgraded") === "true" && !syncing && !loading) {
       syncTier().then(() => {
-        // Remove the query param so it doesn't re-sync on refresh
-        router.replace("/dashboard/settings");
+        router.replace("/dashboard/settings?tab=plan");
       });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -150,37 +189,6 @@ function SettingsContent() {
       </div>
     );
   }
-
-  // URL-driven tabs (?tab=profile|plan|customers|notifications|security).
-  // Reading the URL (rather than only useState) means deep-links and refresh
-  // both land on the right tab. Writing it back means each tab change is a
-  // shareable URL — useful for support flows ("open this URL to find the
-  // toggle"). Default = profile when ?tab= is missing or unrecognized.
-  const initialTab = ((): SettingsTab => {
-    const t = searchParams.get("tab");
-    return isSettingsTab(t) ? t : "profile";
-  })();
-  const [activeTab, setActiveTab] = useState<SettingsTab>(initialTab);
-
-  // Keep state in sync if the URL changes (back/forward, support deep-link).
-  useEffect(() => {
-    const t = searchParams.get("tab");
-    if (isSettingsTab(t) && t !== activeTab) {
-      setActiveTab(t);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [searchParams]);
-
-  const handleTabChange = useCallback(
-    (value: unknown) => {
-      if (typeof value !== "string" || !isSettingsTab(value)) return;
-      setActiveTab(value);
-      const params = new URLSearchParams(searchParams.toString());
-      params.set("tab", value);
-      router.replace(`/dashboard/settings?${params.toString()}`, { scroll: false });
-    },
-    [router, searchParams]
-  );
 
   return (
     <div className="space-y-6">
