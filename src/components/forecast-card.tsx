@@ -10,6 +10,7 @@ import {
   formatForecastRange,
   hasUsableForecast,
   isFixedRevenueEvent,
+  lowConfidenceAnchorSentence,
   plainEnglishAdjustments,
 } from "@/lib/forecast-display";
 
@@ -40,6 +41,11 @@ export function ForecastCard({ event, forecast }: ForecastCardProps) {
   const confidence = forecast?.confidence ?? event.forecast_confidence ?? null;
   const density = dataDensityFromConfidence(confidence);
   const pill = dataDensityPill(density);
+  // Per 2026-04-29 operator feedback: don't render the "Learning" pill —
+  // it framed thin-data forecasts as the model's failure rather than a
+  // matter-of-fact next step. For "Calibrated" / "Building" the pill still
+  // earns its space; for "learning" we substitute an anchor sentence below.
+  const showPill = density !== "learning";
 
   // Range: prefer live computation when we have a forecast result (so /forecasts
   // stays in sync with events-list without waiting for recalc). Fall back to
@@ -56,7 +62,17 @@ export function ForecastCard({ event, forecast }: ForecastCardProps) {
     high = event.forecast_high;
   }
 
-  const context = forecast ? forecastContextSentence(forecast, event) : null;
+  // Low-confidence anchor sentence stands in for the dropped "Learning" pill.
+  // Renders below the range; the standard `forecastContextSentence` is hidden
+  // in the learning case to avoid stacking two history-grounded sentences.
+  const anchor =
+    forecast && density === "learning"
+      ? lowConfidenceAnchorSentence(forecast, event)
+      : null;
+  const context =
+    forecast && density !== "learning"
+      ? forecastContextSentence(forecast, event)
+      : null;
   const adjustments = forecast ? plainEnglishAdjustments(forecast, event) : [];
 
   return (
@@ -69,15 +85,21 @@ export function ForecastCard({ event, forecast }: ForecastCardProps) {
         {low !== null && high !== null && (
           <span>{formatForecastRange(low, high)}</span>
         )}
-        {low !== null && high !== null && (
+        {low !== null && high !== null && showPill && (
           <span aria-hidden>·</span>
         )}
-        <span
-          className={`inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-medium ${pill.className}`}
-        >
-          {pill.label}
-        </span>
+        {showPill && (
+          <span
+            className={`inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-medium ${pill.className}`}
+          >
+            {pill.label}
+          </span>
+        )}
       </div>
+
+      {anchor && (
+        <p className="text-sm text-muted-foreground">{anchor}</p>
+      )}
 
       {context && (
         <p className="text-sm text-muted-foreground">{context}</p>
@@ -162,6 +184,10 @@ export function ForecastInline({ event, forecast }: ForecastInlineProps) {
   const confidence = forecast?.confidence ?? event.forecast_confidence ?? null;
   const density = dataDensityFromConfidence(confidence);
   const pill = dataDensityPill(density);
+  // Drop pill in learning state (operator feedback 2026-04-29). Inline
+  // surfaces don't have room for the anchor sentence, so the row stays
+  // clean — just the range, no badge.
+  const showPill = density !== "learning";
 
   let low: number | null = null;
   let high: number | null = null;
@@ -174,12 +200,6 @@ export function ForecastInline({ event, forecast }: ForecastInlineProps) {
     high = event.forecast_high;
   }
 
-  // L0 cold-start chip: the dense row shows no context sentence, so without
-  // this hint users see "Learning" next to a number and wonder where it
-  // came from. Only surfaces for true cold-start; blended-L1 rows stay
-  // clean (trust gets built on the full card, not in the list).
-  const isColdStart = forecast?.level === 0 && (forecast.platformOperatorCount ?? 0) >= 3;
-
   return (
     <div className="leading-tight space-y-0.5">
       {low !== null && high !== null ? (
@@ -191,18 +211,15 @@ export function ForecastInline({ event, forecast }: ForecastInlineProps) {
           {formatDollars(forecast?.forecast ?? event.forecast_sales ?? 0)}
         </div>
       )}
-      <div className="flex items-center gap-1 flex-wrap">
-        <span
-          className={`inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-medium ${pill.className}`}
-        >
-          {pill.label}
-        </span>
-        {isColdStart && (
-          <span className="inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-medium bg-neutral-100 text-neutral-600 dark:bg-neutral-800 dark:text-neutral-400">
-            from {forecast!.platformOperatorCount} ops
+      {showPill && (
+        <div className="flex items-center gap-1 flex-wrap">
+          <span
+            className={`inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-medium ${pill.className}`}
+          >
+            {pill.label}
           </span>
-        )}
-      </div>
+        </div>
+      )}
     </div>
   );
 }

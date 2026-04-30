@@ -86,4 +86,24 @@ describe("calculateEventPerformance", () => {
     expect(result.avg_sales).toBe(0);
     expect(result.times_booked).toBe(0);
   });
+
+  it("excludes events linked as carry-over (caused_by_event_id set) from stats", () => {
+    // Sunday cancelled because Saturday sold out → linkage points at
+    // Saturday. Even if Sunday somehow had a positive net_sales row
+    // (data hygiene gap), the caused_by_event_id filter keeps it out
+    // of the per-event-name aggregate.
+    const events = [
+      makeEvent({ id: "saturday", event_date: "2025-06-01", net_sales: 1500 }),
+      makeEvent({
+        id: "sunday",
+        event_date: "2025-06-02",
+        net_sales: 600, // hypothetical leftover row
+        caused_by_event_id: "saturday",
+      }),
+    ];
+    const result = calculateEventPerformance("Farmers Market", "user-1", events);
+    expect(result.times_booked).toBe(1);
+    expect(result.total_sales).toBe(1500);
+    expect(result.avg_sales).toBe(1500);
+  });
 });
