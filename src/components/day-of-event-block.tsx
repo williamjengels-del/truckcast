@@ -283,7 +283,7 @@ export async function DayOfEventBlock({
     !(event.event_mode === "catering" && event.invoice_revenue > 0);
 
   return (
-    <Card data-testid="day-of-event-block" className="border-orange-200 dark:border-orange-900/40">
+    <Card data-testid="day-of-event-block" className="border-brand-orange/40">
       <CardContent className="py-5 space-y-4">
         {/* After-event wrap-up surfaces above the main card content
             when a today event has just ended without a summary.
@@ -300,7 +300,7 @@ export async function DayOfEventBlock({
 
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
-            <p className="text-xs font-semibold uppercase tracking-widest text-orange-700 dark:text-orange-400">
+            <p className="text-xs font-semibold uppercase tracking-widest text-brand-orange">
               {state.kind === "today"
                 ? upcomingToday.length > 0
                   ? "Now"
@@ -497,9 +497,9 @@ export async function DayOfEventBlock({
               className="flex items-start gap-2 text-sm min-w-0"
               data-testid="day-of-event-menu-special"
             >
-              <MenuIcon className="h-4 w-4 text-orange-700 dark:text-orange-400 shrink-0 mt-0.5" />
+              <MenuIcon className="h-4 w-4 text-brand-orange shrink-0 mt-0.5" />
               <div className="min-w-0">
-                <p className="font-medium text-orange-700 dark:text-orange-400">
+                <p className="font-medium text-brand-orange">
                   Special menu
                 </p>
                 {event.special_menu_details && (
