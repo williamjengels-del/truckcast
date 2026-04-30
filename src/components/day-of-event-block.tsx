@@ -32,6 +32,7 @@ import { SetupCountdown } from "@/components/setup-countdown";
 import { InServiceNotes } from "@/components/in-service-notes";
 import { ContentCapture } from "@/components/content-capture";
 import { SalesPaceBar } from "@/components/sales-pace-bar";
+import { AfterEventSummary } from "@/components/after-event-summary";
 
 interface Props {
   events: Event[];
@@ -284,6 +285,19 @@ export async function DayOfEventBlock({
   return (
     <Card data-testid="day-of-event-block" className="border-orange-200 dark:border-orange-900/40">
       <CardContent className="py-5 space-y-4">
+        {/* After-event wrap-up surfaces above the main card content
+            when a today event has just ended without a summary.
+            Operator can fill or skip; "Skip for now" hides locally,
+            saving for the events page. */}
+        {state.needsWrapUp && (
+          <AfterEventSummary
+            eventId={state.needsWrapUp.id}
+            eventName={state.needsWrapUp.event_name}
+            endTimeDisplay={formatTimeHHMM(state.needsWrapUp.end_time)}
+            initialNetSales={state.needsWrapUp.net_sales}
+          />
+        )}
+
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
             <p className="text-xs font-semibold uppercase tracking-widest text-orange-700 dark:text-orange-400">

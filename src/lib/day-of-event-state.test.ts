@@ -205,6 +205,46 @@ describe("computeDayOfState", () => {
     expect(state.current?.id).toBe("no-end-time");
   });
 
+  it("surfaces needsWrapUp for the most-recently-ended event without a summary", () => {
+    const events = [
+      makeEvent({
+        id: "lunch",
+        event_date: "2026-04-29",
+        start_time: "11:30",
+        end_time: "13:30",
+      }),
+      makeEvent({
+        id: "vets",
+        event_date: "2026-04-29",
+        start_time: "15:30",
+        end_time: "18:00",
+      }),
+    ];
+    // Now: 19:00 — both ended.
+    const nowMs = wallclockInZoneToUtcMs("2026-04-29", "19:00", TZ)!;
+    const state = computeDayOfState(events, "2026-04-29", nowMs, TZ);
+    expect(state.needsWrapUp?.id).toBe("vets"); // most recent
+  });
+
+  it("does not surface needsWrapUp when summary already saved", () => {
+    const events = [
+      makeEvent({
+        id: "lunch",
+        event_date: "2026-04-29",
+        start_time: "11:30",
+        end_time: "13:30",
+        after_event_summary: {
+          final_sales: 1100,
+          wrap_up_note: "Crushed it",
+          what_id_change: null,
+        },
+      }),
+    ];
+    const nowMs = wallclockInZoneToUtcMs("2026-04-29", "14:00", TZ)!;
+    const state = computeDayOfState(events, "2026-04-29", nowMs, TZ);
+    expect(state.needsWrapUp).toBeNull();
+  });
+
   it("handles events with end_time crossing into next UTC day", () => {
     // Spec test case: Food Truck Friday 2026-05-01 8 PM CDT end =
     // 2026-05-02 01:00 UTC. Event date = 2026-05-01.

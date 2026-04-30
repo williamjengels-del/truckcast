@@ -279,6 +279,46 @@ export async function appendInServiceNote(eventId: string, text: string) {
 }
 
 /**
+ * Save the after-event summary on a wrapped-up event. Optionally
+ * updates net_sales when the operator enters a final figure during
+ * wrap-up that differs from the auto-logged value.
+ */
+export async function saveAfterEventSummary(
+  eventId: string,
+  summary: {
+    final_sales: number | null;
+    wrap_up_note: string | null;
+    what_id_change: string | null;
+  }
+) {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) throw new Error("Not authenticated");
+
+  const update: Record<string, unknown> = { after_event_summary: summary };
+  // If the operator entered a final sales number during wrap-up,
+  // also update net_sales — that's the canonical column the rest
+  // of the app reads from. Skip when null/unchanged to avoid
+  // clobbering POS-sync'd values.
+  if (summary.final_sales !== null) {
+    update.net_sales = summary.final_sales;
+  }
+
+  const { error } = await supabase
+    .from("events")
+    .update(update)
+    .eq("id", eventId)
+    .eq("user_id", user.id);
+  if (error) throw new Error(error.message);
+
+  revalidatePath("/dashboard");
+  revalidatePath("/dashboard/events");
+  recalculateForUser(user.id).catch(() => {});
+}
+
+/**
  * Set events.content_capture_notes — free-form scratchpad for B-roll
  * moments, story ideas, photo references. Edited (not appended);
  * latest write wins.
