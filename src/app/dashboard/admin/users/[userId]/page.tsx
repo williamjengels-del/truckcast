@@ -11,9 +11,14 @@ import { ChevronLeft, Upload } from "lucide-react";
 import { ImpersonateButton } from "./impersonate-button";
 import { ResetTrialButton } from "./reset-trial-button";
 import { MfaResetButton } from "./mfa-reset-button";
+import { ChatCapOverride } from "./chat-cap-override";
 import { EventsAdminTable } from "./events-admin-table";
 import type { Event } from "@/lib/database.types";
 import { formatDate, formatTimestamp } from "@/lib/format-time";
+import {
+  chatV2MonthlyCapCents,
+  monthToDateCostCents,
+} from "@/lib/chat-v2-usage";
 
 // Auth handled by /dashboard/admin/layout.tsx.
 
@@ -59,6 +64,13 @@ function renderAuditSummary(row: AdminActionRow): string {
       return `began impersonating`;
     case "user.impersonate_end":
       return `ended impersonation`;
+    case "user.cap_override_set": {
+      const fmt = (cents: unknown) =>
+        cents === null || cents === undefined
+          ? "default"
+          : `$${(Number(cents) / 100).toFixed(2)}`;
+      return `Tier-B cap ${fmt(m.from)} → ${fmt(m.to)}`;
+    }
     default:
       return JSON.stringify(m);
   }
@@ -122,6 +134,17 @@ export default async function UserDetailPage({ params }: PageProps) {
 
   const profile = profileResult.data;
   if (!profile) notFound();
+
+  // Tier-B chat cap override panel context. Read alongside the other
+  // queries above; spent is summed via the shared helper so admin and
+  // runtime stay aligned. Env default reads from process.env at request
+  // time; override comes off the profile we already loaded.
+  const chatCapOverrideCents =
+    (
+      profile as { chat_v2_monthly_cap_cents_override?: number | null }
+    ).chat_v2_monthly_cap_cents_override ?? null;
+  const chatCapEnvDefaultCents = chatV2MonthlyCapCents(null);
+  const chatCapSpentCents = await monthToDateCostCents(service, userId);
 
   const authUser = authResult.data?.user ?? null;
   const email = authUser?.email ?? null;
@@ -339,6 +362,13 @@ export default async function UserDetailPage({ params }: PageProps) {
           <MfaResetButton
             userId={profile.id}
             targetLabel={profile.business_name ?? email ?? "this user"}
+          />
+          <ChatCapOverride
+            userId={profile.id}
+            targetLabel={profile.business_name ?? email ?? "this user"}
+            currentOverrideCents={chatCapOverrideCents}
+            envDefaultCents={chatCapEnvDefaultCents}
+            spentCents={chatCapSpentCents}
           />
           <p className="text-xs text-muted-foreground">
             For tier changes and trial extensions by custom day counts, use the

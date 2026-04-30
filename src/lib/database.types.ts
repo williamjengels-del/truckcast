@@ -72,6 +72,11 @@ export interface Profile {
   team_share_token?: string | null;
   owner_user_id?: string | null;
   trial_extended_until?: string | null;
+  /** Per-operator override (cents) of the Tier-B chatbot monthly cap.
+   *  NULL = use env default (CHAT_V2_MONTHLY_CAP_CENTS, fallback $10).
+   *  Mutated only via the admin tool on /dashboard/admin/users/[userId].
+   *  Migration 20260429000005. */
+  chat_v2_monthly_cap_cents_override?: number | null;
   created_at: string;
   updated_at: string;
 }
