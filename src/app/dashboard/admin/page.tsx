@@ -45,8 +45,14 @@ export default async function AdminOverviewPage() {
     costMigrationApplied = false;
   }
 
+  // Operator vs manager separation (2026-04-30): all "user" metrics
+  // here count OPERATOR profiles only (owner_user_id IS NULL). Manager
+  // profiles (owner_user_id pointing at the operator they manage) get
+  // their own "Managers" stat — they're staff seats, not new vendor
+  // signups, and counting them inflates growth + feature adoption.
   const [
     { count: totalUsers },
+    { count: managerCount },
     { data: recentProfiles },
     { count: totalEvents },
     { count: activeThisWeek },
@@ -58,10 +64,18 @@ export default async function AdminOverviewPage() {
     { data: eventsCreatedWithin30d },
     authListResult,
   ] = await Promise.all([
-    serviceClient.from("profiles").select("*", { count: "exact", head: true }),
+    serviceClient
+      .from("profiles")
+      .select("*", { count: "exact", head: true })
+      .is("owner_user_id", null),
+    serviceClient
+      .from("profiles")
+      .select("*", { count: "exact", head: true })
+      .not("owner_user_id", "is", null),
     serviceClient
       .from("profiles")
       .select("id, business_name, city, subscription_tier, created_at")
+      .is("owner_user_id", null)
       .order("created_at", { ascending: false })
       .limit(10),
     serviceClient.from("events").select("*", { count: "exact", head: true }),
@@ -71,7 +85,8 @@ export default async function AdminOverviewPage() {
       .gte("created_at", sevenDaysAgoStr),
     serviceClient
       .from("profiles")
-      .select("data_sharing_enabled"),
+      .select("id, data_sharing_enabled")
+      .is("owner_user_id", null),
     serviceClient
       .from("beta_invites")
       .select("id, redeemed_by"),
@@ -91,10 +106,12 @@ export default async function AdminOverviewPage() {
     serviceClient
       .from("profiles")
       .select("*", { count: "exact", head: true })
+      .is("owner_user_id", null)
       .gte("created_at", thirtyDaysAgoStr),
     serviceClient
       .from("profiles")
       .select("created_at")
+      .is("owner_user_id", null)
       .gte("created_at", thirtyDaysAgoStr)
       .limit(50000),
     serviceClient
@@ -115,6 +132,12 @@ export default async function AdminOverviewPage() {
     (p: { data_sharing_enabled: boolean }) => p.data_sharing_enabled
   ).length;
   const sharingDisabled = (totalUsers ?? 0) - sharingEnabled;
+
+  // Operator IDs (Set for O(1) auth-list filtering below). allProfiles
+  // already excludes managers via .is("owner_user_id", null).
+  const operatorIds = new Set<string>(
+    (allProfiles ?? []).map((p: { id: string }) => p.id)
+  );
 
   const totalInvites = (invites ?? []).length;
   const redeemedInvites = (invites ?? []).filter(
@@ -157,7 +180,11 @@ export default async function AdminOverviewPage() {
   const totalSignupsIn30d = signupsCountIn30d ?? 0;
   const totalEventsLoggedIn30d = eventsCountIn30d ?? 0;
 
+  // Operator-only — manager auth sessions don't count toward active
+  // operator users. Filtering against the operatorIds set keeps this
+  // honest with the rest of the admin user metrics.
   const activeUsers7d = (authListResult?.data?.users ?? []).filter((u) => {
+    if (!operatorIds.has(u.id)) return false;
     if (!u.last_sign_in_at) return false;
     return new Date(u.last_sign_in_at) >= sevenDaysAgo;
   }).length;
@@ -228,11 +255,16 @@ export default async function AdminOverviewPage() {
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-xs font-normal text-muted-foreground uppercase tracking-wide">
-              Total Users
+              Operators
             </CardTitle>
           </CardHeader>
           <CardContent>
             <p className="text-3xl font-bold">{totalUsers ?? 0}</p>
+            {(managerCount ?? 0) > 0 && (
+              <p className="text-xs text-muted-foreground">
+                +{managerCount} {managerCount === 1 ? "manager" : "managers"}
+              </p>
+            )}
           </CardContent>
         </Card>
         <Card>

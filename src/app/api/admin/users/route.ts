@@ -35,12 +35,17 @@ interface AdminProfileRow {
 async function fetchAllProfiles(
   service: NonNullable<Awaited<ReturnType<typeof getServiceClient>>>
 ): Promise<AdminProfileRow[]> {
+  // Operator-only — manager profiles (owner_user_id IS NOT NULL) are
+  // staff seats invited via the operator's settings → Team Members
+  // flow, not separate vendor signups. Counting them in admin user
+  // metrics inflated growth + tier breakdown.
   const all: AdminProfileRow[] = [];
   let offset = 0;
   while (true) {
     const { data, error } = await service
       .from("profiles")
       .select("id, business_name, city, state, subscription_tier, stripe_customer_id, stripe_subscription_id, trial_extended_until, data_sharing_enabled, onboarding_completed, created_at, last_payment_status, last_payment_failure_reason")
+      .is("owner_user_id", null)
       .order("created_at", { ascending: false })
       .range(offset, offset + BATCH_SIZE - 1);
     if (error) throw new Error(error.message);
