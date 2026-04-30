@@ -73,12 +73,12 @@ export function AfterEventSummary({
   return (
     <form
       onSubmit={submit}
-      className="rounded-md border border-orange-200 dark:border-orange-900/40 bg-orange-50/50 dark:bg-orange-950/20 p-4 space-y-3"
+      className="rounded-md border border-brand-orange/40 bg-brand-orange/5 p-4 space-y-3"
       data-testid="day-of-event-after-summary"
     >
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
-          <p className="text-xs font-semibold uppercase tracking-widest text-orange-700 dark:text-orange-400">
+          <p className="text-xs font-semibold uppercase tracking-widest text-brand-orange">
             Wrap up · {eventName}
           </p>
           {endTimeDisplay && (

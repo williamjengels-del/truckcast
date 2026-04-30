@@ -69,7 +69,7 @@ export function SetupCountdown({ setupInstantMs, setupDisplay }: Props) {
           isOverdue
             ? "h-4 w-4 text-destructive shrink-0 mt-0.5"
             : isNow
-            ? "h-4 w-4 text-orange-600 dark:text-orange-400 shrink-0 mt-0.5"
+            ? "h-4 w-4 text-brand-orange shrink-0 mt-0.5"
             : "h-4 w-4 text-muted-foreground shrink-0 mt-0.5"
         }
       />
