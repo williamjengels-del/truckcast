@@ -114,7 +114,13 @@ export default async function DashboardLayout({
     <ImpersonationProvider value={impersonationState}>
       <div className="flex h-screen overflow-hidden">
         <Sidebar />
-        <div className="flex flex-1 flex-col overflow-hidden">
+        {/* min-w-0 lets this flex column shrink below its content's
+            natural width — without it, wide content like the events
+            table balloons the column past the viewport (sidebar +
+            content > 100vw), and child overflow-x-auto wrappers
+            can't trigger because their parent is already as wide
+            as their content. */}
+        <div className="flex flex-1 flex-col overflow-hidden min-w-0">
           <Header />
           {/* Impersonation banner renders only when active — mounted
               before Trial / Manager banners so the read-only state is
