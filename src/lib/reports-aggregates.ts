@@ -125,9 +125,15 @@ export function computeReportsAggregates(
   events: Event[],
   performances: EventPerformance[]
 ): ReportsAggregates {
+  // caused_by_event_id check excludes carry-over linkages (e.g., Sunday
+  // cancelled because Saturday sold out) from every aggregate this function
+  // produces — monthly totals, day-of-week, top-10, accuracy. Saturday's
+  // overrun is the credited outcome; the cancelled Sunday is bookkeeping
+  // and shouldn't influence aggregates.
   const completedEvents = events.filter(
     (e) =>
       e.booked !== false &&
+      !e.caused_by_event_id &&
       ((e.net_sales !== null && e.net_sales > 0) ||
         (e.event_mode === "catering" && e.invoice_revenue > 0))
   );

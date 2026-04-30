@@ -113,9 +113,13 @@ export default async function DashboardPage() {
   );
 
   // KPI calculations
+  // Linked carry-over events (e.g., Sunday cancelled because Saturday sold
+  // out — carries caused_by_event_id pointing at Saturday) drop out at the
+  // completed-events filter so they don't drag down forecast accuracy or
+  // YTD totals. Saturday's overrun is the credited outcome.
   const bookedEvents = events.filter((e) => e.booked);
   const completedEvents = bookedEvents.filter(
-    (e) => e.event_date <= today && hasRevenue(e)
+    (e) => e.event_date <= today && !e.caused_by_event_id && hasRevenue(e)
   );
   const ytdEvents = completedEvents.filter(
     (e) => new Date(e.event_date + "T00:00:00").getFullYear() === currentYear
