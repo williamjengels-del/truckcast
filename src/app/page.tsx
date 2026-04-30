@@ -88,83 +88,6 @@ async function getWeatherLossDollars(): Promise<string> {
   }
 }
 
-/** Repeat-booking decline rate = share of Julian's multi-year recurring events
- *  whose latest-year revenue is below their first-year revenue AND shows a
- *  near-monotonic downward trend across the intermediate years.
- *
- *  Qualifying group: same `event_name` appearing across 3+ distinct calendar
- *  years with `net_sales` recorded in each appearance. "Near-monotonic" =
- *  at most one year-over-year uptick in the series.
- *
- *  Returns a pre-formatted string ("65%"), snapped to nearest 5%, or the
- *  placeholder "{{REPEAT_BOOKING_DECLINE_RATE}}" on env/timeout/empty-data.
- */
-async function getRepeatBookingDeclineRate(): Promise<string> {
-  if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
-    return "{{REPEAT_BOOKING_DECLINE_RATE}}";
-  }
-  try {
-    const serviceClient = createServiceClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL,
-      process.env.SUPABASE_SERVICE_ROLE_KEY
-    );
-    const query = serviceClient
-      .from("events")
-      .select("event_name, event_date, net_sales")
-      .eq("user_id", JULIAN_USER_ID)
-      .not("net_sales", "is", null)
-      .not("event_name", "is", null)
-      .then(({ data }) => {
-        if (!data || data.length === 0) return null;
-
-        // Bucket by event_name → year → max(net_sales) for that year.
-        const byNameYear = new Map<string, Map<number, number>>();
-        for (const row of data) {
-          const name = String(row.event_name ?? "").trim();
-          const dateStr = String(row.event_date ?? "");
-          const year = Number(dateStr.slice(0, 4));
-          const sales = Number(row.net_sales ?? 0);
-          if (!name || !Number.isFinite(year) || year < 2000 || !Number.isFinite(sales)) continue;
-          let perYear = byNameYear.get(name);
-          if (!perYear) {
-            perYear = new Map();
-            byNameYear.set(name, perYear);
-          }
-          // Prefer max per year so a single outlier doesn't wash out the signal.
-          const prior = perYear.get(year);
-          perYear.set(year, prior === undefined ? sales : Math.max(prior, sales));
-        }
-
-        let qualifyingGroups = 0;
-        let decliningGroups = 0;
-        for (const perYear of byNameYear.values()) {
-          if (perYear.size < 3) continue;
-          qualifyingGroups++;
-          const years = [...perYear.keys()].sort((a, b) => a - b);
-          const series = years.map((y) => perYear.get(y) ?? 0);
-          const firstYearRevenue = series[0];
-          const lastYearRevenue = series[series.length - 1];
-          if (lastYearRevenue >= firstYearRevenue) continue;
-          // Count YoY upticks — allow at most one for "near-monotonic".
-          let upticks = 0;
-          for (let i = 1; i < series.length; i++) {
-            if (series[i] > series[i - 1]) upticks++;
-          }
-          if (upticks <= 1) decliningGroups++;
-        }
-
-        if (qualifyingGroups === 0) return null;
-        const rate = (decliningGroups / qualifyingGroups) * 100;
-        const rounded = Math.round(rate / 5) * 5;
-        return `${rounded}%`;
-      });
-    const result = await withTimeout<string | null>(query, 3000, null);
-    return result ?? "{{REPEAT_BOOKING_DECLINE_RATE}}";
-  } catch {
-    return "{{REPEAT_BOOKING_DECLINE_RATE}}";
-  }
-}
-
 /** Apply numeric-emphasis classes only when the value is a resolved number.
  *  Placeholders get muted, normal-size treatment so they read as pending
  *  rather than shouting a literal template string. Resolved values use
@@ -215,13 +138,11 @@ const FEATURE_CARDS = [
 ];
 
 export default async function LandingPage() {
-  const [eventCount, weatherLossDollars, repeatDeclineRate] = await Promise.all([
+  const [eventCount, weatherLossDollars] = await Promise.all([
     getEventCount(),
     getWeatherLossDollars(),
-    getRepeatBookingDeclineRate(),
   ]);
   const weatherEmphasis = isResolvedValue(weatherLossDollars) ? EMPHASIS_RESOLVED : EMPHASIS_PLACEHOLDER;
-  const repeatEmphasis = isResolvedValue(repeatDeclineRate) ? EMPHASIS_RESOLVED : EMPHASIS_PLACEHOLDER;
 
   // Diagonal tint pairing (Row1:L + Row2:R share one tint, others share the other).
   // On desktop this is literal diagonal; on mobile it becomes alternating bands.
@@ -339,25 +260,31 @@ export default async function LandingPage() {
               </p>
             </div>
 
-            {/* Block 2 — Repeat bookings (rebooking decision) */}
+            {/* Block 2 — Forecast accuracy (planning decision).
+                Reframed 2026-04-30 from "repeats decline by year three"
+                to "accuracy from booking #1." Reasoning: "by year three"
+                made urgency too distant; "from booking #1" reframes
+                urgency as useful from day one + "tighter as you go"
+                promises improvement without overclaiming a specific
+                repeat-cohort accuracy number. */}
             <div
-              data-testid="insight-block-repeats"
+              data-testid="insight-block-accuracy"
               className={`${cardBase} ${tintB}`}
             >
               <h2 className="text-xl font-bold tracking-tight sm:text-2xl">
-                Know which repeats are still earning their keep.
+                Forecasts that get sharper with every booking.
               </h2>
               <p className="text-lg font-semibold">
                 <span
-                  data-testid="insight-finding-repeats"
-                  className={repeatEmphasis}
+                  data-testid="insight-finding-accuracy"
+                  className={EMPHASIS_RESOLVED}
                 >
-                  {repeatDeclineRate}
+                  16% accuracy from booking #1.
                 </span>{" "}
-                of repeat bookings show declining revenue by year three.
+                Tighter as you go.
               </p>
               <p className="text-sm text-muted-foreground">
-                VendCast tracks each repeat — what you made and how this year compares to last.
+                VendCast learns your patterns from day one — and keeps refining as you log.
               </p>
             </div>
 
