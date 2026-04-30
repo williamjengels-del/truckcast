@@ -27,6 +27,7 @@ import {
 } from "@/lib/weather";
 import { wallclockInZoneToUtcMs } from "@/lib/wallclock-tz";
 import { findSalesComparable } from "@/lib/sales-pace";
+import { computeDayOfState } from "@/lib/day-of-event-state";
 import { SetupCountdown } from "@/components/setup-countdown";
 import { InServiceNotes } from "@/components/in-service-notes";
 import { ContentCapture } from "@/components/content-capture";
@@ -170,7 +171,12 @@ export async function DayOfEventBlock({
       return (a.start_time ?? "99:99").localeCompare(b.start_time ?? "99:99");
     });
 
-  if (bookedFuture.length === 0) {
+  // Auto-end aware state machine: picks the right "current" event,
+  // stacks "Up next today," and falls through to tomorrow / future
+  // when today is exhausted. Auto-ended audit IDs let us lazily
+  // backfill auto_ended_at server-side without a cron.
+  const state = computeDayOfState(bookedFuture, today, Date.now(), timezone);
+  if (!state.current) {
     return (
       <Card data-testid="day-of-event-block">
         <CardContent className="py-6 flex items-center justify-between gap-4">
@@ -193,11 +199,23 @@ export async function DayOfEventBlock({
       </Card>
     );
   }
+  const event = state.current;
+  const isToday = state.kind === "today";
+  const upcomingToday = state.upcomingToday;
 
-  const todaysEvents = bookedFuture.filter((e) => e.event_date === today);
-  const isToday = todaysEvents.length > 0;
-  const event = isToday ? todaysEvents[0] : bookedFuture[0];
-  const additionalTodayCount = isToday ? todaysEvents.length - 1 : 0;
+  // Lazy auto-end audit: when we discover events that have ended
+  // since the last render, fire-and-forget set auto_ended_at. Not
+  // awaited — the card render must not block on this. RLS keeps the
+  // write scoped to the operator's own rows.
+  if (state.endedTodayIds.length > 0) {
+    void supabase
+      .from("events")
+      .update({ auto_ended_at: new Date().toISOString() })
+      .in("id", state.endedTodayIds)
+      .eq("user_id", userId)
+      .is("auto_ended_at", null)
+      .then(() => undefined);
+  }
 
   const [weather, contactsRes, hdrs, comparable] = await Promise.all([
     // Hourly only fetched for paid tiers — Starter sees daily-only.
@@ -269,19 +287,17 @@ export async function DayOfEventBlock({
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
             <p className="text-xs font-semibold uppercase tracking-widest text-orange-700 dark:text-orange-400">
-              {isToday ? "Today's event" : `Next event — ${formatEventDate(event.event_date)}`}
+              {state.kind === "today"
+                ? upcomingToday.length > 0
+                  ? "Now"
+                  : "Today's event"
+                : state.kind === "tomorrow"
+                ? "Tomorrow's event"
+                : `Next event — ${formatEventDate(event.event_date)}`}
             </p>
             <h2 className="text-xl md:text-2xl font-bold tracking-tight mt-1 truncate">
               {event.event_name}
             </h2>
-            {additionalTodayCount > 0 && (
-              <Link
-                href="/dashboard/events?tab=upcoming"
-                className="inline-block mt-1 text-xs font-medium text-orange-700 dark:text-orange-400 hover:underline"
-              >
-                +{additionalTodayCount} more today
-              </Link>
-            )}
           </div>
           {showLogSales && (
             <Link
@@ -570,6 +586,40 @@ export async function DayOfEventBlock({
               eventId={event.id}
               initialValue={event.content_capture_notes}
             />
+          </div>
+        )}
+
+        {/* Up next today — collapsed previews of additional today
+            events still ahead. Spec §10: "stacked Now: [A] +
+            Up next today: [B] (collapsed preview, expands when A ends)."
+            v1 ships the collapsed list; auto-promotion of the next
+            event is handled by computeDayOfState on the next render
+            (i.e., when A's end_time passes). */}
+        {upcomingToday.length > 0 && (
+          <div className="pt-2 border-t border-border/40 space-y-2" data-testid="day-of-event-upcoming-today">
+            <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">
+              Up next today
+            </p>
+            <ul className="space-y-2">
+              {upcomingToday.map((u) => (
+                <li
+                  key={u.id}
+                  className="flex items-center gap-3 text-sm rounded-md bg-muted/40 px-3 py-2"
+                >
+                  <Clock className="h-4 w-4 text-muted-foreground shrink-0" />
+                  <div className="min-w-0 flex-1">
+                    <p className="font-medium truncate">{u.event_name}</p>
+                    {(u.start_time || u.end_time) && (
+                      <p className="text-xs text-muted-foreground">
+                        {formatTimeHHMM(u.start_time) ?? "—"}
+                        {u.end_time && ` – ${formatTimeHHMM(u.end_time) ?? ""}`}
+                        {u.location ? ` · ${u.location}` : ""}
+                      </p>
+                    )}
+                  </div>
+                </li>
+              ))}
+            </ul>
           </div>
         )}
         {/* TODO: events table has no organizer_name / organizer_phone /
