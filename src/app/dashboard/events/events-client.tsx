@@ -715,15 +715,14 @@ function ListView({
                       <SortIcon field="event_name" sortField={sortField} sortDirection={sortDirection} />
                     </span>
                   </TableHead>
-                  <TableHead
-                    className="hidden md:table-cell cursor-pointer select-none pl-6 pr-4"
-                    onClick={() => handleSort("event_type")}
-                  >
-                    <span className="inline-flex items-center">
-                      Type
-                      <SortIcon field="event_type" sortField={sortField} sortDirection={sortDirection} />
-                    </span>
-                  </TableHead>
+                  {/* Type and After Fees columns removed 2026-04-30 per
+                      operator feedback — they were inflating the table
+                      width past 1100px viewport without earning their
+                      space. Event type is still surfaced under the
+                      event name in the mobile card view, and
+                      net_after_fees is still computed + included in the
+                      CSV export. Re-add later as opt-in advanced
+                      columns if operator demand surfaces. */}
                   <TableHead
                     className="hidden xl:table-cell cursor-pointer select-none"
                     onClick={() => handleSort("location")}
@@ -740,15 +739,6 @@ function ListView({
                     <span className="inline-flex items-center justify-end">
                       Net Sales
                       <SortIcon field="net_sales" sortField={sortField} sortDirection={sortDirection} />
-                    </span>
-                  </TableHead>
-                  <TableHead
-                    className="hidden md:table-cell cursor-pointer select-none text-right"
-                    onClick={() => handleSort("net_after_fees")}
-                  >
-                    <span className="inline-flex items-center justify-end">
-                      After Fees
-                      <SortIcon field="net_after_fees" sortField={sortField} sortDirection={sortDirection} />
                     </span>
                   </TableHead>
                   <TableHead
@@ -816,9 +806,10 @@ function ListView({
                       {/* Forecast vs Actual for past events */}
                       <ForecastVsActual event={event} today={today} />
                     </TableCell>
-                    <TableCell className="hidden md:table-cell text-sm text-muted-foreground pl-6 pr-4">
-                      {event.event_type ?? "—"}
-                    </TableCell>
+                    {/* Type + After Fees TableCells removed alongside
+                        their headers above (2026-04-30). Type still
+                        renders under event name in mobile card view;
+                        net_after_fees still in CSV export. */}
                     <TableCell className="hidden xl:table-cell text-sm text-muted-foreground">
                       {event.location ?? event.city ?? "—"}
                     </TableCell>
@@ -833,9 +824,6 @@ function ListView({
                       ) : (
                         formatCurrency(event.net_sales)
                       )}
-                    </TableCell>
-                    <TableCell className="hidden md:table-cell text-right text-sm">
-                      {formatCurrency(event.net_after_fees)}
                     </TableCell>
                     <TableCell className="hidden lg:table-cell text-right text-sm text-muted-foreground">
                       <ForecastInline event={event} />
