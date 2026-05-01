@@ -433,6 +433,11 @@ function ListView({
     const name = eventNameById.get(event.caused_by_event_id);
     return name ? `Carry-over from ${name}` : "Carry-over from earlier event";
   }
+  // Analysis columns (Type / Fees out / Profit) only on Past + Booked.
+  // For Cancelled or Unbooked status chips on the Past tab, those
+  // numbers are nonsensical (no sales, no fees, no profit) so the
+  // table reverts to the glance layout.
+  const showAnalysisColumns = activeTab === "past" && selectedChips.has("booked");
   return (
     <>
       {/* 4-tab nav (chip-foundation refactor 2026-04-30):
@@ -715,11 +720,12 @@ function ListView({
                       <SortIcon field="event_name" sortField={sortField} sortDirection={sortDirection} />
                     </span>
                   </TableHead>
-                  {/* Type — past-tab analysis view only. text-xs +
-                      tight padding so the column doesn't blow past
-                      the 781px card width on the operator's 1100px
-                      viewport. */}
-                  {activeTab === "past" && (
+                  {/* Type — Past + Booked analysis view only.
+                      showAnalysisColumns gates this; cancelled and
+                      unbooked status chips revert to glance layout.
+                      text-xs + tight padding keeps it inside the
+                      781px card at 1100px viewport. */}
+                  {showAnalysisColumns && (
                     <TableHead
                       className="cursor-pointer select-none px-2 text-xs"
                       onClick={() => handleSort("event_type")}
@@ -732,7 +738,7 @@ function ListView({
                   )}
                   <TableHead
                     className={
-                      activeTab === "past"
+                      showAnalysisColumns
                         ? "cursor-pointer select-none text-right px-2 text-xs"
                         : "cursor-pointer select-none text-right"
                     }
@@ -743,8 +749,8 @@ function ListView({
                       <SortIcon field="net_sales" sortField={sortField} sortDirection={sortDirection} />
                     </span>
                   </TableHead>
-                  {/* After Fees — past-tab only. */}
-                  {activeTab === "past" && (
+                  {/* After Fees — Past + Booked only. */}
+                  {showAnalysisColumns && (
                     <TableHead
                       className="cursor-pointer select-none text-right px-2 text-xs"
                       onClick={() => handleSort("net_after_fees")}
@@ -755,11 +761,12 @@ function ListView({
                       </span>
                     </TableHead>
                   )}
-                  {/* Forecast — hidden on past tab because
-                      <ForecastVsActual /> already renders inline
-                      under the event name for past events. Showing
-                      both is redundant + bloats the column count. */}
-                  {activeTab !== "past" && (
+                  {/* Forecast — hidden in the Past+Booked analysis
+                      view because <ForecastVsActual /> already
+                      renders inline under the event name for past
+                      events. Showing both is redundant + bloats the
+                      column count. Visible everywhere else. */}
+                  {!showAnalysisColumns && (
                     <TableHead
                       className="hidden lg:table-cell cursor-pointer select-none text-right"
                       onClick={() => handleSort("forecast_sales")}
@@ -770,9 +777,9 @@ function ListView({
                       </span>
                     </TableHead>
                   )}
-                  {/* Profit — past-tab only, em-dash when cost data
-                      missing on the row. */}
-                  {activeTab === "past" && (
+                  {/* Profit — Past + Booked only, em-dash when cost
+                      data missing on the row. */}
+                  {showAnalysisColumns && (
                     <TableHead
                       className="cursor-pointer select-none text-right px-2 text-xs"
                       onClick={() => handleSort("net_profit")}
@@ -827,14 +834,14 @@ function ListView({
                     </TableCell>
                     <TableCell
                       className={
-                        activeTab === "past"
+                        showAnalysisColumns
                           ? "font-medium align-top text-xs px-2"
                           : "font-medium align-top"
                       }
                     >
                       <div
                         className={
-                          activeTab === "past"
+                          showAnalysisColumns
                             ? "truncate max-w-[20ch]"
                             : "truncate max-w-[28ch]"
                         }
@@ -848,7 +855,7 @@ function ListView({
                       {(event.location || event.city) && (
                         <div
                           className={
-                            activeTab === "past"
+                            showAnalysisColumns
                               ? "text-[10px] font-normal text-muted-foreground truncate max-w-[20ch]"
                               : "text-xs font-normal text-muted-foreground truncate max-w-[28ch]"
                           }
@@ -859,15 +866,15 @@ function ListView({
                       {/* Forecast vs Actual for past events */}
                       <ForecastVsActual event={event} today={today} />
                     </TableCell>
-                    {/* Type cell — past-tab only, compact text-xs. */}
-                    {activeTab === "past" && (
+                    {/* Type cell — Past + Booked analysis only. */}
+                    {showAnalysisColumns && (
                       <TableCell className="text-xs text-muted-foreground px-2 truncate max-w-[14ch]">
                         {event.event_type ?? "—"}
                       </TableCell>
                     )}
                     <TableCell
                       className={
-                        activeTab === "past"
+                        showAnalysisColumns
                           ? "text-right font-medium text-xs px-2"
                           : "text-right font-medium"
                       }
@@ -883,15 +890,16 @@ function ListView({
                         formatCurrency(event.net_sales)
                       )}
                     </TableCell>
-                    {/* After Fees cell — past-tab only. */}
-                    {activeTab === "past" && (
+                    {/* Fees out cell — Past + Booked only. */}
+                    {showAnalysisColumns && (
                       <TableCell className="text-right text-xs px-2">
                         {formatCurrency(event.net_after_fees)}
                       </TableCell>
                     )}
-                    {/* Forecast cell — hidden on past tab; ForecastVsActual
-                        in the Event cell already covers it. */}
-                    {activeTab !== "past" && (
+                    {/* Forecast cell — hidden in Past+Booked analysis
+                        view; ForecastVsActual in the Event cell
+                        covers it there. Visible everywhere else. */}
+                    {!showAnalysisColumns && (
                       <TableCell className="hidden lg:table-cell text-right text-sm text-muted-foreground">
                         <ForecastInline event={event} />
                         {event.event_date >= today && (
@@ -899,8 +907,8 @@ function ListView({
                         )}
                       </TableCell>
                     )}
-                    {/* Profit cell — past-tab only. */}
-                    {activeTab === "past" && (
+                    {/* Profit cell — Past + Booked only. */}
+                    {showAnalysisColumns && (
                       <TableCell className="text-right text-xs font-medium px-2">
                         {(() => {
                           const hasCost = event.food_cost !== null || event.labor_cost !== null || event.other_costs !== null;
