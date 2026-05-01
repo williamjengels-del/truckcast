@@ -515,8 +515,12 @@ function ListView({
        * usable search without that big refactor.
        */}
 
-      {/* Events Table */}
-      <Card>
+      {/* Events Table — Card's default overflow-hidden was clipping the
+          inner table wrapper's horizontal scrollbar at viewports below
+          xl, so columns past the visible width were unreachable. Allow
+          x-axis overflow on this card; keep y-axis clipped so the
+          rounded corners still mask any vertical bleed. */}
+      <Card className="overflow-x-visible overflow-y-hidden">
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Calendar className="h-5 w-5" />
