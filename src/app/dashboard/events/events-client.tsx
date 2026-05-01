@@ -787,16 +787,24 @@ function ListView({
                         <WeatherBadge event={event} weatherMap={weatherMap} />
                       )}
                     </TableCell>
-                    <TableCell className="font-medium">
-                      <div>{event.event_name}</div>
+                    <TableCell className="font-medium align-top">
+                      <div className="truncate max-w-[28ch]">{event.event_name}</div>
+                      {/* Location stacked under the event name — same
+                          pattern the mobile card view uses. Keeps
+                          location visible at every viewport without
+                          adding a column. */}
+                      {(event.location || event.city) && (
+                        <div className="text-xs font-normal text-muted-foreground truncate max-w-[28ch]">
+                          {event.location ?? event.city}
+                        </div>
+                      )}
                       {/* Forecast vs Actual for past events */}
                       <ForecastVsActual event={event} today={today} />
                     </TableCell>
-                    {/* Type, After Fees, Location, Profit TableCells
-                        removed alongside their headers above
-                        (2026-04-30) — see header-side comment for the
-                        rationale + what's preserved (CSV / mobile
-                        card / EventForm). */}
+                    {/* Type, After Fees, Location, Profit columns
+                        removed (2026-04-30). Location moved into the
+                        Event cell above. Type/After Fees/Profit still
+                        in CSV export + /insights. */}
                     <TableCell className="text-right font-medium">
                       {event.cancellation_reason === "sold_out" && event.caused_by_event_id ? (
                         <span className="text-muted-foreground">—</span>
