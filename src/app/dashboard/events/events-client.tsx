@@ -715,23 +715,18 @@ function ListView({
                       <SortIcon field="event_name" sortField={sortField} sortDirection={sortDirection} />
                     </span>
                   </TableHead>
-                  {/* Type and After Fees columns removed 2026-04-30 per
-                      operator feedback — they were inflating the table
-                      width past 1100px viewport without earning their
-                      space. Event type is still surfaced under the
-                      event name in the mobile card view, and
-                      net_after_fees is still computed + included in the
-                      CSV export. Re-add later as opt-in advanced
-                      columns if operator demand surfaces. */}
-                  <TableHead
-                    className="hidden xl:table-cell cursor-pointer select-none"
-                    onClick={() => handleSort("location")}
-                  >
-                    <span className="inline-flex items-center">
-                      Location
-                      <SortIcon field="location" sortField={sortField} sortDirection={sortDirection} />
-                    </span>
-                  </TableHead>
+                  {/* Trimmed columns (2026-04-30) — Type, After Fees,
+                      Location, Profit. The xl: responsive classes
+                      were rendering at viewports < 1280 in this build
+                      (cause TBD — Tailwind 4 + Card overflow context
+                      interaction), so the safer move is to drop them
+                      from the desktop table entirely.
+                      What's preserved:
+                        - Location: shown under event name in mobile
+                          card view; in CSV export.
+                        - Profit / After Fees / Type: in CSV export.
+                      Re-add later via an "advanced columns" toggle
+                      if operators want them inline. */}
                   <TableHead
                     className="cursor-pointer select-none text-right"
                     onClick={() => handleSort("net_sales")}
@@ -748,15 +743,6 @@ function ListView({
                     <span className="inline-flex items-center justify-end">
                       Forecast
                       <SortIcon field="forecast_sales" sortField={sortField} sortDirection={sortDirection} />
-                    </span>
-                  </TableHead>
-                  <TableHead
-                    className="hidden xl:table-cell cursor-pointer select-none text-right"
-                    onClick={() => handleSort("net_profit")}
-                  >
-                    <span className="inline-flex items-center justify-end">
-                      Profit
-                      <SortIcon field="net_profit" sortField={sortField} sortDirection={sortDirection} />
                     </span>
                   </TableHead>
                   <TableHead></TableHead>
@@ -806,13 +792,11 @@ function ListView({
                       {/* Forecast vs Actual for past events */}
                       <ForecastVsActual event={event} today={today} />
                     </TableCell>
-                    {/* Type + After Fees TableCells removed alongside
-                        their headers above (2026-04-30). Type still
-                        renders under event name in mobile card view;
-                        net_after_fees still in CSV export. */}
-                    <TableCell className="hidden xl:table-cell text-sm text-muted-foreground">
-                      {event.location ?? event.city ?? "—"}
-                    </TableCell>
+                    {/* Type, After Fees, Location, Profit TableCells
+                        removed alongside their headers above
+                        (2026-04-30) — see header-side comment for the
+                        rationale + what's preserved (CSV / mobile
+                        card / EventForm). */}
                     <TableCell className="text-right font-medium">
                       {event.cancellation_reason === "sold_out" && event.caused_by_event_id ? (
                         <span className="text-muted-foreground">—</span>
@@ -830,21 +814,6 @@ function ListView({
                       {event.event_date >= today && (
                         <WeatherForecastImpact event={event} today={today} />
                       )}
-                    </TableCell>
-                    <TableCell className="hidden xl:table-cell text-right text-sm font-medium">
-                      {(() => {
-                        const hasCost = event.food_cost !== null || event.labor_cost !== null || event.other_costs !== null;
-                        if (!hasCost) return <span className="text-muted-foreground">—</span>;
-                        const rev = (event.net_sales ?? 0) + (event.event_mode === "catering" ? (event.invoice_revenue ?? 0) : 0);
-                        const costs = (event.food_cost ?? 0) + (event.labor_cost ?? 0) + (event.other_costs ?? 0);
-                        const p = rev - costs;
-                        const margin = rev > 0 ? (p / rev) * 100 : 0;
-                        return (
-                          <span className={p >= 0 ? "text-green-700 dark:text-green-400" : "text-red-600"} title={`Margin: ${margin.toFixed(1)}%`}>
-                            {formatCurrency(p)}
-                          </span>
-                        );
-                      })()}
                     </TableCell>
                     <TableCell>
                       <div className="flex items-center gap-1 justify-end" onClick={(e) => e.stopPropagation()}>
