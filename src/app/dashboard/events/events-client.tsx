@@ -715,20 +715,27 @@ function ListView({
                       <SortIcon field="event_name" sortField={sortField} sortDirection={sortDirection} />
                     </span>
                   </TableHead>
-                  {/* Trimmed columns (2026-04-30) — Type, After Fees,
-                      Location, Profit. The xl: responsive classes
-                      were rendering at viewports < 1280 in this build
-                      (cause TBD — Tailwind 4 + Card overflow context
-                      interaction), so the safer move is to drop them
-                      from the desktop table entirely.
-                      What's preserved:
-                        - Location: shown under event name in mobile
-                          card view; in CSV export.
-                        - Profit / After Fees / Type: in CSV export.
-                      Re-add later via an "advanced columns" toggle
-                      if operators want them inline. */}
+                  {/* Type — past-tab analysis view only. text-xs +
+                      tight padding so the column doesn't blow past
+                      the 781px card width on the operator's 1100px
+                      viewport. */}
+                  {activeTab === "past" && (
+                    <TableHead
+                      className="cursor-pointer select-none px-2 text-xs"
+                      onClick={() => handleSort("event_type")}
+                    >
+                      <span className="inline-flex items-center">
+                        Type
+                        <SortIcon field="event_type" sortField={sortField} sortDirection={sortDirection} />
+                      </span>
+                    </TableHead>
+                  )}
                   <TableHead
-                    className="cursor-pointer select-none text-right"
+                    className={
+                      activeTab === "past"
+                        ? "cursor-pointer select-none text-right px-2 text-xs"
+                        : "cursor-pointer select-none text-right"
+                    }
                     onClick={() => handleSort("net_sales")}
                   >
                     <span className="inline-flex items-center justify-end">
@@ -736,15 +743,46 @@ function ListView({
                       <SortIcon field="net_sales" sortField={sortField} sortDirection={sortDirection} />
                     </span>
                   </TableHead>
-                  <TableHead
-                    className="hidden lg:table-cell cursor-pointer select-none text-right"
-                    onClick={() => handleSort("forecast_sales")}
-                  >
-                    <span className="inline-flex items-center justify-end">
-                      Forecast
-                      <SortIcon field="forecast_sales" sortField={sortField} sortDirection={sortDirection} />
-                    </span>
-                  </TableHead>
+                  {/* After Fees — past-tab only. */}
+                  {activeTab === "past" && (
+                    <TableHead
+                      className="cursor-pointer select-none text-right px-2 text-xs"
+                      onClick={() => handleSort("net_after_fees")}
+                    >
+                      <span className="inline-flex items-center justify-end">
+                        Fees out
+                        <SortIcon field="net_after_fees" sortField={sortField} sortDirection={sortDirection} />
+                      </span>
+                    </TableHead>
+                  )}
+                  {/* Forecast — hidden on past tab because
+                      <ForecastVsActual /> already renders inline
+                      under the event name for past events. Showing
+                      both is redundant + bloats the column count. */}
+                  {activeTab !== "past" && (
+                    <TableHead
+                      className="hidden lg:table-cell cursor-pointer select-none text-right"
+                      onClick={() => handleSort("forecast_sales")}
+                    >
+                      <span className="inline-flex items-center justify-end">
+                        Forecast
+                        <SortIcon field="forecast_sales" sortField={sortField} sortDirection={sortDirection} />
+                      </span>
+                    </TableHead>
+                  )}
+                  {/* Profit — past-tab only, em-dash when cost data
+                      missing on the row. */}
+                  {activeTab === "past" && (
+                    <TableHead
+                      className="cursor-pointer select-none text-right px-2 text-xs"
+                      onClick={() => handleSort("net_profit")}
+                    >
+                      <span className="inline-flex items-center justify-end">
+                        Profit
+                        <SortIcon field="net_profit" sortField={sortField} sortDirection={sortDirection} />
+                      </span>
+                    </TableHead>
+                  )}
                   <TableHead></TableHead>
                 </TableRow>
               </TableHeader>
@@ -787,25 +825,53 @@ function ListView({
                         <WeatherBadge event={event} weatherMap={weatherMap} />
                       )}
                     </TableCell>
-                    <TableCell className="font-medium align-top">
-                      <div className="truncate max-w-[28ch]">{event.event_name}</div>
+                    <TableCell
+                      className={
+                        activeTab === "past"
+                          ? "font-medium align-top text-xs px-2"
+                          : "font-medium align-top"
+                      }
+                    >
+                      <div
+                        className={
+                          activeTab === "past"
+                            ? "truncate max-w-[20ch]"
+                            : "truncate max-w-[28ch]"
+                        }
+                      >
+                        {event.event_name}
+                      </div>
                       {/* Location stacked under the event name — same
                           pattern the mobile card view uses. Keeps
                           location visible at every viewport without
                           adding a column. */}
                       {(event.location || event.city) && (
-                        <div className="text-xs font-normal text-muted-foreground truncate max-w-[28ch]">
+                        <div
+                          className={
+                            activeTab === "past"
+                              ? "text-[10px] font-normal text-muted-foreground truncate max-w-[20ch]"
+                              : "text-xs font-normal text-muted-foreground truncate max-w-[28ch]"
+                          }
+                        >
                           {event.location ?? event.city}
                         </div>
                       )}
                       {/* Forecast vs Actual for past events */}
                       <ForecastVsActual event={event} today={today} />
                     </TableCell>
-                    {/* Type, After Fees, Location, Profit columns
-                        removed (2026-04-30). Location moved into the
-                        Event cell above. Type/After Fees/Profit still
-                        in CSV export + /insights. */}
-                    <TableCell className="text-right font-medium">
+                    {/* Type cell — past-tab only, compact text-xs. */}
+                    {activeTab === "past" && (
+                      <TableCell className="text-xs text-muted-foreground px-2 truncate max-w-[14ch]">
+                        {event.event_type ?? "—"}
+                      </TableCell>
+                    )}
+                    <TableCell
+                      className={
+                        activeTab === "past"
+                          ? "text-right font-medium text-xs px-2"
+                          : "text-right font-medium"
+                      }
+                    >
                       {event.cancellation_reason === "sold_out" && event.caused_by_event_id ? (
                         <span className="text-muted-foreground">—</span>
                       ) : event.event_mode === "catering" && (event.invoice_revenue ?? 0) > 0 ? (
@@ -817,12 +883,40 @@ function ListView({
                         formatCurrency(event.net_sales)
                       )}
                     </TableCell>
-                    <TableCell className="hidden lg:table-cell text-right text-sm text-muted-foreground">
-                      <ForecastInline event={event} />
-                      {event.event_date >= today && (
-                        <WeatherForecastImpact event={event} today={today} />
-                      )}
-                    </TableCell>
+                    {/* After Fees cell — past-tab only. */}
+                    {activeTab === "past" && (
+                      <TableCell className="text-right text-xs px-2">
+                        {formatCurrency(event.net_after_fees)}
+                      </TableCell>
+                    )}
+                    {/* Forecast cell — hidden on past tab; ForecastVsActual
+                        in the Event cell already covers it. */}
+                    {activeTab !== "past" && (
+                      <TableCell className="hidden lg:table-cell text-right text-sm text-muted-foreground">
+                        <ForecastInline event={event} />
+                        {event.event_date >= today && (
+                          <WeatherForecastImpact event={event} today={today} />
+                        )}
+                      </TableCell>
+                    )}
+                    {/* Profit cell — past-tab only. */}
+                    {activeTab === "past" && (
+                      <TableCell className="text-right text-xs font-medium px-2">
+                        {(() => {
+                          const hasCost = event.food_cost !== null || event.labor_cost !== null || event.other_costs !== null;
+                          if (!hasCost) return <span className="text-muted-foreground">—</span>;
+                          const rev = (event.net_sales ?? 0) + (event.event_mode === "catering" ? (event.invoice_revenue ?? 0) : 0);
+                          const costs = (event.food_cost ?? 0) + (event.labor_cost ?? 0) + (event.other_costs ?? 0);
+                          const p = rev - costs;
+                          const margin = rev > 0 ? (p / rev) * 100 : 0;
+                          return (
+                            <span className={p >= 0 ? "text-green-700 dark:text-green-400" : "text-red-600"} title={`Margin: ${margin.toFixed(1)}%`}>
+                              {formatCurrency(p)}
+                            </span>
+                          );
+                        })()}
+                      </TableCell>
+                    )}
                     <TableCell>
                       <div className="flex items-center gap-1 justify-end" onClick={(e) => e.stopPropagation()}>
                         {/* Needs-attention rows that match the missing-sales
