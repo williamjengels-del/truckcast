@@ -315,7 +315,7 @@ export async function DayOfEventBlock({
           </div>
           {showLogSales && (
             <Link
-              href="/dashboard/events?tab=flagged"
+              href="/dashboard/events?tab=needs_attention&chips=missing-sales"
               className="shrink-0"
               data-testid="day-of-event-log-sales"
             >

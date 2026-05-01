@@ -327,9 +327,9 @@ export default async function DashboardPage() {
     const missingType = pastBookedEvents.filter((e) => !e.event_type).length;
     const missingWeather = pastBookedEvents.filter((e) => !e.event_weather).length;
     const missingLocation = pastBookedEvents.filter((e) => !e.location && !e.city).length;
-    if (missingType > 0) dataQualityGaps.push({ label: "Event Type", count: missingType, href: "/dashboard/events?tab=past&missing=type", field: "type" });
-    if (missingWeather > 0) dataQualityGaps.push({ label: "Weather", count: missingWeather, href: "/dashboard/events?tab=past&missing=weather", field: "weather" });
-    if (missingLocation > 0) dataQualityGaps.push({ label: "Location", count: missingLocation, href: "/dashboard/events?tab=past&missing=location", field: "location" });
+    if (missingType > 0) dataQualityGaps.push({ label: "Event Type", count: missingType, href: "/dashboard/events?tab=needs_attention&chips=missing-type", field: "type" });
+    if (missingWeather > 0) dataQualityGaps.push({ label: "Weather", count: missingWeather, href: "/dashboard/events?tab=needs_attention&chips=missing-weather", field: "weather" });
+    if (missingLocation > 0) dataQualityGaps.push({ label: "Location", count: missingLocation, href: "/dashboard/events?tab=needs_attention&chips=missing-location", field: "location" });
     dataQualityGaps.sort((a, b) => b.count - a.count);
   }
   const filledFields = pastBookedEvents.length >= 5
@@ -569,7 +569,7 @@ export default async function DashboardPage() {
                     Needs attention: {unloggedEvents.length} event{unloggedEvents.length !== 1 ? "s" : ""} need{unloggedEvents.length === 1 ? "s" : ""} revenue logged
                   </p>
                 </div>
-                <Link href="/dashboard/events?tab=flagged">
+                <Link href="/dashboard/events?tab=needs_attention&chips=missing-sales">
                   <Button variant="outline" size="sm" className="text-xs border-brand-orange/40 hover:bg-brand-orange/10">
                     View all
                   </Button>
@@ -586,7 +586,7 @@ export default async function DashboardPage() {
                         <span className="ml-1.5 text-xs font-medium text-muted-foreground">(catering)</span>
                       )}
                     </span>
-                    <Link href="/dashboard/events?tab=flagged" className="text-xs font-medium text-brand-orange underline-offset-2 hover:underline shrink-0">
+                    <Link href="/dashboard/events?tab=needs_attention&chips=missing-sales" className="text-xs font-medium text-brand-orange underline-offset-2 hover:underline shrink-0">
                       {e.event_mode === "catering" ? "Log invoice →" : "Log sales →"}
                     </Link>
                   </div>

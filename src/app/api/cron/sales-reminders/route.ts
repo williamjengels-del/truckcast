@@ -17,7 +17,7 @@ import { sendSalesReminderEmail } from "@/lib/email";
  * TODO(Phase 8.2+): fire push notification in parallel with the email so
  * operators who have push enabled get the reminder on their phone too.
  * Call POST /api/push/send with { user_id, payload: { title: "N events
- * need sales logged", body: "...", url: "/dashboard/events?tab=flagged" } }
+ * need sales logged", body: "...", url: "/dashboard/events?tab=needs_attention&chips=missing-sales" } }
  * after the sendSalesReminderEmail call. Fire-and-forget; don't fail the
  * email send on push errors.
  */

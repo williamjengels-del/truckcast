@@ -114,7 +114,13 @@ export default async function DashboardLayout({
     <ImpersonationProvider value={impersonationState}>
       <div className="flex h-screen overflow-hidden">
         <Sidebar />
-        <div className="flex flex-1 flex-col overflow-hidden">
+        {/* min-w-0 lets this flex column shrink below its content's
+            natural width — without it, wide content like the events
+            table balloons the column past the viewport (sidebar +
+            content > 100vw), and child overflow-x-auto wrappers
+            can't trigger because their parent is already as wide
+            as their content. */}
+        <div className="flex flex-1 flex-col overflow-hidden min-w-0">
           <Header />
           {/* Impersonation banner renders only when active — mounted
               before Trial / Manager banners so the read-only state is
@@ -126,7 +132,14 @@ export default async function DashboardLayout({
               You&apos;re managing <span className="font-bold">{managerBanner.ownerName}</span>&apos;s account
             </div>
           )}
-          <main className="flex-1 overflow-y-auto bg-muted/30 p-4 lg:p-6">
+          {/* min-w-0 + overflow-x-hidden on main: belt-and-suspenders
+              with min-w-0 on the column above. min-w-0 alone wasn't
+              enough on previews — wide content (events table) was
+              still escaping. overflow-x-hidden forces page content
+              to stay within main's width, which then forces nested
+              overflow-x-auto wrappers (the table) to scroll within
+              their card. */}
+          <main className="flex-1 overflow-y-auto overflow-x-hidden bg-muted/30 p-4 lg:p-6 min-w-0">
             <ErrorBoundary>
               {children}
             </ErrorBoundary>
