@@ -397,6 +397,11 @@ interface ListViewProps {
   handleDelete: (id: string) => void;
   handleQuickBook: (event: Event) => Promise<void>;
   handleDismiss: (eventId: string, reason: "disrupted" | "charity") => Promise<void>;
+  // Table density toggle. Compact = glance (default); Advanced = full
+  // analysis columns on Past+Booked. Owned by EventsClient + persisted
+  // in localStorage so it survives reloads.
+  tableDensity: "compact" | "advanced";
+  handleTableDensity: (v: "compact" | "advanced") => void;
 }
 
 function ListView({
@@ -427,17 +432,25 @@ function ListView({
   handleDelete,
   handleQuickBook,
   handleDismiss,
+  tableDensity,
+  handleTableDensity,
 }: ListViewProps) {
   function carryOverLabel(event: Event): string | null {
     if (!event.caused_by_event_id) return null;
     const name = eventNameById.get(event.caused_by_event_id);
     return name ? `Carry-over from ${name}` : "Carry-over from earlier event";
   }
-  // Analysis columns (Type / Fees out / Profit) only on Past + Booked.
-  // For Cancelled or Unbooked status chips on the Past tab, those
-  // numbers are nonsensical (no sales, no fees, no profit) so the
-  // table reverts to the glance layout.
-  const showAnalysisColumns = activeTab === "past" && selectedChips.has("booked");
+  // Analysis columns (Type / Fees out / Forecast / Profit) only on
+  // Past + Booked AND when the operator has opted into the advanced
+  // table density. Default density is "compact" — clean glance with
+  // ForecastVsActual rendered inline under event names. Operators who
+  // want all the numbers visible flip the density toggle in the
+  // header. Cancelled/Unbooked status chips on the Past tab still
+  // revert to glance because Fees / Profit are nonsensical for those.
+  const showAnalysisColumns =
+    tableDensity === "advanced" &&
+    activeTab === "past" &&
+    selectedChips.has("booked");
   return (
     <>
       {/* 4-tab nav (chip-foundation refactor 2026-04-30):
@@ -698,6 +711,45 @@ function ListView({
               })}
             </div>
 
+            {/* Density toggle — only meaningful on Past+Booked since
+                that's where the analysis columns show up. Compact is
+                the default; operators flip to Advanced when they want
+                Type / Fees out / Forecast / Profit visible alongside
+                Net Sales. Persisted in localStorage. */}
+            {activeTab === "past" && selectedChips.has("booked") && (
+              <div className="hidden sm:flex items-center justify-end gap-2 pb-2 text-xs text-muted-foreground">
+                <span>Columns:</span>
+                <div className="inline-flex rounded-md border bg-muted/30 p-0.5">
+                  <button
+                    type="button"
+                    onClick={() => handleTableDensity("compact")}
+                    className={
+                      tableDensity === "compact"
+                        ? "px-2 py-0.5 rounded bg-background text-foreground shadow-sm"
+                        : "px-2 py-0.5 rounded hover:text-foreground"
+                    }
+                    aria-pressed={tableDensity === "compact"}
+                    title="Glance — Date / Event / Net Sales / Forecast"
+                  >
+                    Compact
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleTableDensity("advanced")}
+                    className={
+                      tableDensity === "advanced"
+                        ? "px-2 py-0.5 rounded bg-background text-foreground shadow-sm"
+                        : "px-2 py-0.5 rounded hover:text-foreground"
+                    }
+                    aria-pressed={tableDensity === "advanced"}
+                    title="Full — adds Type / Fees out / Profit"
+                  >
+                    Advanced
+                  </button>
+                </div>
+              </div>
+            )}
+
             <div className="hidden sm:block overflow-x-auto">
             <Table>
               <TableHeader>
@@ -761,22 +813,25 @@ function ListView({
                       </span>
                     </TableHead>
                   )}
-                  {/* Forecast — hidden in the Past+Booked analysis
-                      view because <ForecastVsActual /> already
-                      renders inline under the event name for past
-                      events. Showing both is redundant + bloats the
-                      column count. Visible everywhere else. */}
-                  {!showAnalysisColumns && (
-                    <TableHead
-                      className="hidden lg:table-cell cursor-pointer select-none text-right"
-                      onClick={() => handleSort("forecast_sales")}
-                    >
-                      <span className="inline-flex items-center justify-end">
-                        Forecast
-                        <SortIcon field="forecast_sales" sortField={sortField} sortDirection={sortDirection} />
-                      </span>
-                    </TableHead>
-                  )}
+                  {/* Forecast column — visible in compact view (default)
+                      and also in the advanced Past+Booked view per
+                      operator request 2026-05-02. ForecastVsActual still
+                      renders inline under the event name for past events;
+                      this dedicated column gives operators a sortable
+                      side-by-side with Net Sales when they want it. */}
+                  <TableHead
+                    className={
+                      showAnalysisColumns
+                        ? "cursor-pointer select-none text-right px-2 text-xs"
+                        : "hidden lg:table-cell cursor-pointer select-none text-right"
+                    }
+                    onClick={() => handleSort("forecast_sales")}
+                  >
+                    <span className="inline-flex items-center justify-end">
+                      Forecast
+                      <SortIcon field="forecast_sales" sortField={sortField} sortDirection={sortDirection} />
+                    </span>
+                  </TableHead>
                   {/* Profit — Past + Booked only, em-dash when cost
                       data missing on the row. */}
                   {showAnalysisColumns && (
@@ -896,17 +951,23 @@ function ListView({
                         {formatCurrency(event.net_after_fees)}
                       </TableCell>
                     )}
-                    {/* Forecast cell — hidden in Past+Booked analysis
-                        view; ForecastVsActual in the Event cell
-                        covers it there. Visible everywhere else. */}
-                    {!showAnalysisColumns && (
-                      <TableCell className="hidden lg:table-cell text-right text-sm text-muted-foreground">
-                        <ForecastInline event={event} />
-                        {event.event_date >= today && (
-                          <WeatherForecastImpact event={event} today={today} />
-                        )}
-                      </TableCell>
-                    )}
+                    {/* Forecast cell — always rendered now. In compact
+                        view stays on the lg breakpoint; in advanced
+                        Past+Booked uses analysis sizing alongside Fees /
+                        Profit. ForecastVsActual still shows inline under
+                        the event name in either mode. */}
+                    <TableCell
+                      className={
+                        showAnalysisColumns
+                          ? "text-right text-xs text-muted-foreground px-2"
+                          : "hidden lg:table-cell text-right text-sm text-muted-foreground"
+                      }
+                    >
+                      <ForecastInline event={event} />
+                      {event.event_date >= today && (
+                        <WeatherForecastImpact event={event} today={today} />
+                      )}
+                    </TableCell>
                     {/* Profit cell — Past + Booked only. */}
                     {showAnalysisColumns && (
                       <TableCell className="text-right text-xs font-medium px-2">
@@ -1092,6 +1153,13 @@ export function EventsClient({ initialEvents, userId = "", businessName = "", us
   // everything. Default "booked" — the calendar is an operational surface for
   // scheduled work, not an inquiry triage view. Persisted in localStorage.
   const [calendarFilter, setCalendarFilter] = useState<"all" | "booked">("booked");
+  // Table density toggle. "compact" = glance layout (Date / Event /
+  // Net Sales / Forecast inline / Actions). "advanced" = expanded
+  // analysis layout on Past+Booked (adds Type / Fees out / Forecast /
+  // Profit). Default compact — reduces information overload for the
+  // common case; advanced is opt-in for operators who want all the
+  // numbers visible. Persisted in localStorage.
+  const [tableDensity, setTableDensity] = useState<"compact" | "advanced">("compact");
   // Selected day on the mobile calendar grid; null = nothing expanded.
   // Reset when the visible month changes.
   const [calendarExpandedDay, setCalendarExpandedDay] = useState<number | null>(null);
@@ -1129,6 +1197,17 @@ export function EventsClient({ initialEvents, userId = "", businessName = "", us
   function handleCalendarFilter(v: "all" | "booked") {
     setCalendarFilter(v);
     localStorage.setItem("events_calendar_filter", v);
+  }
+
+  // Load table density from localStorage (default: "compact").
+  useEffect(() => {
+    const saved = localStorage.getItem("events_table_density");
+    if (saved === "advanced") setTableDensity("advanced");
+  }, []);
+
+  function handleTableDensity(v: "compact" | "advanced") {
+    setTableDensity(v);
+    localStorage.setItem("events_table_density", v);
   }
 
   // Auto-open new event dialog if ?new=true
@@ -2374,6 +2453,8 @@ export function EventsClient({ initialEvents, userId = "", businessName = "", us
             handleDelete={handleDelete}
             handleQuickBook={handleQuickBook}
             handleDismiss={handleDismiss}
+            tableDensity={tableDensity}
+            handleTableDensity={handleTableDensity}
           />
         </>
       )}
