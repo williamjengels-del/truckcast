@@ -350,7 +350,11 @@ export default async function DashboardPage() {
   const isNewUser = events.length === 0;
 
   return (
-    <div className="space-y-6">
+    // Phase 6 visual polish 2026-05-02: bumped space-y from 6 to 8 for
+    // more breathing room between dashboard sections. Matches the more
+    // airy feel of Brad's New Dashboard 4-24-26 mockup. Easy revert if
+    // it reads too sparse.
+    <div className="space-y-8">
       <DunningBanner
         status={profile?.last_payment_status ?? null}
         failureReason={profile?.last_payment_failure_reason ?? null}
