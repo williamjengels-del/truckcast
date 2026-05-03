@@ -617,7 +617,7 @@ function ListView({
                             {formatDate(event.event_date)}
                           </span>
                           {event.cancellation_reason && (
-                            <Badge variant="outline" className="text-[10px] text-red-600 border-red-300 dark:text-red-400 dark:border-red-700">
+                            <Badge variant="outline" className="text-[10px] text-destructive border-destructive/40">
                               {event.cancellation_reason === "sold_out" && event.caused_by_event_id
                                 ? "Sold out"
                                 : "Cancelled"}
@@ -803,7 +803,7 @@ function ListView({
                         : activeTab === "all"
                           ? event.booked
                             ? "border-l-[3px] border-l-green-500 bg-green-50/40 dark:bg-green-950/10"
-                            : "border-l-[3px] border-l-slate-300 dark:border-l-slate-600 bg-slate-50/60 dark:bg-slate-900/20"
+                            : "border-l-[3px] border-l-border bg-muted/30"
                           : ""
                     }`}
                     onClick={() => setEditingEvent(event)}
@@ -811,7 +811,7 @@ function ListView({
                     <TableCell className="whitespace-nowrap text-sm pr-6">
                       {formatDate(event.event_date)}
                       {event.cancellation_reason && (
-                        <Badge variant="outline" className="ml-2 text-xs text-red-600 border-red-300 dark:text-red-400 dark:border-red-700">
+                        <Badge variant="outline" className="ml-2 text-xs text-destructive border-destructive/40">
                           {event.cancellation_reason === "sold_out" && event.caused_by_event_id
                             ? "Sold out"
                             : "Cancelled"}
@@ -1979,7 +1979,7 @@ export function EventsClient({ initialEvents, userId = "", businessName = "", us
                           <Badge variant="outline" className="text-[10px] shrink-0">Unbooked</Badge>
                         )}
                         {event.cancellation_reason && (
-                          <Badge variant="outline" className="text-[10px] shrink-0 text-red-600 border-red-300">Cancelled</Badge>
+                          <Badge variant="outline" className="text-[10px] shrink-0 text-destructive border-destructive/40">Cancelled</Badge>
                         )}
                       </button>
                     );

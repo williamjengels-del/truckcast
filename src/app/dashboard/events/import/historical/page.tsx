@@ -190,14 +190,15 @@ export default function HistoricalSalesImportPage() {
         </p>
       </div>
 
-      {/* How it works */}
-      <Card className="border-blue-200 bg-blue-50/50">
+      {/* How it works — Phase 4 design: blue informational tile →
+          brand-teal (default brand presence per Verdict #25) */}
+      <Card className="border-brand-teal/30 bg-brand-teal/5">
         <CardContent className="pt-4 pb-4">
           <div className="flex gap-3">
-            <Info className="h-4 w-4 text-blue-600 mt-0.5 shrink-0" />
-            <div className="text-sm text-blue-800 space-y-1">
+            <Info className="h-4 w-4 text-brand-teal mt-0.5 shrink-0" />
+            <div className="text-sm text-brand-teal space-y-1">
               <p className="font-medium">How this works</p>
-              <ul className="list-disc list-inside space-y-0.5 text-blue-700">
+              <ul className="list-disc list-inside space-y-0.5 text-brand-teal/90">
                 <li>Pick a date range and we&apos;ll pull all orders from your POS for those days</li>
                 <li>Sales are matched to booked events by date — one event per day</li>
                 <li>If you have multiple events on the same day, you&apos;ll be prompted to assign the total</li>
