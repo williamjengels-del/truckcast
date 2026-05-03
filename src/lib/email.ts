@@ -416,11 +416,13 @@ export async function sendInquiryNotificationEmail(
 
   // The fan-out caveat is what makes this different from a 1:1 booking
   // inquiry — operators need to know other vendors saw this too so they
-  // reply quickly instead of sitting on it.
+  // reply quickly. "Reach out directly" is intentional: VendCast doesn't
+  // mediate, so marking interest in the inbox doesn't notify the
+  // organizer; the operator must email or call.
   const fanoutLine =
     payload.matchedOperatorCount > 1
-      ? `Sent to <strong>${payload.matchedOperatorCount} operators</strong> in your area — first to claim wins.`
-      : `You're the only operator we matched in <strong>${escapeHtml(payload.city)}, ${escapeHtml(payload.state)}</strong>.`;
+      ? `Sent to <strong>${payload.matchedOperatorCount} operators</strong> in your area — reach out directly to lock it in.`
+      : `You're the only operator we matched in <strong>${escapeHtml(payload.city)}, ${escapeHtml(payload.state)}</strong> — reach out directly to lock it in.`;
 
   await resend.emails.send({
     from: FROM,
@@ -451,7 +453,7 @@ export async function sendInquiryNotificationEmail(
         Open Inbox →
       </a>
       <p style="margin:24px 0 0;font-size:13px;color:#9ca3af;">
-        Reply directly to <a href="mailto:${payload.organizerEmail}" style="color:#9ca3af;">${payload.organizerEmail}</a>, or claim the inquiry from your VendCast Inbox to track it.
+        Email <a href="mailto:${payload.organizerEmail}" style="color:#9ca3af;">${payload.organizerEmail}</a> directly to win the booking — VendCast doesn't mediate. Marking interest in your inbox creates a planning record but doesn't notify the organizer.
       </p>
     </div>
     <div style="padding:20px 40px;border-top:1px solid #f3f4f6;">
