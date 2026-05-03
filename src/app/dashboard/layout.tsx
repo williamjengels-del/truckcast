@@ -38,10 +38,11 @@ export default async function DashboardLayout({
   let isPro = false;
   let isPremium = false;
   let managerBanner: { ownerName: string } | null = null;
-  // TODO: Re-enable chat widget when ANTHROPIC_API_KEY is added to Vercel;
-  // gated behind Pro/Premium tier. When the env var is absent, the widget
-  // does not render at all (prevents client from hitting /api/chat which
-  // would 500). Add the key in Vercel → Settings → Environment Variables.
+  // Chat widget is enabled in production (ANTHROPIC_API_KEY is set in
+  // Vercel). This guard remains as a safety net — if the key is ever
+  // removed/rotated the widget cleanly fails closed instead of 500ing
+  // the dashboard. Pro/Premium tier gating is enforced separately by
+  // <ChatWidget>'s own props.
   const chatEnabled = Boolean(process.env.ANTHROPIC_API_KEY);
 
   if (user) {
