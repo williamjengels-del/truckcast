@@ -17,6 +17,11 @@ interface AggregatableRow {
   net_sales: number;
   event_type: string | null;
   city: string | null;
+  // Cross-operator Phase 1 inputs (added 2026-05-02). Both nullable in
+  // source events; aggregates only computed when at least one row of
+  // the contributing set has a value.
+  other_trucks: number | null;
+  expected_attendance: number | null;
 }
 
 interface AggregateResult {
@@ -30,6 +35,12 @@ interface AggregateResult {
   sales_p75: number;
   most_common_event_type: string | null;
   most_common_city: string | null;
+  // Cross-operator Phase 1 outputs. Null when the contributing rows
+  // had no values for the underlying field — recompute leaves the
+  // platform_events column null in that case so display can fall
+  // through cleanly.
+  median_other_trucks: number | null;
+  median_attendance: number | null;
 }
 
 /**
@@ -64,6 +75,17 @@ function computeAggregate(rows: AggregatableRow[]): AggregateResult | null {
   const mostCommonCity =
     Object.entries(cityCounts).sort((a, b) => b[1] - a[1])[0]?.[0] ?? null;
 
+  // Cross-operator Phase 1 medians. Compute each independently — an
+  // event might have other_trucks data but no attendance estimates
+  // (or vice-versa). Return null when no contributing row had a
+  // numeric value so display fall-through stays clean.
+  const median_other_trucks = medianOfNonNull(
+    rows.map((r) => r.other_trucks)
+  );
+  const median_attendance = medianOfNonNull(
+    rows.map((r) => r.expected_attendance)
+  );
+
   return {
     operator_count: operatorCount,
     total_instances: n,
@@ -75,7 +97,23 @@ function computeAggregate(rows: AggregatableRow[]): AggregateResult | null {
     sales_p75: Math.round(p75 * 100) / 100,
     most_common_event_type: mostCommonEventType,
     most_common_city: mostCommonCity,
+    median_other_trucks,
+    median_attendance,
   };
+}
+
+// Median of the non-null entries, rounded to 2 decimals. Returns null
+// when nothing contributed. Shared by both Phase 1 aggregates so
+// rounding + null handling stays in one place.
+function medianOfNonNull(values: (number | null | undefined)[]): number | null {
+  const filtered = values
+    .filter((v): v is number => typeof v === "number" && !Number.isNaN(v))
+    .sort((a, b) => a - b);
+  const n = filtered.length;
+  if (n === 0) return null;
+  const m =
+    n % 2 === 0 ? (filtered[n / 2 - 1] + filtered[n / 2]) / 2 : filtered[Math.floor(n / 2)];
+  return Math.round(m * 100) / 100;
 }
 
 // Exported for tests.
@@ -124,7 +162,7 @@ async function upsertPlatformEvent(
 
   const { data: rows } = await client
     .from("events")
-    .select("user_id, net_sales, event_type, city")
+    .select("user_id, net_sales, event_type, city, other_trucks, expected_attendance")
     .ilike("event_name", normalized)
     .eq("booked", true)
     .not("net_sales", "is", null)
@@ -153,6 +191,8 @@ async function upsertPlatformEvent(
       sales_p75: agg.sales_p75,
       most_common_event_type: agg.most_common_event_type,
       most_common_city: agg.most_common_city,
+      median_other_trucks: agg.median_other_trucks,
+      median_attendance: agg.median_attendance,
       updated_at: new Date().toISOString(),
     },
     { onConflict: "event_name_normalized" }
@@ -241,7 +281,7 @@ export async function getPlatformEventsExcludingUser(
   // separate queries.
   const { data: rows } = await client
     .from("events")
-    .select("user_id, net_sales, event_type, city, event_name")
+    .select("user_id, net_sales, event_type, city, event_name, other_trucks, expected_attendance")
     .in(
       "event_name",
       // Use the original casing the operator stored — ilike below
@@ -289,6 +329,8 @@ export async function getPlatformEventsExcludingUser(
       sales_p75: agg.sales_p75,
       most_common_event_type: agg.most_common_event_type,
       most_common_city: agg.most_common_city,
+      median_other_trucks: agg.median_other_trucks,
+      median_attendance: agg.median_attendance,
       updated_at: new Date().toISOString(),
     } as PlatformEvent);
   }
