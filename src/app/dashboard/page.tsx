@@ -375,23 +375,26 @@ export default async function DashboardPage() {
       <JourneyCallout journeyContext={journeyContext} />
 
       {showDataQuality && (
-        <div className="rounded-lg border border-indigo-200 bg-indigo-50 dark:border-indigo-800/40 dark:bg-indigo-950/20 p-4 space-y-3">
+        // Phase 4 design: data-quality nudge migrated indigo → brand-teal.
+        // Positive encouragement, not a warning — fits "default brand
+        // presence" per Verdict #25.
+        <div className="rounded-lg border border-brand-teal/30 bg-brand-teal/5 p-4 space-y-3">
           <div className="flex items-center justify-between gap-3">
             <div className="flex items-center gap-2">
-              <Sparkles className="h-4 w-4 text-indigo-600 dark:text-indigo-400 shrink-0" />
-              <p className="text-sm font-medium text-indigo-900 dark:text-indigo-300">
+              <Sparkles className="h-4 w-4 text-brand-teal shrink-0" />
+              <p className="text-sm font-medium text-brand-teal">
                 Forecast accuracy improves with better data — yours is {dataScore}% complete
               </p>
             </div>
             <Link href="/dashboard/events?tab=past">
-              <Button variant="outline" size="sm" className="text-xs border-indigo-300 hover:bg-indigo-100 dark:border-indigo-700 dark:hover:bg-indigo-900/30 shrink-0">
+              <Button variant="outline" size="sm" className="text-xs border-brand-teal/40 text-brand-teal hover:bg-brand-teal/10 shrink-0">
                 Fill gaps
               </Button>
             </Link>
           </div>
           <div className="flex flex-wrap gap-x-6 gap-y-1">
             {dataQualityGaps.slice(0, 4).map((gap) => (
-              <Link key={gap.field} href={gap.href} className="text-xs text-indigo-700 dark:text-indigo-400 hover:underline">
+              <Link key={gap.field} href={gap.href} className="text-xs text-brand-teal hover:underline">
                 {gap.count} event{gap.count !== 1 ? "s" : ""} missing <span className="font-medium">{gap.label}</span>
               </Link>
             ))}
@@ -421,7 +424,11 @@ export default async function DashboardPage() {
       {isNewUser ? (
         /* ── Getting-started layout for new users ── */
         <div className="space-y-6">
-          <div className="rounded-xl border bg-gradient-to-br from-orange-50 to-amber-50 dark:from-orange-950/20 dark:to-amber-950/10 p-6 md:p-8">
+          {/* Phase 4 design: getting-started hero migrated orange/amber
+              raw palette → brand-orange tint. Welcome / first-action
+              moment legitimately gets the differentiator color per
+              Verdict #25 (orange = closer / call-to-action accents). */}
+          <div className="rounded-xl border border-brand-orange/20 bg-gradient-to-br from-brand-orange/10 to-brand-orange/5 p-6 md:p-8">
             <h2 className="text-xl font-bold mb-1">Let&apos;s get your first forecast ready 🚚</h2>
             <p className="text-muted-foreground text-sm mb-6">
               Pick the fastest path to get started:
