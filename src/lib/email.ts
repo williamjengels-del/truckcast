@@ -779,3 +779,96 @@ export async function sendWeeklyDigestEmail(payload: WeeklyDigestPayload) {
     `.trim(),
   });
 }
+
+// ─── Event Inquiry Confirmation Email ──────────────────────────────────────
+
+/**
+ * Sent to organizers immediately after they submit an event inquiry
+ * via the public /request-event form (Phase 7a). Sets honest
+ * expectations — operators respond directly via the organizer's email,
+ * VendCast doesn't mediate.
+ */
+
+export interface EventInquiryConfirmationPayload {
+  to: string;
+  organizerName: string;
+  eventDate: string;       // YYYY-MM-DD
+  eventType: string;
+  city: string;
+  state: string;
+  matchedOperatorCount: number;
+}
+
+export async function sendEventInquiryConfirmation(p: EventInquiryConfirmationPayload) {
+  if (!process.env.RESEND_API_KEY) return;
+  const resend = getResend();
+
+  const dateLabel = new Date(p.eventDate + "T00:00:00").toLocaleDateString("en-US", {
+    weekday: "long",
+    month: "long",
+    day: "numeric",
+    year: "numeric",
+  });
+  const opsLine =
+    p.matchedOperatorCount === 0
+      ? `We don't have any operators in <strong>${escapeHtml(p.city)}, ${escapeHtml(p.state)}</strong> yet — but we're growing fast. We'll save your request and reach out if a match comes online.`
+      : p.matchedOperatorCount === 1
+        ? `Your request is being shared with <strong>1 operator</strong> in ${escapeHtml(p.city)}, ${escapeHtml(p.state)}. They'll reach out directly via the email you provided if interested.`
+        : `Your request is being shared with <strong>${p.matchedOperatorCount} operators</strong> in ${escapeHtml(p.city)}, ${escapeHtml(p.state)}. Any interested operator will reach out directly via the email you provided.`;
+
+  await resend.emails.send({
+    from: FROM,
+    to: p.to,
+    subject: `We received your event request — ${escapeHtml(p.eventType)} on ${dateLabel}`,
+    html: `
+<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
+<body style="margin:0;padding:0;background:#f9fafb;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;">
+  <div style="max-width:560px;margin:40px auto;background:#fff;border-radius:12px;overflow:hidden;border:1px solid #e5e7eb;">
+
+    <!-- Header -->
+    <div style="background:#0d4f5c;padding:32px 40px;">
+      <div style="color:white;font-size:28px;font-weight:800;letter-spacing:-1px;">VendCast</div>
+      <div style="color:rgba(255,255,255,0.7);font-size:13px;margin-top:6px;">Event request received</div>
+    </div>
+
+    <!-- Body -->
+    <div style="padding:40px;">
+      <h1 style="margin:0 0 16px;font-size:22px;font-weight:700;color:#111827;">Hi ${escapeHtml(p.organizerName)} 👋</h1>
+
+      <p style="margin:0 0 18px;font-size:15px;line-height:1.6;color:#374151;">
+        Thanks for your event request for <strong>${escapeHtml(p.eventType)}</strong> on <strong>${dateLabel}</strong>.
+      </p>
+
+      <p style="margin:0 0 18px;font-size:15px;line-height:1.6;color:#374151;">
+        ${opsLine}
+      </p>
+
+      <div style="background:#fff7ed;border:1px solid #fed7aa;border-radius:8px;padding:16px 20px;margin:20px 0;">
+        <div style="font-weight:600;color:#9a3412;font-size:14px;margin-bottom:8px;">How this works</div>
+        <p style="margin:0 0 8px;font-size:14px;color:#374151;line-height:1.5;">
+          VendCast doesn't take a commission and doesn't sit between you and the operator. Operators reach out to you directly — you negotiate everything (menu, pricing, logistics) with them.
+        </p>
+        <p style="margin:0;font-size:14px;color:#374151;line-height:1.5;">
+          Most operators respond within 24-48 hours. If you don't hear back from anyone in 3 days, reply to this email and we'll help.
+        </p>
+      </div>
+
+      <p style="margin:32px 0 0;font-size:13px;color:#9ca3af;line-height:1.6;">
+        Questions? Just reply — it goes to a real human.
+      </p>
+    </div>
+
+    <!-- Footer -->
+    <div style="padding:20px 40px;border-top:1px solid #f3f4f6;">
+      <p style="margin:0;font-size:12px;color:#9ca3af;">
+        VendCast · Built by Wok-O Taco, St. Louis MO
+      </p>
+    </div>
+  </div>
+</body>
+</html>
+    `.trim(),
+  });
+}

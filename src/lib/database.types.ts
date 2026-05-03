@@ -337,6 +337,40 @@ export interface PlatformEvent {
   updated_at: string;
 }
 
+// Phase 7 Event Marketplace — Inquiry Distribution.
+// Public-submit table; one inquiry routes to N operators via
+// matched_operator_ids. Operator actions tracked in operator_actions
+// jsonb keyed by operator UUID. Migration 20260502000006.
+export type EventInquiryStatus = "open" | "closed" | "expired";
+export type EventInquiryAction = "claimed" | "declined" | "contacted";
+export interface EventInquiryOperatorAction {
+  action: EventInquiryAction;
+  at: string; // ISO timestamp
+}
+export interface EventInquiry {
+  id: string;
+  organizer_name: string;
+  organizer_email: string;
+  organizer_phone: string | null;
+  organizer_org: string | null;
+  event_name: string | null;
+  event_date: string;
+  event_start_time: string | null;
+  event_end_time: string | null;
+  event_type: string;
+  expected_attendance: number | null;
+  city: string;
+  state: string;
+  location_details: string | null;
+  budget_estimate: number | null;
+  notes: string | null;
+  status: EventInquiryStatus;
+  matched_operator_ids: string[];
+  operator_actions: Record<string, EventInquiryOperatorAction>;
+  created_at: string;
+  updated_at: string;
+}
+
 export type UnmatchedPaymentResolution = "assigned_to_event" | "dismissed";
 
 export interface UnmatchedToastPayment {
