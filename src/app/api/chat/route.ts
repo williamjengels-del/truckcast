@@ -16,9 +16,11 @@ const CHAT_RATE_WINDOW_MS = 60 * 60 * 1000; // 1 hour
 
 export async function POST(req: NextRequest) {
   try {
-    // TODO: Re-enable when ANTHROPIC_API_KEY is added to Vercel; gated behind
-    // Pro/Premium tier. The ChatWidget also refuses to render when the env
-    // var is absent, so in practice this guard is belt-and-suspenders.
+    // ANTHROPIC_API_KEY is set in production. This guard remains as a
+    // safety net — if the key is ever removed/rotated the route cleanly
+    // 503s instead of crashing. Belt-and-suspenders with the dashboard
+    // layout's chatEnabled prop on <ChatWidget>. (Note: this is the
+    // legacy Tier-A route — the Tier-B agent loop lives at /api/chat-v2.)
     if (!process.env.ANTHROPIC_API_KEY) {
       return new Response(
         JSON.stringify({ error: "AI assistant is temporarily unavailable" }),
