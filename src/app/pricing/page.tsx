@@ -93,21 +93,25 @@ export default function PricingPage() {
                 Built by an operator who needed it first.
               </h2>
               <p className="text-base leading-relaxed text-muted-foreground">
-                VendCast started as a stack of spreadsheets in the cab of
-                a food truck. The owner was juggling event inquiries,
-                weather risk, prep, and crew scheduling — and the math
-                kept getting away. So they built a system to forecast
-                event revenue before committing to a booking.
+                I needed a better way to manage my events. Google Calendar
+                didn&apos;t cut it, and nothing on the market was built for
+                how we actually operate. So I started building something
+                myself.
               </p>
               <p className="text-base leading-relaxed text-muted-foreground">
-                Five years and a thousand-plus events later, that system
-                became VendCast. Same forecasting engine, same operator
-                perspective — generalized for any mobile vendor: food
-                truck, trailer, cart, pop-up.
+                It started as scheduling. Then past sales data alongside
+                each event. Then automating the data pull so I wasn&apos;t
+                inputting it by hand. Then forecasting, once the data was
+                clean enough to forecast on. Then weather, after one bad
+                year of it killing me without warning.
+              </p>
+              <p className="text-base leading-relaxed text-muted-foreground">
+                A thousand-plus events later, that&apos;s VendCast —
+                generalized for any mobile vendor: food truck, trailer,
+                cart, pop-up.
               </p>
               <p className="text-base leading-relaxed text-foreground">
-                Everything you see was built because an operator needed
-                it. None of it because investors did.
+                It kept growing because it kept needing to.
               </p>
             </div>
           </div>
