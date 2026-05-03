@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { ForecastCalculator } from "@/components/forecast-calculator";
+import { FindVendorLink } from "@/components/find-vendor-link";
 
 export const metadata: Metadata = {
   title: "Free Food Truck Revenue Estimator | VendCast",
@@ -27,18 +28,19 @@ export default function PublicCalculatorPage() {
             <span className="font-bold">VendCast</span>
           </Link>
           <div className="flex items-center gap-3">
-            <a
+            <FindVendorLink />
+            <Link
               href="/login"
               className="text-sm text-muted-foreground hover:text-foreground transition-colors"
             >
               Sign in
-            </a>
-            <a
+            </Link>
+            <Link
               href="/signup"
               className="text-sm bg-primary text-primary-foreground rounded-md px-3 py-1.5 font-medium hover:bg-primary/90 transition-colors"
             >
               Start free trial
-            </a>
+            </Link>
           </div>
         </div>
       </header>
@@ -68,10 +70,10 @@ export default function PublicCalculatorPage() {
         <div className="max-w-4xl mx-auto px-4 flex flex-col sm:flex-row items-center justify-between gap-2 text-xs text-muted-foreground">
           <span>© {new Date().getFullYear()} VendCast — built for food truck operators, by a food truck operator</span>
           <div className="flex gap-4">
-            <a href="/privacy" className="hover:text-foreground transition-colors">Privacy</a>
-            <a href="/terms" className="hover:text-foreground transition-colors">Terms</a>
-            <a href="/contact" className="hover:text-foreground transition-colors">Contact</a>
-            <a href="/signup" className="hover:text-foreground transition-colors">Sign up free</a>
+            <Link href="/privacy" className="hover:text-foreground transition-colors">Privacy</Link>
+            <Link href="/terms" className="hover:text-foreground transition-colors">Terms</Link>
+            <Link href="/contact" className="hover:text-foreground transition-colors">Contact</Link>
+            <Link href="/signup" className="hover:text-foreground transition-colors">Sign up free</Link>
           </div>
         </div>
       </footer>

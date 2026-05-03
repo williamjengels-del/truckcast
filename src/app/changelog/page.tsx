@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Image from "next/image";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
+import { FindVendorLink } from "@/components/find-vendor-link";
 
 export const metadata: Metadata = {
   title: "Changelog — VendCast",
@@ -235,6 +236,7 @@ export default function ChangelogPage() {
             <Link href="/help" className="text-sm hover:text-brand-teal hidden sm:inline-block px-3 py-2">
               Help
             </Link>
+            <FindVendorLink />
             <Link href="/login">
               <Button variant="ghost" size="sm">Log in</Button>
             </Link>

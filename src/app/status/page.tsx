@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Image from "next/image";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
+import { FindVendorLink } from "@/components/find-vendor-link";
 import { CheckCircle2, AlertCircle, XCircle, HelpCircle } from "lucide-react";
 
 export const metadata: Metadata = {
@@ -130,6 +131,7 @@ export default async function StatusPage() {
             <Link href="/help" className="text-sm hover:text-brand-teal hidden sm:inline-block px-3 py-2">
               Help
             </Link>
+            <FindVendorLink />
             <Link href="/login">
               <Button variant="ghost" size="sm">Log in</Button>
             </Link>

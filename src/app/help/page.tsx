@@ -3,6 +3,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { FindVendorLink } from "@/components/find-vendor-link";
 
 export const metadata: Metadata = {
   title: "Help Center — VendCast",
@@ -157,6 +158,7 @@ export default function HelpPage() {
             />
           </Link>
           <div className="flex items-center gap-3 text-sm">
+            <FindVendorLink />
             <Link href="/login" className="text-muted-foreground hover:text-foreground transition-colors">
               Sign in
             </Link>
