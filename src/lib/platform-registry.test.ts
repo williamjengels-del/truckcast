@@ -9,6 +9,8 @@ function row(overrides: {
   city?: string | null;
   other_trucks?: number | null;
   expected_attendance?: number | null;
+  fee_type?: string | null;
+  fee_rate?: number | null;
 }) {
   return {
     user_id: overrides.user_id,
@@ -17,6 +19,8 @@ function row(overrides: {
     city: overrides.city ?? null,
     other_trucks: overrides.other_trucks ?? null,
     expected_attendance: overrides.expected_attendance ?? null,
+    fee_type: overrides.fee_type ?? null,
+    fee_rate: overrides.fee_rate ?? null,
   };
 }
 
@@ -102,5 +106,58 @@ describe("computeAggregate (platform-registry)", () => {
     const agg = __computeAggregate(rows);
     expect(agg?.median_attendance).toBe(1000); // (500 + 1500) / 2
     expect(agg?.median_other_trucks).toBeNull(); // none populated
+  });
+
+  it("computes modal_fee_type + median_fee_rate at the 3+ operator floor", () => {
+    // 3 operators all charge a flat fee — modal is 'flat_fee', median rate
+    // is the median of the three rates ($100, $150, $200).
+    const rows = [
+      row({ user_id: "u1", net_sales: 1000, fee_type: "flat_fee", fee_rate: 100 }),
+      row({ user_id: "u2", net_sales: 1200, fee_type: "flat_fee", fee_rate: 150 }),
+      row({ user_id: "u3", net_sales: 1500, fee_type: "flat_fee", fee_rate: 200 }),
+    ];
+    const agg = __computeAggregate(rows);
+    expect(agg?.modal_fee_type).toBe("flat_fee");
+    expect(agg?.median_fee_rate).toBe(150);
+  });
+
+  it("does NOT publish fee aggregates below the 3+ operator floor", () => {
+    // 2 operators meets the sales floor but not the fee floor.
+    const rows = [
+      row({ user_id: "u1", net_sales: 1000, fee_type: "flat_fee", fee_rate: 100 }),
+      row({ user_id: "u2", net_sales: 1200, fee_type: "flat_fee", fee_rate: 150 }),
+    ];
+    const agg = __computeAggregate(rows);
+    expect(agg?.median_sales).toBe(1100); // sales aggregate fine at 2+
+    expect(agg?.modal_fee_type).toBeNull();
+    expect(agg?.median_fee_rate).toBeNull();
+  });
+
+  it("medians fee_rate ONLY across rows matching the modal fee_type", () => {
+    // 3 operators flat_fee, 2 percentage. Modal = flat_fee. Median rate
+    // is over the flat_fee rows only — would be nonsense to average a
+    // flat $200 against a 12% percentage.
+    const rows = [
+      row({ user_id: "u1", net_sales: 1000, fee_type: "flat_fee", fee_rate: 100 }),
+      row({ user_id: "u2", net_sales: 1200, fee_type: "flat_fee", fee_rate: 200 }),
+      row({ user_id: "u3", net_sales: 1500, fee_type: "flat_fee", fee_rate: 300 }),
+      row({ user_id: "u4", net_sales: 800, fee_type: "percentage", fee_rate: 12 }),
+      row({ user_id: "u5", net_sales: 900, fee_type: "percentage", fee_rate: 15 }),
+    ];
+    const agg = __computeAggregate(rows);
+    expect(agg?.modal_fee_type).toBe("flat_fee");
+    expect(agg?.median_fee_rate).toBe(200); // median of 100, 200, 300
+  });
+
+  it("returns null fee_rate when modal is 'none'", () => {
+    // 3 operators have no fee — modal_fee_type=none, but no rate to median.
+    const rows = [
+      row({ user_id: "u1", net_sales: 1000, fee_type: "none" }),
+      row({ user_id: "u2", net_sales: 1200, fee_type: "none" }),
+      row({ user_id: "u3", net_sales: 1500, fee_type: "none" }),
+    ];
+    const agg = __computeAggregate(rows);
+    expect(agg?.modal_fee_type).toBe("none");
+    expect(agg?.median_fee_rate).toBeNull();
   });
 });

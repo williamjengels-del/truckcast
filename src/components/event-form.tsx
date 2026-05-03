@@ -97,6 +97,8 @@ export function EventForm({
   const [platformHints, setPlatformHints] = useState<{
     median_other_trucks: number | null;
     median_attendance: number | null;
+    modal_fee_type: string | null;
+    median_fee_rate: number | null;
     operator_count: number;
   } | null>(null);
   const [isPrivate, setIsPrivate] = useState<boolean>(initialData?.is_private ?? false);
@@ -309,7 +311,7 @@ export function EventForm({
       const supabase = createClient();
       const { data } = await supabase
         .from("platform_events")
-        .select("median_other_trucks, median_attendance, operator_count")
+        .select("median_other_trucks, median_attendance, modal_fee_type, median_fee_rate, operator_count")
         .eq("event_name_normalized", name.toLowerCase())
         .maybeSingle();
       if (cancelled) return;
@@ -317,6 +319,8 @@ export function EventForm({
         setPlatformHints({
           median_other_trucks: data.median_other_trucks,
           median_attendance: data.median_attendance,
+          modal_fee_type: data.modal_fee_type,
+          median_fee_rate: data.median_fee_rate,
           operator_count: data.operator_count,
         });
       } else {
@@ -953,6 +957,24 @@ export function EventForm({
                     </Select>
                     {feeType !== "none" && feeType !== "" && (
                       <p className="text-xs text-muted-foreground">We&apos;ll calculate your take-home automatically</p>
+                    )}
+                    {/* Cross-operator fee hint — Phase 1 fee aggregates,
+                        2026-05-02. Privacy floor 3+ operators. Surfaces
+                        what the modal fee structure looks like across
+                        peers booking this event_name. */}
+                    {platformHints?.modal_fee_type && (
+                      <p className="text-xs text-brand-teal">
+                        Other operators at this event: typically {FEE_TYPES[platformHints.modal_fee_type as keyof typeof FEE_TYPES] ?? platformHints.modal_fee_type}
+                        {platformHints.median_fee_rate != null && (
+                          <>
+                            {" "}({platformHints.modal_fee_type === "percentage" ? `${platformHints.median_fee_rate}%` : `$${platformHints.median_fee_rate}`} median)
+                          </>
+                        )}
+                        {" "}
+                        <span className="text-muted-foreground">
+                          (across {platformHints.operator_count} operator{platformHints.operator_count === 1 ? "" : "s"})
+                        </span>
+                      </p>
                     )}
                   </div>
                   <div className="space-y-2">
