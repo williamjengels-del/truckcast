@@ -33,6 +33,14 @@ interface Props {
   // conflict. Self-conflicts (the inquiry's own auto-created planning
   // event) are excluded server-side.
   conflictsByInquiry?: Record<string, string[]>;
+  // Server-loaded per-operator notes per inquiry. Hydrates the
+  // textareas so the operator sees their own notes immediately
+  // without a client-side round trip.
+  initialOperatorNotes?: Record<string, string>;
+  // Operator's business_name for the email-template signature.
+  // Empty string is acceptable — the template falls back to a
+  // neutral phrasing.
+  operatorBusinessName?: string;
 }
 
 function formatDate(iso: string): string {
@@ -70,11 +78,48 @@ function relativeTime(iso: string): string {
   return new Date(iso).toLocaleDateString("en-US", { month: "short", day: "numeric" });
 }
 
+// Mailto template — short by design (most clients balk past ~2000
+// chars). Interpolates inquiry + operator context so the operator can
+// hit Send (or edit first) without writing from scratch. URL-encoded
+// at usage site.
+function buildEmailTemplate(args: {
+  organizerName: string;
+  eventType: string;
+  eventDate: string;
+  city: string;
+  state: string;
+  operatorBusinessName: string;
+}): { subject: string; body: string } {
+  const dateText = new Date(args.eventDate + "T00:00:00").toLocaleDateString(
+    "en-US",
+    { weekday: "long", month: "long", day: "numeric" }
+  );
+  const sig = args.operatorBusinessName || "Your VendCast operator";
+  const subject = `Re: your VendCast event request (${dateText})`;
+  const body = [
+    `Hi ${args.organizerName},`,
+    "",
+    `Thanks for the event request through VendCast. I'm interested in your ${args.eventType} on ${dateText} in ${args.city}, ${args.state}, and would love to discuss the details.`,
+    "",
+    "A few quick questions to put together the best plan:",
+    "  - Final guest count and serving window?",
+    "  - Any dietary needs or specific cuisine direction?",
+    "  - Venue setup — power, water, parking access?",
+    "",
+    "Looking forward to hearing more.",
+    "",
+    sig,
+  ].join("\n");
+  return { subject, body };
+}
+
 export function InquiriesInbox({
   initialInquiries,
   currentUserId,
   initialClaimedEventByInquiry = {},
   conflictsByInquiry = {},
+  initialOperatorNotes = {},
+  operatorBusinessName = "",
 }: Props) {
   const router = useRouter();
   const [inquiries, setInquiries] = useState(initialInquiries);
@@ -83,6 +128,51 @@ export function InquiriesInbox({
   const [claimedEventByInquiry, setClaimedEventByInquiry] = useState(
     initialClaimedEventByInquiry
   );
+  // Per-inquiry operator notes. Server-loaded initial map; local
+  // edits debounce-save to /api/event-inquiries/notes.
+  const [operatorNotes, setOperatorNotes] =
+    useState<Record<string, string>>(initialOperatorNotes);
+  const noteSaveTimersRef = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
+  const NOTES_DEBOUNCE_MS = 800;
+  function handleNotesChange(inquiryId: string, value: string) {
+    setOperatorNotes((prev) => ({ ...prev, [inquiryId]: value }));
+    if (noteSaveTimersRef.current[inquiryId]) {
+      clearTimeout(noteSaveTimersRef.current[inquiryId]);
+    }
+    noteSaveTimersRef.current[inquiryId] = setTimeout(() => {
+      fetch("/api/event-inquiries/notes", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ inquiryId, notes: value }),
+      }).catch(() => {
+        // Silent — operator's text stays in local state. On reload,
+        // server-side initialOperatorNotes wins; if the save was
+        // genuinely lost the operator will notice and retype.
+      });
+      delete noteSaveTimersRef.current[inquiryId];
+    }, NOTES_DEBOUNCE_MS);
+  }
+  // Flush any pending note save on unmount via sendBeacon — same
+  // pattern as mark-viewed so a fast tab-close doesn't lose typing.
+  useEffect(() => {
+    const timersRef = noteSaveTimersRef;
+    return () => {
+      const pending = Object.entries(timersRef.current);
+      for (const [inquiryId, timer] of pending) {
+        clearTimeout(timer);
+        const value = operatorNotes[inquiryId] ?? "";
+        navigator.sendBeacon?.(
+          "/api/event-inquiries/notes",
+          new Blob([JSON.stringify({ inquiryId, notes: value })], {
+            type: "application/json",
+          })
+        );
+      }
+    };
+    // operatorNotes intentionally not in deps — we only want this
+    // cleanup to fire on unmount, capturing whatever's pending then.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   // Tracks which inquiries this operator has already viewed in this
   // session — used to flip the unread dot off optimistically the
   // moment the IntersectionObserver fires, before the API round-trip
@@ -412,13 +502,34 @@ export function InquiriesInbox({
                     How to reach {inq.organizer_name}
                   </p>
                   <div className="flex flex-wrap gap-x-4 gap-y-1">
-                    <a
-                      href={`mailto:${inq.organizer_email}?subject=Re: your VendCast event request`}
-                      className="inline-flex items-center gap-1.5 hover:underline text-foreground"
-                    >
-                      <Mail className="h-3.5 w-3.5" />
-                      {inq.organizer_email}
-                    </a>
+                    {(() => {
+                      // Build the templated mailto inline so the
+                      // operator's email client opens with subject + a
+                      // pre-written body referencing this inquiry's
+                      // details. Operator can edit before sending.
+                      const tpl = buildEmailTemplate({
+                        organizerName: inq.organizer_name,
+                        eventType: inq.event_type,
+                        eventDate: inq.event_date,
+                        city: inq.city,
+                        state: inq.state,
+                        operatorBusinessName,
+                      });
+                      const href =
+                        `mailto:${inq.organizer_email}` +
+                        `?subject=${encodeURIComponent(tpl.subject)}` +
+                        `&body=${encodeURIComponent(tpl.body)}`;
+                      return (
+                        <a
+                          href={href}
+                          className="inline-flex items-center gap-1.5 hover:underline text-foreground"
+                          title="Opens your email client with a pre-filled draft you can edit before sending"
+                        >
+                          <Mail className="h-3.5 w-3.5" />
+                          {inq.organizer_email}
+                        </a>
+                      );
+                    })()}
                     {inq.organizer_phone && (
                       <a
                         href={`tel:${inq.organizer_phone}`}
@@ -483,13 +594,34 @@ export function InquiriesInbox({
                   )}
                 </div>
 
+                {/* Operator-only private notes. Free-text follow-up
+                    context — "called Sarah Mon, budget might rise" —
+                    invisible to the organizer and to other matched
+                    operators. Debounce-saved on type. */}
+                <div className="border-t pt-3">
+                  <label
+                    htmlFor={`notes-${inq.id}`}
+                    className="text-xs font-semibold uppercase tracking-widest text-muted-foreground block mb-1.5"
+                  >
+                    Your private notes
+                  </label>
+                  <textarea
+                    id={`notes-${inq.id}`}
+                    rows={2}
+                    value={operatorNotes[inq.id] ?? ""}
+                    onChange={(e) => handleNotesChange(inq.id, e.target.value)}
+                    placeholder="Follow-up reminders, things you told the organizer, anything you want to remember about this lead. Only you see this."
+                    className="w-full text-sm rounded-md border bg-background px-3 py-2 placeholder:text-muted-foreground/60 focus:outline-none focus:ring-2 focus:ring-brand-teal/40 resize-none"
+                  />
+                </div>
+
                 {/* Marketplace is non-mediated by design — clicking
                     Interested only books the lead in this operator's
                     own pipeline. The operator must email or call the
                     organizer themselves to actually win the booking.
                     Without this note, operators assume the button "did
                     the work" and leads go cold. */}
-                <p className="text-xs text-muted-foreground border-t pt-3">
+                <p className="text-xs text-muted-foreground">
                   Marking this doesn&apos;t notify the organizer. To win the booking, reach out directly via the contact info above — other operators in your area saw this request too.
                 </p>
               </div>

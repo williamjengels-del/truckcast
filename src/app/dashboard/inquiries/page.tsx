@@ -16,15 +16,34 @@ export default async function InquiriesPage() {
   // need to act on next?" not "what came in most recently." Tie-break
   // on created_at desc so two events on the same date show the
   // newer-arriving inquiry on top (rare in practice).
-  const { data } = await scope.client
-    .from("event_inquiries")
-    .select("*")
-    .contains("matched_operator_ids", [scope.userId])
-    .order("event_date", { ascending: true })
-    .order("created_at", { ascending: false })
-    .limit(100);
+  const [inquiriesRes, profileRes] = await Promise.all([
+    scope.client
+      .from("event_inquiries")
+      .select("*")
+      .contains("matched_operator_ids", [scope.userId])
+      .order("event_date", { ascending: true })
+      .order("created_at", { ascending: false })
+      .limit(100),
+    // Operator's business_name powers the email-template signature.
+    // Fallback to "your VendCast operator" if the profile isn't set
+    // yet so the template still renders coherently.
+    scope.client
+      .from("profiles")
+      .select("business_name")
+      .eq("id", scope.userId)
+      .maybeSingle(),
+  ]);
 
-  const inquiries = (data ?? []) as EventInquiry[];
+  const inquiries = (inquiriesRes.data ?? []) as EventInquiry[];
+  const operatorBusinessName =
+    (profileRes.data?.business_name as string | null) ?? "";
+  // Per-operator notes preloaded server-side so the textarea hydrates
+  // with what the operator last typed without a client round-trip.
+  const initialOperatorNotes: Record<string, string> = {};
+  for (const inq of inquiries) {
+    const slot = (inq.operator_notes_by_user ?? {}) as Record<string, string>;
+    if (slot[scope.userId]) initialOperatorNotes[inq.id] = slot[scope.userId];
+  }
 
   // Look up which inquiries already have a planning event so the inbox
   // can show "View event →" instead of just a Claimed badge. Empty list
@@ -90,6 +109,8 @@ export default async function InquiriesPage() {
         currentUserId={scope.userId}
         initialClaimedEventByInquiry={claimedEventByInquiry}
         conflictsByInquiry={conflictsByInquiry}
+        initialOperatorNotes={initialOperatorNotes}
+        operatorBusinessName={operatorBusinessName}
       />
     </div>
   );
