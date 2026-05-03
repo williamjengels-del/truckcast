@@ -668,3 +668,114 @@ export async function sendNewDeviceLoginEmail(
     html,
   });
 }
+
+// ─── Weekly Digest Email ───────────────────────────────────────────────────
+
+/**
+ * Sent every Monday morning to active operators (Pro/Premium with
+ * `email_reminders_enabled = true`). 1-paragraph plain-English summary
+ * of last week's activity to bring operators back to the dashboard
+ * AND demonstrate VendCast is doing background work.
+ *
+ * Triggered by /api/cron/weekly-digest route. Safe to call with no
+ * RESEND_API_KEY (no-op).
+ */
+
+export interface WeeklyDigestPayload {
+  to: string;
+  businessName: string;
+  weekRangeLabel: string;          // "April 28 – May 4"
+  eventsRun: number;
+  totalRevenue: number;
+  bestDayCopy: string | null;       // "Saturday outperformed your weekday average by 23%."
+  forecastAccuracyPct: number | null; // 91 means 91% in-range; null when no forecast/actual pairs
+  unloggedCount: number;            // events past their date with no net_sales logged
+  upcomingNextWeek: number;         // booked events Mon-Sun next week
+}
+
+export async function sendWeeklyDigestEmail(payload: WeeklyDigestPayload) {
+  if (!process.env.RESEND_API_KEY) return;
+  const resend = getResend();
+
+  const displayName = payload.businessName || "there";
+  const subject = `Your VendCast week — ${escapeHtml(payload.weekRangeLabel)}`;
+  const revenueDisplay = `$${Math.round(payload.totalRevenue).toLocaleString("en-US")}`;
+
+  await resend.emails.send({
+    from: FROM,
+    to: payload.to,
+    subject,
+    html: `
+<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
+<body style="margin:0;padding:0;background:#f9fafb;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;">
+  <div style="max-width:560px;margin:40px auto;background:#fff;border-radius:12px;overflow:hidden;border:1px solid #e5e7eb;">
+
+    <!-- Header -->
+    <div style="background:#0d4f5c;padding:32px 40px;">
+      <div style="color:white;font-size:28px;font-weight:800;letter-spacing:-1px;">VendCast</div>
+      <div style="color:rgba(255,255,255,0.7);font-size:13px;margin-top:6px;">Your week in review · ${escapeHtml(payload.weekRangeLabel)}</div>
+    </div>
+
+    <!-- Body -->
+    <div style="padding:40px;">
+      <h1 style="margin:0 0 16px;font-size:22px;font-weight:700;color:#111827;">Hey ${escapeHtml(displayName)} 👋</h1>
+
+      ${payload.eventsRun > 0 ? `
+      <p style="margin:0 0 18px;font-size:15px;line-height:1.6;color:#374151;">
+        Last week you ran <strong style="color:#0d4f5c;">${payload.eventsRun} event${payload.eventsRun === 1 ? "" : "s"}</strong>, totaling <strong style="color:#0d4f5c;">${revenueDisplay}</strong> in revenue.
+      </p>
+      ` : `
+      <p style="margin:0 0 18px;font-size:15px;line-height:1.6;color:#374151;">
+        No events ran last week. Time to fill the calendar — your next opportunity is one click away.
+      </p>
+      `}
+
+      ${payload.bestDayCopy ? `
+      <div style="background:#fff7ed;border:1px solid #fed7aa;border-radius:8px;padding:16px 20px;margin:20px 0;">
+        <div style="font-size:14px;color:#9a3412;line-height:1.5;">
+          📈 ${escapeHtml(payload.bestDayCopy)}
+        </div>
+      </div>
+      ` : ""}
+
+      ${payload.forecastAccuracyPct !== null ? `
+      <p style="margin:0 0 18px;font-size:14px;line-height:1.6;color:#374151;">
+        Forecast accuracy this week: <strong>${payload.forecastAccuracyPct}%</strong> in range.
+      </p>
+      ` : ""}
+
+      ${payload.unloggedCount > 0 ? `
+      <p style="margin:0 0 18px;font-size:14px;line-height:1.6;color:#9a3412;">
+        ⚠️ <strong>${payload.unloggedCount} past event${payload.unloggedCount === 1 ? "" : "s"}</strong> still need${payload.unloggedCount === 1 ? "s" : ""} sales logged. Logging them sharpens future forecasts.
+      </p>
+      ` : ""}
+
+      ${payload.upcomingNextWeek > 0 ? `
+      <p style="margin:0 0 18px;font-size:14px;line-height:1.6;color:#374151;">
+        Coming up next week: <strong>${payload.upcomingNextWeek} booked event${payload.upcomingNextWeek === 1 ? "" : "s"}</strong>. Day-of cards are ready when you are.
+      </p>
+      ` : ""}
+
+      <a href="${APP_URL}/dashboard" style="display:inline-block;background:#0d4f5c;color:white;font-weight:600;font-size:15px;padding:12px 28px;border-radius:8px;text-decoration:none;margin-top:8px;">
+        Open dashboard →
+      </a>
+
+      <p style="margin:32px 0 0;font-size:13px;color:#9ca3af;line-height:1.6;">
+        You're getting this because email reminders are on for your account. <a href="${APP_URL}/dashboard/settings" style="color:#9ca3af;">Manage preferences</a>.
+      </p>
+    </div>
+
+    <!-- Footer -->
+    <div style="padding:20px 40px;border-top:1px solid #f3f4f6;">
+      <p style="margin:0;font-size:12px;color:#9ca3af;">
+        VendCast · Built by Wok-O Taco, St. Louis MO
+      </p>
+    </div>
+  </div>
+</body>
+</html>
+    `.trim(),
+  });
+}
