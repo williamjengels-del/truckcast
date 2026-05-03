@@ -99,6 +99,7 @@ export function EventForm({
     median_attendance: number | null;
     modal_fee_type: string | null;
     median_fee_rate: number | null;
+    modal_weather_by_month: Record<string, { weather: string; count: number }> | null;
     operator_count: number;
   } | null>(null);
   const [isPrivate, setIsPrivate] = useState<boolean>(initialData?.is_private ?? false);
@@ -311,7 +312,7 @@ export function EventForm({
       const supabase = createClient();
       const { data } = await supabase
         .from("platform_events")
-        .select("median_other_trucks, median_attendance, modal_fee_type, median_fee_rate, operator_count")
+        .select("median_other_trucks, median_attendance, modal_fee_type, median_fee_rate, modal_weather_by_month, operator_count")
         .eq("event_name_normalized", name.toLowerCase())
         .maybeSingle();
       if (cancelled) return;
@@ -321,6 +322,7 @@ export function EventForm({
           median_attendance: data.median_attendance,
           modal_fee_type: data.modal_fee_type,
           median_fee_rate: data.median_fee_rate,
+          modal_weather_by_month: data.modal_weather_by_month,
           operator_count: data.operator_count,
         });
       } else {
@@ -1135,6 +1137,27 @@ export function EventForm({
                         {weatherBadge}
                       </Badge>
                     )}
+                    {/* Cross-operator Phase 2 weather hint — month-of-event
+                        modal across peers. Only renders when the operator
+                        has set event_date AND there's data for that month
+                        on this event_name. Privacy floor 3+ ops per cell
+                        is enforced upstream. */}
+                    {(() => {
+                      if (!dateValue || !platformHints?.modal_weather_by_month) return null;
+                      const month = String(new Date(dateValue + "T00:00:00").getMonth() + 1);
+                      const cell = platformHints.modal_weather_by_month[month];
+                      if (!cell) return null;
+                      const monthName = new Date(dateValue + "T00:00:00").toLocaleDateString("en-US", { month: "long" });
+                      return (
+                        <p className="text-xs text-brand-teal">
+                          Other operators at this event in {monthName}: typically <span className="font-medium">{cell.weather}</span>
+                          {" "}
+                          <span className="text-muted-foreground">
+                            ({cell.count} prior bookings)
+                          </span>
+                        </p>
+                      );
+                    })()}
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="anomaly_flag">Anomaly Flag</Label>

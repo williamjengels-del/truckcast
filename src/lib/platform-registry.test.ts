@@ -11,6 +11,8 @@ function row(overrides: {
   expected_attendance?: number | null;
   fee_type?: string | null;
   fee_rate?: number | null;
+  event_date?: string | null;
+  event_weather?: string | null;
 }) {
   return {
     user_id: overrides.user_id,
@@ -21,6 +23,8 @@ function row(overrides: {
     expected_attendance: overrides.expected_attendance ?? null,
     fee_type: overrides.fee_type ?? null,
     fee_rate: overrides.fee_rate ?? null,
+    event_date: overrides.event_date ?? null,
+    event_weather: overrides.event_weather ?? null,
   };
 }
 
@@ -159,5 +163,41 @@ describe("computeAggregate (platform-registry)", () => {
     const agg = __computeAggregate(rows);
     expect(agg?.modal_fee_type).toBe("none");
     expect(agg?.median_fee_rate).toBeNull();
+  });
+
+  it("computes modal_weather_by_month at the 3+ per-cell floor", () => {
+    // 3 operators all booked April events with Clear weather → publish.
+    // Same 3 in May with Rain Before Event → publish. Cells with <3
+    // distinct operators are absent from the output entirely.
+    const rows = [
+      row({ user_id: "u1", net_sales: 1000, event_date: "2026-04-15", event_weather: "Clear" }),
+      row({ user_id: "u2", net_sales: 1200, event_date: "2026-04-22", event_weather: "Clear" }),
+      row({ user_id: "u3", net_sales: 1500, event_date: "2026-04-29", event_weather: "Clear" }),
+      row({ user_id: "u1", net_sales: 800, event_date: "2026-05-06", event_weather: "Rain Before Event" }),
+      row({ user_id: "u2", net_sales: 900, event_date: "2026-05-13", event_weather: "Rain Before Event" }),
+      row({ user_id: "u3", net_sales: 1100, event_date: "2026-05-20", event_weather: "Rain Before Event" }),
+      // Single-operator November row should NOT publish
+      row({ user_id: "u1", net_sales: 700, event_date: "2026-11-04", event_weather: "Cold" }),
+    ];
+    const agg = __computeAggregate(rows);
+    expect(agg?.modal_weather_by_month["4"]).toEqual({ weather: "Clear", count: 3 });
+    expect(agg?.modal_weather_by_month["5"]).toEqual({ weather: "Rain Before Event", count: 3 });
+    expect(agg?.modal_weather_by_month["11"]).toBeUndefined(); // below floor
+  });
+
+  it("counts DISTINCT operators per (month × weather) cell, not bookings", () => {
+    // u1 booked April-Clear 3 times, u2 once. Cell has 2 distinct ops, NOT 4.
+    // Should NOT publish (below 3+ floor).
+    const rows = [
+      row({ user_id: "u1", net_sales: 1000, event_date: "2026-04-01", event_weather: "Clear" }),
+      row({ user_id: "u1", net_sales: 1000, event_date: "2026-04-08", event_weather: "Clear" }),
+      row({ user_id: "u1", net_sales: 1000, event_date: "2026-04-15", event_weather: "Clear" }),
+      row({ user_id: "u2", net_sales: 1200, event_date: "2026-04-22", event_weather: "Clear" }),
+      // Need a second-operator row so the event aggregate publishes at all
+      row({ user_id: "u2", net_sales: 1200, event_date: "2026-05-01", event_weather: "Overcast" }),
+    ];
+    const agg = __computeAggregate(rows);
+    expect(agg).not.toBeNull();
+    expect(agg?.modal_weather_by_month["4"]).toBeUndefined(); // 2 distinct ops, below floor
   });
 });

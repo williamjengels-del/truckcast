@@ -29,6 +29,12 @@ interface AggregatableRow {
   // fee_type's rates keeps median_fee_rate semantically coherent.
   fee_type: string | null;
   fee_rate: number | null;
+  // Cross-operator Phase 2 weather inputs. event_date drives month-of-year
+  // bucketing; event_weather is the operator-recorded weather for that
+  // booking. Both nullable — rows without weather contribute to nothing
+  // weather-related.
+  event_date: string | null;
+  event_weather: string | null;
 }
 
 interface AggregateResult {
@@ -56,6 +62,11 @@ interface AggregateResult {
   // Higher privacy floor (3+) than other Phase 1 aggregates.
   modal_fee_type: string | null;
   median_fee_rate: number | null;
+  // Cross-operator Phase 2 weather output. Per-month modal weather across
+  // operators. Months below the 3+ operator floor are absent from the
+  // record (no null placeholder). Empty record when no month has enough
+  // contributors.
+  modal_weather_by_month: Record<string, { weather: string; count: number }>;
 }
 
 /**
@@ -101,6 +112,42 @@ function computeAggregate(rows: AggregatableRow[]): AggregateResult | null {
     rows.map((r) => r.expected_attendance)
   );
 
+  // Cross-operator Phase 2 weather aggregates. Per-month modal weather
+  // across operators with this event_name in that month-of-year. Higher
+  // privacy floor (3+ operators per cell) because weather + event_name
+  // + month combined is meaningfully identifying. Months below the floor
+  // are simply absent from the output record.
+  const modal_weather_by_month: Record<string, { weather: string; count: number }> = {};
+  if (operatorCount >= 3) {
+    // Group operator-month-weather counts:
+    //   weatherCounts[month][weather] = Set<user_id>
+    // Track distinct operators per (month × weather) combo so we can
+    // enforce the 3+ floor at the cell level, not the event level.
+    const weatherCounts: Record<string, Record<string, Set<string>>> = {};
+    for (const r of rows) {
+      if (!r.event_date || !r.event_weather) continue;
+      const month = String(new Date(r.event_date + "T00:00:00").getMonth() + 1);
+      if (!weatherCounts[month]) weatherCounts[month] = {};
+      if (!weatherCounts[month][r.event_weather]) {
+        weatherCounts[month][r.event_weather] = new Set();
+      }
+      weatherCounts[month][r.event_weather].add(r.user_id);
+    }
+    // Pick the modal weather per month (cell with the most distinct
+    // operators) and only publish if that cell has 3+ operators.
+    for (const [month, byWeather] of Object.entries(weatherCounts)) {
+      const sorted = Object.entries(byWeather)
+        .map(([weather, ops]) => ({ weather, count: ops.size }))
+        .sort((a, b) => b.count - a.count);
+      if (sorted.length > 0 && sorted[0].count >= 3) {
+        modal_weather_by_month[month] = {
+          weather: sorted[0].weather,
+          count: sorted[0].count,
+        };
+      }
+    }
+  }
+
   // Cross-operator fee aggregates. Higher privacy floor (3+ operators)
   // because fee_type + event_name combined leans more identifying. We
   // skip the fee block entirely below that threshold.
@@ -143,6 +190,7 @@ function computeAggregate(rows: AggregatableRow[]): AggregateResult | null {
     median_attendance,
     modal_fee_type,
     median_fee_rate,
+    modal_weather_by_month,
   };
 }
 
@@ -206,7 +254,7 @@ async function upsertPlatformEvent(
 
   const { data: rows } = await client
     .from("events")
-    .select("user_id, net_sales, event_type, city, other_trucks, expected_attendance, fee_type, fee_rate")
+    .select("user_id, net_sales, event_type, city, other_trucks, expected_attendance, fee_type, fee_rate, event_date, event_weather")
     .ilike("event_name", normalized)
     .eq("booked", true)
     .not("net_sales", "is", null)
@@ -239,6 +287,7 @@ async function upsertPlatformEvent(
       median_attendance: agg.median_attendance,
       modal_fee_type: agg.modal_fee_type,
       median_fee_rate: agg.median_fee_rate,
+      modal_weather_by_month: agg.modal_weather_by_month,
       updated_at: new Date().toISOString(),
     },
     { onConflict: "event_name_normalized" }
@@ -327,7 +376,7 @@ export async function getPlatformEventsExcludingUser(
   // separate queries.
   const { data: rows } = await client
     .from("events")
-    .select("user_id, net_sales, event_type, city, event_name, other_trucks, expected_attendance")
+    .select("user_id, net_sales, event_type, city, event_name, other_trucks, expected_attendance, fee_type, fee_rate, event_date, event_weather")
     .in(
       "event_name",
       // Use the original casing the operator stored — ilike below
@@ -379,6 +428,7 @@ export async function getPlatformEventsExcludingUser(
       median_attendance: agg.median_attendance,
       modal_fee_type: agg.modal_fee_type,
       median_fee_rate: agg.median_fee_rate,
+      modal_weather_by_month: agg.modal_weather_by_month,
       updated_at: new Date().toISOString(),
     } as PlatformEvent);
   }
