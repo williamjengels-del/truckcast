@@ -47,7 +47,7 @@ const sections = [
       },
       {
         q: "How does weather affect the forecast?",
-        a: "VendCast applies a weather coefficient to outdoor events based on the forecast for that day. Rain During Event = 53% of normal, Storms = 30%, Hot (90°F+) = 63%, Cold (≤40°F) = 55%. These coefficients come from 244+ real Wok-O Taco events and recalibrate as your own data accumulates.",
+        a: "VendCast applies a weather coefficient to outdoor events based on the forecast for that day. Rain During Event = 53% of normal, Storms = 30%, Hot (90°F+) = 63%, Cold (≤40°F) = 55%. These coefficients come from 244+ real food truck events and recalibrate as your own data accumulates.",
       },
       {
         q: "Can I override a forecast?",

@@ -92,25 +92,21 @@ export default function PricingPage() {
                 Built by an operator who needed it first.
               </h2>
               <p className="text-base leading-relaxed text-muted-foreground">
-                VendCast started as a stack of spreadsheets in the cab of a
-                food truck. Julian was running Wok-O Taco in St. Louis —
-                juggling event inquiries, weather risk, prep, and crew
-                scheduling — and the math kept getting away from him. So he
-                built a system to forecast event revenue before committing to
-                a booking.
+                VendCast started as a stack of spreadsheets in the cab of
+                a food truck. The owner was juggling event inquiries,
+                weather risk, prep, and crew scheduling — and the math
+                kept getting away. So they built a system to forecast
+                event revenue before committing to a booking.
               </p>
               <p className="text-base leading-relaxed text-muted-foreground">
                 Five years and a thousand-plus events later, that system
                 became VendCast. Same forecasting engine, same operator
-                perspective — generalized for any mobile vendor: food truck,
-                trailer, cart, pop-up.
+                perspective — generalized for any mobile vendor: food
+                truck, trailer, cart, pop-up.
               </p>
               <p className="text-base leading-relaxed text-foreground">
-                Everything you see was built because an operator needed it.
-                None of it because investors did.
-              </p>
-              <p className="text-sm text-muted-foreground">
-                — Julian Engels, founder
+                Everything you see was built because an operator needed
+                it. None of it because investors did.
               </p>
             </div>
           </div>

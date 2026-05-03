@@ -78,6 +78,23 @@ export default function ContactPage() {
           </a>
         </p>
       </main>
+
+      {/* Footer — mirrors homepage / pricing / help link group so
+          marketing surfaces feel like one site, not standalone pages. */}
+      <footer className="border-t py-8 mt-auto">
+        <div className="container mx-auto px-4 text-center text-sm text-muted-foreground space-y-2">
+          <div className="flex flex-wrap items-center justify-center gap-x-6 gap-y-2">
+            <Link href="/pricing" className="hover:text-foreground transition-colors">Pricing</Link>
+            <Link href="/roadmap" className="hover:text-foreground transition-colors">Roadmap</Link>
+            <Link href="/changelog" className="hover:text-foreground transition-colors">Changelog</Link>
+            <Link href="/help" className="hover:text-foreground transition-colors">Help Center</Link>
+            <Link href="/contact" className="hover:text-foreground transition-colors">Contact</Link>
+            <Link href="/request-event" className="hover:text-foreground transition-colors">Need a vendor?</Link>
+            <Link href="/signup" className="hover:text-foreground transition-colors">Get Started</Link>
+          </div>
+          <p>&copy; {new Date().getFullYear()} VendCast — built by a food truck operator, for mobile vendors.</p>
+        </div>
+      </footer>
     </div>
   );
 }
