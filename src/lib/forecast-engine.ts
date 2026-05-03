@@ -427,9 +427,18 @@ function calculateConfidenceScore(
   const venueScore = venueFamiliar ? 0.1 : 0;
   const tierScore = eventTier === "A" ? 0.1 : eventTier === "B" ? 0.05 : 0;
 
-  // Community agreement bonus: ≥ 8 operators in the platform registry for
-  // this event → 0.10; 3–7 → 0.05; < 3 → 0. Rewards the user for running
+  // Community agreement bonus: ≥ 8 OTHER operators in the platform registry
+  // for this event → 0.10; 3–7 → 0.05; < 3 → 0. Rewards the user for running
   // events where independent operators are producing similar numbers.
+  //
+  // Threshold semantics LOCKED 2026-05-02: counts OTHER operators only, not
+  // total. Since the Q2 self-filter fix (2026-04-28) the engine reads
+  // platformOperatorCount via getPlatformEventsExcludingUser() which strips
+  // the requesting user. At small platform scale this means: ≥3 peers
+  // (i.e. 4+ total operators booking this event, you + 3 others) before
+  // the 0.05 boost kicks in. Privacy floor at the publication side
+  // (platform-registry.ts) is 2+ peers — so the boost intentionally
+  // requires more density than mere publication.
   const communityScore =
     platformOperatorCount >= 8 ? 0.1 :
     platformOperatorCount >= 3 ? 0.05 : 0;
