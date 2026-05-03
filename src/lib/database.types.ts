@@ -324,6 +324,12 @@ export interface PlatformEvent {
   // Months below 3+ operator floor are absent from the jsonb. Migration
   // 20260502000003.
   modal_weather_by_month: Record<string, { weather: string; count: number }> | null;
+  // Cross-operator Phase 3 — per-DOW lift vs event median across operators.
+  // Shape: { "0": { lift_pct: -8, count: 4 }, ..., "6": { ... } }.
+  // dow indexed 0=Sun..6=Sat (Date.getDay()). lift_pct is integer % above
+  // (positive) or below (negative) the event-wide median. DOWs below 3+
+  // operator floor absent. Migration 20260502000004.
+  dow_lift: Record<string, { lift_pct: number; count: number }> | null;
   updated_at: string;
 }
 
