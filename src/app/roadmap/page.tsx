@@ -272,13 +272,29 @@ export default function RoadmapPage() {
             </Link>
           </div>
           <p className="mt-6 text-xs text-muted-foreground">
-            Built by a St. Louis food truck operator of five years.{" "}
+            Built by a food truck operator of five years.{" "}
             <Link href="/" className="text-primary hover:underline">
               vendcast.co
             </Link>
           </p>
         </div>
       </div>
+
+      {/* Footer — mirrors marketing site link group. */}
+      <footer className="border-t py-8 mt-12">
+        <div className="container mx-auto px-4 text-center text-sm text-muted-foreground space-y-2">
+          <div className="flex flex-wrap items-center justify-center gap-x-6 gap-y-2">
+            <Link href="/pricing" className="hover:text-foreground transition-colors">Pricing</Link>
+            <Link href="/roadmap" className="hover:text-foreground transition-colors">Roadmap</Link>
+            <Link href="/changelog" className="hover:text-foreground transition-colors">Changelog</Link>
+            <Link href="/help" className="hover:text-foreground transition-colors">Help Center</Link>
+            <Link href="/contact" className="hover:text-foreground transition-colors">Contact</Link>
+            <Link href="/request-event" className="hover:text-foreground transition-colors">Need a vendor?</Link>
+            <Link href="/signup" className="hover:text-foreground transition-colors">Get Started</Link>
+          </div>
+          <p>&copy; {new Date().getFullYear()} VendCast — built by a food truck operator, for mobile vendors.</p>
+        </div>
+      </footer>
     </div>
   );
 }

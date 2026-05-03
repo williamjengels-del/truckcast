@@ -177,7 +177,7 @@ export default function OnboardingPage() {
                 onChange={(e) =>
                   setProfile({ ...profile, business_name: e.target.value })
                 }
-                placeholder="e.g. Wok-O Taco"
+                placeholder="e.g. Your Food Truck"
                 autoFocus
               />
             </div>

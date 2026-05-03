@@ -222,7 +222,7 @@ const entries: ChangelogEntry[] = [
     items: [
       {
         kind: "polish",
-        text: "Brad's brand tokens live: VendCast teal + orange across marketing, auth, and per-operator public pages.",
+        text: "VendCast brand tokens live: teal + orange across marketing, auth, and per-operator public pages.",
       },
       {
         kind: "feat",
