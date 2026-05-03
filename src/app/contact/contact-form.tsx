@@ -195,6 +195,7 @@ export function ContactForm() {
           onChange={(e) => setName(e.target.value)}
           maxLength={200}
           autoComplete="name"
+          placeholder="Your name"
           required
         />
       </div>
@@ -211,6 +212,7 @@ export function ContactForm() {
           disabled={emailLocked}
           maxLength={320}
           autoComplete="email"
+          placeholder="you@example.com"
           required
         />
         {emailLocked && (
