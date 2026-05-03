@@ -184,8 +184,8 @@ function PosSettingsContent() {
       )}
 
       {error && (
-        <div className="rounded-md bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 p-4">
-          <p className="text-sm text-red-800 dark:text-red-200">
+        <div className="rounded-md bg-destructive/5 border border-destructive/40 p-4">
+          <p className="text-sm text-destructive">
             Connection error: {decodeURIComponent(error)}
           </p>
         </div>
@@ -595,7 +595,7 @@ function PosProviderCard({
                       className={`rounded-md p-3 text-sm space-y-1 ${
                         historicalResult.success
                           ? "border border-brand-teal/30 bg-brand-teal/5"
-                          : "bg-red-50 border border-red-200"
+                          : "bg-destructive/5 border border-destructive/40"
                       }`}
                     >
                       {historicalResult.success ? (
@@ -614,8 +614,8 @@ function PosProviderCard({
                         </>
                       ) : (
                         <>
-                          <p className="font-medium text-red-800">Sync failed</p>
-                          <p className="text-red-700">{historicalResult.error}</p>
+                          <p className="font-medium text-destructive">Sync failed</p>
+                          <p className="text-destructive">{historicalResult.error}</p>
                         </>
                       )}
                     </div>
