@@ -314,6 +314,11 @@ export interface PlatformEvent {
   // platform-registry.ts (same gate as median_sales).
   median_other_trucks: number | null;
   median_attendance: number | null;
+  // Cross-operator fee aggregates (migration 20260502000002).
+  // Privacy floor 3+ operators (slightly stricter than other Phase 1
+  // aggregates because fee + event_name combined leans more identifying).
+  modal_fee_type: string | null;
+  median_fee_rate: number | null;
   updated_at: string;
 }
 

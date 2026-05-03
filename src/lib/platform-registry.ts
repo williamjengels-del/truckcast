@@ -22,6 +22,13 @@ interface AggregatableRow {
   // the contributing set has a value.
   other_trucks: number | null;
   expected_attendance: number | null;
+  // Cross-operator fee aggregate inputs (added 2026-05-02 follow-on).
+  // fee_type is an enum on events; fee_rate is the numeric value paired
+  // with that fee_type (interpretation depends on the type — flat $ for
+  // flat_fee, % for percentage, etc.). Aggregating only the modal
+  // fee_type's rates keeps median_fee_rate semantically coherent.
+  fee_type: string | null;
+  fee_rate: number | null;
 }
 
 interface AggregateResult {
@@ -41,6 +48,14 @@ interface AggregateResult {
   // through cleanly.
   median_other_trucks: number | null;
   median_attendance: number | null;
+  // Cross-operator fee aggregate outputs. modal_fee_type = most-common
+  // fee_type across operators (null if no row had a fee_type or if
+  // operator_count < 3). median_fee_rate = median of fee_rates ONLY for
+  // rows whose fee_type matches the modal — keeps the rate semantically
+  // coherent (don't average a flat $50 fee against a 12% percentage).
+  // Higher privacy floor (3+) than other Phase 1 aggregates.
+  modal_fee_type: string | null;
+  median_fee_rate: number | null;
 }
 
 /**
@@ -86,6 +101,33 @@ function computeAggregate(rows: AggregatableRow[]): AggregateResult | null {
     rows.map((r) => r.expected_attendance)
   );
 
+  // Cross-operator fee aggregates. Higher privacy floor (3+ operators)
+  // because fee_type + event_name combined leans more identifying. We
+  // skip the fee block entirely below that threshold.
+  let modal_fee_type: string | null = null;
+  let median_fee_rate: number | null = null;
+  if (operatorCount >= 3) {
+    // Modal fee_type: most-common across rows. "none" is meaningful (no
+    // fee at all), so we DO include it. Skip null/undefined / empty.
+    const feeTypeCounts: Record<string, number> = {};
+    for (const r of rows) {
+      if (r.fee_type) feeTypeCounts[r.fee_type] = (feeTypeCounts[r.fee_type] ?? 0) + 1;
+    }
+    const sorted = Object.entries(feeTypeCounts).sort((a, b) => b[1] - a[1]);
+    if (sorted.length > 0) {
+      modal_fee_type = sorted[0][0];
+      // Median fee_rate ONLY across rows whose fee_type matches the
+      // modal — averaging a flat $50 against a 12% would be nonsense.
+      // Also skips "none" because there's no rate to median when the
+      // modal is no-fee.
+      if (modal_fee_type !== "none") {
+        median_fee_rate = medianOfNonNull(
+          rows.filter((r) => r.fee_type === modal_fee_type).map((r) => r.fee_rate)
+        );
+      }
+    }
+  }
+
   return {
     operator_count: operatorCount,
     total_instances: n,
@@ -99,6 +141,8 @@ function computeAggregate(rows: AggregatableRow[]): AggregateResult | null {
     most_common_city: mostCommonCity,
     median_other_trucks,
     median_attendance,
+    modal_fee_type,
+    median_fee_rate,
   };
 }
 
@@ -162,7 +206,7 @@ async function upsertPlatformEvent(
 
   const { data: rows } = await client
     .from("events")
-    .select("user_id, net_sales, event_type, city, other_trucks, expected_attendance")
+    .select("user_id, net_sales, event_type, city, other_trucks, expected_attendance, fee_type, fee_rate")
     .ilike("event_name", normalized)
     .eq("booked", true)
     .not("net_sales", "is", null)
@@ -193,6 +237,8 @@ async function upsertPlatformEvent(
       most_common_city: agg.most_common_city,
       median_other_trucks: agg.median_other_trucks,
       median_attendance: agg.median_attendance,
+      modal_fee_type: agg.modal_fee_type,
+      median_fee_rate: agg.median_fee_rate,
       updated_at: new Date().toISOString(),
     },
     { onConflict: "event_name_normalized" }
@@ -331,6 +377,8 @@ export async function getPlatformEventsExcludingUser(
       most_common_city: agg.most_common_city,
       median_other_trucks: agg.median_other_trucks,
       median_attendance: agg.median_attendance,
+      modal_fee_type: agg.modal_fee_type,
+      median_fee_rate: agg.median_fee_rate,
       updated_at: new Date().toISOString(),
     } as PlatformEvent);
   }
