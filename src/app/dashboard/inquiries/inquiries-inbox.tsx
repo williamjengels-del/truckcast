@@ -200,7 +200,7 @@ export function InquiriesInbox({
                   </div>
                   <div className="flex gap-2 flex-wrap">
                     {my === "claimed" && (
-                      <Badge className="bg-brand-teal/15 text-brand-teal border-0">Claimed</Badge>
+                      <Badge className="bg-brand-teal/15 text-brand-teal border-0">Interested</Badge>
                     )}
                     {my === "contacted" && (
                       <Badge className="bg-brand-orange/15 text-brand-orange border-0">Contacted</Badge>
@@ -299,7 +299,7 @@ export function InquiriesInbox({
                     ) : (
                       <CheckCircle2 className="h-3.5 w-3.5 mr-1" />
                     )}
-                    {my === "claimed" ? "Claimed" : "Claim"}
+                    {my === "claimed" ? "Interested" : "I'm interested"}
                   </Button>
                   <Button
                     onClick={() => handleAction(inq.id, "contacted")}
@@ -334,6 +334,16 @@ export function InquiriesInbox({
                     </Link>
                   )}
                 </div>
+
+                {/* Marketplace is non-mediated by design — clicking
+                    Interested only books the lead in this operator's
+                    own pipeline. The operator must email or call the
+                    organizer themselves to actually win the booking.
+                    Without this note, operators assume the button "did
+                    the work" and leads go cold. */}
+                <p className="text-xs text-muted-foreground border-t pt-3">
+                  Marking this doesn&apos;t notify the organizer. To win the booking, reach out directly via the contact info above — other operators in your area saw this request too.
+                </p>
               </div>
             );
           })}
