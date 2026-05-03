@@ -271,9 +271,18 @@ export function isFixedRevenueEvent(event: Event): boolean {
 }
 
 export function fixedRevenueAmount(event: Event): number {
-  // Pre-settled stores the contracted payout in fee_rate.
-  if (event.fee_type === "pre_settled" && (event.fee_rate ?? 0) > 0) {
-    return event.fee_rate;
+  // Pre-settled stores the contracted payout. Operators can put it in
+  // EITHER fee_rate OR sales_minimum — both fields are visible in the
+  // form and "sales minimum" reads naturally as "the guaranteed amount."
+  // Take the max of whichever is populated so we never under-report the
+  // contract.
+  if (event.fee_type === "pre_settled") {
+    const rate = event.fee_rate ?? 0;
+    const minimum = event.sales_minimum ?? 0;
+    const contract = Math.max(rate, minimum);
+    if (contract > 0) return contract;
+    // Fall through if neither field is filled — the caller's downstream
+    // fallback (invoice_revenue / net_sales / forecast) still applies.
   }
   // Commission-with-minimum: the floor is the minimum guaranteed payout.
   // Show that as the headline; detail panels surface the upside potential.

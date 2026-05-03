@@ -938,9 +938,13 @@ function ListView({
                         !event.cancellation_reason &&
                         event.net_sales === null &&
                         !(event.event_mode === "catering" && event.invoice_revenue > 0) &&
-                        event.anomaly_flag !== "disrupted" &&
-                        event.fee_type !== "pre_settled" ? (
+                        event.anomaly_flag !== "disrupted" ? (
                           <>
+                            {/* pre_settled events keep the Enter-sales
+                                action — operators routinely append
+                                walk-up / overflow sales on top of the
+                                contract amount, so locking them out
+                                here was over-strict. */}
                             <Button
                               variant="ghost"
                               size="icon"
