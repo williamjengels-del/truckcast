@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { ForecastCalculator } from "@/components/forecast-calculator";
 import { FindVendorLink } from "@/components/find-vendor-link";
+import { MarketingFooter } from "@/components/marketing-footer";
 
 export const metadata: Metadata = {
   title: "Free Food Truck Revenue Estimator | VendCast",
@@ -65,18 +66,7 @@ export default function PublicCalculatorPage() {
         />
       </main>
 
-      {/* Footer */}
-      <footer className="border-t mt-12 py-6">
-        <div className="max-w-4xl mx-auto px-4 flex flex-col sm:flex-row items-center justify-between gap-2 text-xs text-muted-foreground">
-          <span>© {new Date().getFullYear()} VendCast — built for food truck operators, by a food truck operator</span>
-          <div className="flex gap-4">
-            <Link href="/privacy" className="hover:text-foreground transition-colors">Privacy</Link>
-            <Link href="/terms" className="hover:text-foreground transition-colors">Terms</Link>
-            <Link href="/contact" className="hover:text-foreground transition-colors">Contact</Link>
-            <Link href="/signup" className="hover:text-foreground transition-colors">Sign up free</Link>
-          </div>
-        </div>
-      </footer>
+      <MarketingFooter />
     </div>
   );
 }
