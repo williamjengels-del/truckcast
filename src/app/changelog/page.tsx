@@ -25,6 +25,84 @@ interface ChangelogEntry {
 
 const entries: ChangelogEntry[] = [
   {
+    date: "May 3, 2026",
+    title: "Marketplace inbox v2 — notifications, claim flow, and a polished organizer surface",
+    items: [
+      {
+        kind: "feat",
+        text: "When an event organizer's request matches you, you now get an email AND a push notification (if you have notifications enabled). No more refreshing the inbox to see what's new.",
+      },
+      {
+        kind: "feat",
+        text: "Click 'I'm interested' on an inquiry and we'll auto-create a planning event in your events table — date, venue, attendance, and organizer contact all pre-filled. Click 'View event' to land right on it (highlighted, scrolled into view).",
+      },
+      {
+        kind: "feat",
+        text: "Sidebar Inquiries badge: orange pill with the count of inquiries you haven't responded to. Drops in real-time when you mark Interested / Contacted / Not interested.",
+      },
+      {
+        kind: "feat",
+        text: "Inbox sorted soonest-first by event date — triage by what you need to act on next, not by what arrived most recently.",
+      },
+      {
+        kind: "feat",
+        text: "Read/unread state: small orange dot + bold title for unread inquiries; both clear as you scroll past them.",
+      },
+      {
+        kind: "feat",
+        text: "Calendar conflict warning: amber banner on inquiry cards when you already have an event on that date. Warn-only; never blocks you from acting.",
+      },
+      {
+        kind: "feat",
+        text: "Per-inquiry private notes — sticky-note style textarea, only you see it. Auto-saves as you type.",
+      },
+      {
+        kind: "feat",
+        text: "Click an organizer's email in the inbox to open your email client with a pre-filled draft (subject + body referencing the inquiry). Edit before sending.",
+      },
+      {
+        kind: "feat",
+        text: "Filter inquiries by event type (Wedding / Festival / Corporate / etc.) once you have inquiries spanning multiple types. Filter persists in the URL so refresh keeps it.",
+      },
+      {
+        kind: "feat",
+        text: "Soft engagement signal on inquiry cards — qualitative copy ('Picking up steam', 'Drawing real interest') when other operators are pursuing the same lead. No counts, no names, no countdown anxiety.",
+      },
+      {
+        kind: "feat",
+        text: "New 'Find a vendor' link in the marketing nav for event organizers. Lands on a polished /request-event page with a clear 3-step process explainer.",
+      },
+      {
+        kind: "feat",
+        text: "Inquiry confirmation email now includes a 'reply within 48 hours if you don't hear back' fallback line. Replies route to support@vendcast.co (a real human inbox), not the no-reply sender.",
+      },
+      {
+        kind: "fix",
+        text: "City spelling drift was breaking the marketplace match — 'St. Louis' vs 'Saint Louis' wouldn't pair up. Both sides now canonicalize to the same form ('Saint Louis'). Backfill applied to existing profiles.",
+      },
+      {
+        kind: "fix",
+        text: "Period-attached city forms ('St.Louis', 'Mt.Pleasant', 'N.Bend') now also canonicalize correctly.",
+      },
+      {
+        kind: "fix",
+        text: "Submitting the public request-event form on Chrome (with autofill enabled) was silently failing — autofill was filling our hidden bot-trap field. Fixed by switching to a different bot-trap that autofill ignores. The marketplace was effectively broken for ~70% of visitors before this.",
+      },
+      {
+        kind: "fix",
+        text: "Renamed 'Claim' → 'I'm interested' on inbox cards. The old wording implied you'd already won the booking. Added an inline note that marking interest doesn't notify the organizer — you have to email or call directly.",
+      },
+      {
+        kind: "polish",
+        text: "/request-event page now has a teal hero band matching the rest of the marketing surfaces, with the 3-step process moved above the form so organizers see what happens before committing their info.",
+      },
+      {
+        kind: "polish",
+        text: "/help page contact footer wording — generic 'email us' instead of personalized.",
+      },
+    ],
+  },
+  {
     date: "May 2, 2026",
     title: "Cross-operator data sharing — fully live",
     items: [
