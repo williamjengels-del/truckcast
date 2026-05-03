@@ -83,12 +83,12 @@ export async function POST(request: Request) {
       await stripe.subscriptions.cancel(sub.id);
     }
 
-    // Extended beta trial — all signups get a free trial through May 1, 2026.
+    // Extended beta trial — all signups get a free trial through July 1, 2026.
     // After that date, remove this block and rely on Stripe price-level trial settings.
-    const MAY_1_2026 = new Date("2026-05-01T00:00:00Z");
+    const TRIAL_END_DATE = new Date("2026-07-01T00:00:00Z");
     const trialEnd =
-      MAY_1_2026 > new Date()
-        ? Math.floor(MAY_1_2026.getTime() / 1000)
+      TRIAL_END_DATE > new Date()
+        ? Math.floor(TRIAL_END_DATE.getTime() / 1000)
         : undefined;
 
     const session = await stripe.checkout.sessions.create({
