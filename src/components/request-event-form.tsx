@@ -55,9 +55,12 @@ export function RequestEventForm() {
           ? Number(form.get("budget_estimate"))
           : undefined,
       notes: String(form.get("notes") ?? ""),
-      // Honeypot — visually hidden field. Real users never fill it;
-      // bots that auto-fill anything labeled "company website" do.
-      company_website: String(form.get("company_website") ?? ""),
+      // Honeypot — visually hidden field with an obscure name. Chrome's
+      // built-in autofill silently filled the previous "company_website"
+      // because the substring "website" matched its heuristic dictionary,
+      // causing every Chrome-with-sync user to silently fail submission.
+      // The current field name has no autofill-targetable substring.
+      __vc_attestation: String(form.get("__vc_attestation") ?? ""),
     };
 
     try {
@@ -110,11 +113,19 @@ export function RequestEventForm() {
 
   return (
     <form onSubmit={handleSubmit} className="space-y-6 rounded-2xl border bg-card p-6 md:p-8">
-      {/* Honeypot — visually hidden but rendered. Real users won't see
-          or fill this; bots that auto-fill labeled inputs do. */}
+      {/* Honeypot — obscurely-named hidden field. No label and no
+          autofill-targetable substring in the name (Chrome's autofill
+          previously filled "company_website" silently because "website"
+          matched its dictionary, breaking submission for Chrome users).
+          Real users never see or fill this; naive bots fill anything. */}
       <div aria-hidden="true" style={{ position: "absolute", left: "-10000px", width: "1px", height: "1px", overflow: "hidden" }}>
-        <label htmlFor="company_website">Company Website (leave blank)</label>
-        <input id="company_website" name="company_website" type="text" autoComplete="off" tabIndex={-1} />
+        <input
+          id="__vc_attestation"
+          name="__vc_attestation"
+          type="text"
+          autoComplete="off"
+          tabIndex={-1}
+        />
       </div>
 
       <fieldset className="space-y-4">
