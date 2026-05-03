@@ -19,18 +19,13 @@ import {
   chatV2MonthlyCapCents,
   monthToDateCostCents,
 } from "@/lib/chat-v2-usage";
+import { SUBSCRIPTION_TIER_COLORS } from "@/lib/constants";
 
 // Auth handled by /dashboard/admin/layout.tsx.
 
 interface PageProps {
   params: Promise<{ userId: string }>;
 }
-
-const TIER_COLORS: Record<string, string> = {
-  starter: "bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300",
-  pro: "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400",
-  premium: "bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400",
-};
 
 // formatDate + formatTimestamp now live in @/lib/format-time and are
 // timezone-aware (viewer's browser tz, with the "short" tz abbrev
@@ -198,7 +193,7 @@ export default async function UserDetailPage({ params }: PageProps) {
           <p className="text-xs text-muted-foreground font-mono mt-1">{profile.id}</p>
         </div>
         <div className="flex items-center gap-2">
-          <Badge className={TIER_COLORS[profile.subscription_tier] ?? TIER_COLORS.starter}>
+          <Badge className={SUBSCRIPTION_TIER_COLORS[profile.subscription_tier] ?? SUBSCRIPTION_TIER_COLORS.starter}>
             {profile.subscription_tier}
           </Badge>
           {!profile.onboarding_completed && (
