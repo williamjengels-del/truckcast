@@ -318,6 +318,152 @@ function escapeHtml(s: string): string {
     .replace(/'/g, "&#39;");
 }
 
+// ─── Marketplace Inquiry Notification Email ───────────────────────────────
+
+/**
+ * Fired from /api/event-inquiries/submit when a Phase 7 marketplace
+ * inquiry lands and routes to one or more operators. Sent to each
+ * matched operator (fan-out from the submit handler).
+ *
+ * Distinguishes itself from sendBookingInquiryEmail in two ways:
+ *   - Multiple operators get the same inquiry (marketplace, not 1:1).
+ *     Copy frames it that way so operators understand they're competing.
+ *   - Carries the city/state, budget estimate, and integer attendance
+ *     that the marketplace form collects but the booking form doesn't.
+ */
+export interface InquiryNotificationEmailPayload {
+  businessName: string;
+  organizerName: string;
+  organizerEmail: string;
+  organizerPhone: string | null;
+  organizerOrg: string | null;
+  eventName: string | null;
+  eventDate: string;
+  startTime: string | null;
+  endTime: string | null;
+  eventType: string;
+  expectedAttendance: number | null;
+  city: string;
+  state: string;
+  locationDetails: string | null;
+  budgetEstimate: number | null;
+  notes: string | null;
+  matchedOperatorCount: number;
+}
+
+export async function sendInquiryNotificationEmail(
+  to: string,
+  payload: InquiryNotificationEmailPayload
+) {
+  if (!process.env.RESEND_API_KEY) return;
+  const resend = getResend();
+
+  const displayName = payload.businessName || "there";
+  const formatDate = (iso: string) =>
+    new Date(iso + "T00:00:00").toLocaleDateString("en-US", {
+      weekday: "short",
+      month: "short",
+      day: "numeric",
+      year: "numeric",
+    });
+
+  // Triage order: where → when → who-and-what → contact. The location +
+  // date are what an operator first decides on; everything else is
+  // "is this worth replying to" detail.
+  const detailRows: { label: string; value: string }[] = [];
+  detailRows.push({ label: "Location", value: `${payload.city}, ${payload.state}` });
+  if (payload.locationDetails) {
+    detailRows.push({ label: "Venue / details", value: payload.locationDetails });
+  }
+  detailRows.push({ label: "Event date", value: formatDate(payload.eventDate) });
+  const timeRange = formatTimeRange(payload.startTime, payload.endTime);
+  if (timeRange) detailRows.push({ label: "Time", value: timeRange });
+  detailRows.push({ label: "Event type", value: payload.eventType });
+  if (payload.expectedAttendance) {
+    detailRows.push({
+      label: "Expected attendance",
+      value: payload.expectedAttendance.toLocaleString(),
+    });
+  }
+  if (payload.budgetEstimate) {
+    detailRows.push({
+      label: "Budget estimate",
+      value: `$${payload.budgetEstimate.toLocaleString()}`,
+    });
+  }
+  if (payload.eventName) detailRows.push({ label: "Event name", value: payload.eventName });
+  if (payload.organizerOrg) detailRows.push({ label: "Organization", value: payload.organizerOrg });
+  detailRows.push({ label: "Contact email", value: payload.organizerEmail });
+  if (payload.organizerPhone) detailRows.push({ label: "Contact phone", value: payload.organizerPhone });
+
+  const detailsHtml = detailRows
+    .map(
+      (r) => `
+    <tr>
+      <td style="padding:8px 0;border-bottom:1px solid #f3f4f6;font-size:13px;color:#6b7280;text-transform:uppercase;letter-spacing:0.5px;font-weight:600;width:40%;vertical-align:top;">${r.label}</td>
+      <td style="padding:8px 0;border-bottom:1px solid #f3f4f6;font-size:14px;color:#111827;">${escapeHtml(r.value)}</td>
+    </tr>`
+    )
+    .join("");
+
+  const notesBlock = payload.notes
+    ? `
+      <div style="background:#f9fafb;border-radius:8px;padding:16px 20px;margin:20px 0;">
+        <div style="font-size:12px;font-weight:600;color:#9ca3af;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px;">Notes from organizer</div>
+        <div style="font-size:14px;color:#374151;line-height:1.6;white-space:pre-wrap;">${escapeHtml(payload.notes)}</div>
+      </div>`
+    : "";
+
+  // The fan-out caveat is what makes this different from a 1:1 booking
+  // inquiry — operators need to know other vendors saw this too so they
+  // reply quickly instead of sitting on it.
+  const fanoutLine =
+    payload.matchedOperatorCount > 1
+      ? `Sent to <strong>${payload.matchedOperatorCount} operators</strong> in your area — first to claim wins.`
+      : `You're the only operator we matched in <strong>${escapeHtml(payload.city)}, ${escapeHtml(payload.state)}</strong>.`;
+
+  await resend.emails.send({
+    from: FROM,
+    to,
+    subject: `New event request — ${payload.city}, ${payload.state}`,
+    html: `
+<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
+<body style="margin:0;padding:0;background:#f9fafb;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;">
+  <div style="max-width:560px;margin:40px auto;background:#fff;border-radius:12px;overflow:hidden;border:1px solid #e5e7eb;">
+    <div style="background:#f97316;padding:32px 40px;">
+      <div style="color:white;font-size:28px;font-weight:800;letter-spacing:-1px;">VendCast</div>
+    </div>
+    <div style="padding:40px;">
+      <h1 style="margin:0 0 8px;font-size:22px;font-weight:700;color:#111827;">New event request, ${displayName} 🎯</h1>
+      <p style="margin:0 0 8px;font-size:15px;line-height:1.6;color:#374151;">
+        <strong>${escapeHtml(payload.organizerName)}</strong> is looking for a mobile vendor for an event in <strong>${escapeHtml(payload.city)}, ${escapeHtml(payload.state)}</strong>.
+      </p>
+      <p style="margin:0 0 24px;font-size:13px;line-height:1.6;color:#6b7280;">
+        ${fanoutLine}
+      </p>
+      <table style="width:100%;border-collapse:collapse;margin-bottom:8px;">
+        <tbody>${detailsHtml}</tbody>
+      </table>
+      ${notesBlock}
+      <a href="${APP_URL}/dashboard/inquiries" style="display:inline-block;background:#f97316;color:white;font-weight:600;font-size:15px;padding:12px 28px;border-radius:8px;text-decoration:none;margin-top:16px;">
+        Open Inbox →
+      </a>
+      <p style="margin:24px 0 0;font-size:13px;color:#9ca3af;">
+        Reply directly to <a href="mailto:${payload.organizerEmail}" style="color:#9ca3af;">${payload.organizerEmail}</a>, or claim the inquiry from your VendCast Inbox to track it.
+      </p>
+    </div>
+    <div style="padding:20px 40px;border-top:1px solid #f3f4f6;">
+      <p style="margin:0;font-size:12px;color:#9ca3af;">VendCast · <a href="${APP_URL}/dashboard/settings" style="color:#9ca3af;">Manage preferences</a></p>
+    </div>
+  </div>
+</body>
+</html>
+    `.trim(),
+  });
+}
+
 // ─── Onboarding Nudge Email ────────────────────────────────────────────────
 
 /**

@@ -1,7 +1,12 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest, NextResponse, after } from "next/server";
 import { createClient as createServiceClient } from "@supabase/supabase-js";
 import { matchOperatorsForInquiry } from "@/lib/event-inquiry-routing";
-import { sendEventInquiryConfirmation } from "@/lib/email";
+import {
+  sendEventInquiryConfirmation,
+  sendInquiryNotificationEmail,
+  type InquiryNotificationEmailPayload,
+} from "@/lib/email";
+import { sendPushToSubscriptions, type PushSubscriptionRow } from "@/lib/push";
 import { EVENT_TYPES } from "@/lib/constants";
 import { canonicalizeCity } from "@/lib/city-normalize";
 
@@ -220,5 +225,180 @@ export async function POST(req: NextRequest) {
     // Non-fatal
   }
 
+  // Fan out push + email notifications to each matched operator. Runs
+  // inside `after()` so the response returns immediately to the
+  // organizer; the Lambda stays alive for the per-operator HTTPS calls
+  // to web-push and Resend. Failures on individual operators don't
+  // affect each other or the response — they're caught and logged.
+  if (matched.length > 0) {
+    after(() =>
+      notifyOperatorsOfInquiry(service, matched, {
+        organizerName: v.payload.organizer_name,
+        organizerEmail: v.payload.organizer_email,
+        organizerPhone: v.payload.organizer_phone ?? null,
+        organizerOrg: v.payload.organizer_org ?? null,
+        eventName: v.payload.event_name ?? null,
+        eventDate: v.payload.event_date,
+        startTime: v.payload.event_start_time ?? null,
+        endTime: v.payload.event_end_time ?? null,
+        eventType: v.payload.event_type,
+        expectedAttendance: v.payload.expected_attendance ?? null,
+        city: v.payload.city,
+        state: v.payload.state,
+        locationDetails: v.payload.location_details ?? null,
+        budgetEstimate: v.payload.budget_estimate ?? null,
+        notes: v.payload.notes ?? null,
+        matchedOperatorCount: matched.length,
+        inquiryId: data.id as string,
+      }).catch((err) => {
+        console.error("[notify] event-inquiry fan-out failed:", err);
+      })
+    );
+  }
+
   return NextResponse.json({ ok: true, id: data.id, matchedOperatorCount: matched.length });
+}
+
+interface InquiryFanoutPayload extends Omit<InquiryNotificationEmailPayload, "businessName"> {
+  inquiryId: string;
+}
+
+/**
+ * Fan out push + email notifications to every matched operator. Runs
+ * sequentially per-operator but each operator's push and email run in
+ * parallel — one operator's email failure doesn't block the next
+ * operator from being notified.
+ *
+ * Per-operator email lives in auth.users (admin API), business_name on
+ * profiles. Push subscriptions are scoped per-user. Bulk lookups for
+ * all of these would shave a few ms on a 50-operator fan-out, but at
+ * v1 marketplace density (1-3 operators per inquiry) the loop reads
+ * cleanly and the latency cost is invisible inside `after()`.
+ */
+async function notifyOperatorsOfInquiry(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  service: any,
+  operatorIds: string[],
+  payload: InquiryFanoutPayload
+) {
+  for (const operatorUserId of operatorIds) {
+    await Promise.all([
+      pushOperator(service, operatorUserId, payload).catch((err) => {
+        console.error(
+          `[push] event-inquiry user=${operatorUserId} failed:`,
+          err
+        );
+      }),
+      emailOperator(service, operatorUserId, payload).catch((err) => {
+        console.error(
+          `[email] event-inquiry user=${operatorUserId} failed:`,
+          err
+        );
+      }),
+    ]);
+  }
+}
+
+async function pushOperator(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  service: any,
+  operatorUserId: string,
+  payload: InquiryFanoutPayload
+) {
+  const { data: subs, error } = await service
+    .from("push_subscriptions")
+    .select("id, endpoint, p256dh, auth")
+    .eq("user_id", operatorUserId);
+
+  if (error) {
+    console.error(
+      `[push] event-inquiry subscription lookup failed for ${operatorUserId}:`,
+      error.message
+    );
+    return;
+  }
+  if (!subs || subs.length === 0) {
+    console.log(`[push] event-inquiry no subscriptions for ${operatorUserId} — skipping`);
+    return;
+  }
+
+  // Push body: "[organizer] needs a vendor [date] in [city]" — under
+  // 100 chars to avoid iOS truncation. Date is the primary triage
+  // signal after the city, so if we go over budget we drop "needs a
+  // vendor" wording.
+  const dateText = new Date(payload.eventDate + "T00:00:00").toLocaleDateString(
+    "en-US",
+    { month: "short", day: "numeric" }
+  );
+  const longBody = `${payload.organizerName} needs a vendor ${dateText} in ${payload.city}`;
+  const body =
+    longBody.length > 100
+      ? `${payload.organizerName} · ${dateText} · ${payload.city}`
+      : longBody;
+
+  const result = await sendPushToSubscriptions(subs as PushSubscriptionRow[], {
+    title: "New event request",
+    body,
+    url: "/dashboard/inquiries",
+    tag: `inquiry-${payload.inquiryId}`,
+  });
+
+  console.log(
+    `[push] event-inquiry user=${operatorUserId} subs=${subs.length} delivered=${result.delivered} failed=${result.failed} cleaned=${result.invalidEndpoints.length}`
+  );
+
+  // Reuse the same dead-endpoint cleanup pattern as book/submit.
+  if (result.invalidEndpoints.length > 0) {
+    await service
+      .from("push_subscriptions")
+      .delete()
+      .in("endpoint", result.invalidEndpoints);
+  }
+  const survivingEndpoints = (subs as PushSubscriptionRow[])
+    .map((s) => s.endpoint)
+    .filter((e) => !result.invalidEndpoints.includes(e));
+  if (survivingEndpoints.length > 0) {
+    await service
+      .from("push_subscriptions")
+      .update({ last_used_at: new Date().toISOString() })
+      .in("endpoint", survivingEndpoints);
+  }
+}
+
+async function emailOperator(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  service: any,
+  operatorUserId: string,
+  payload: InquiryFanoutPayload
+) {
+  const { data: userRow, error: userError } =
+    await service.auth.admin.getUserById(operatorUserId);
+  if (userError || !userRow?.user?.email) {
+    console.error(
+      `[email] event-inquiry operator lookup failed for ${operatorUserId}:`,
+      userError?.message ?? "no email on user"
+    );
+    return;
+  }
+  const operatorEmail = userRow.user.email as string;
+
+  const { data: profile } = await service
+    .from("profiles")
+    .select("business_name")
+    .eq("id", operatorUserId)
+    .single();
+  const businessName = (profile?.business_name as string) ?? "";
+
+  // inquiryId isn't part of the email payload — it's only used for the
+  // push tag. Strip it before passing through.
+  const { inquiryId: _inquiryId, ...emailPayload } = payload;
+  void _inquiryId;
+  await sendInquiryNotificationEmail(operatorEmail, {
+    businessName,
+    ...emailPayload,
+  });
+
+  console.log(
+    `[email] event-inquiry sent to operator=${operatorUserId} (business="${businessName}")`
+  );
 }
