@@ -113,18 +113,19 @@ export function RequestEventForm() {
 
   return (
     <form onSubmit={handleSubmit} className="space-y-6 rounded-2xl border bg-card p-6 md:p-8">
-      {/* Honeypot — obscurely-named hidden field. No label and no
-          autofill-targetable substring in the name (Chrome's autofill
-          previously filled "company_website" silently because "website"
-          matched its dictionary, breaking submission for Chrome users).
-          Real users never see or fill this; naive bots fill anything. */}
+      {/* Honeypot — visually hidden CHECKBOX. Chrome's autofill is
+          heuristic-based and fills any empty text input near identity
+          fields regardless of name (verified: even "__vc_attestation"
+          got filled with the user's email). Checkboxes, however, are
+          not toggled by autofill engines. Real users never see this;
+          bots that auto-check everything fail closed. */}
       <div aria-hidden="true" style={{ position: "absolute", left: "-10000px", width: "1px", height: "1px", overflow: "hidden" }}>
         <input
           id="__vc_attestation"
           name="__vc_attestation"
-          type="text"
-          autoComplete="off"
+          type="checkbox"
           tabIndex={-1}
+          defaultChecked={false}
         />
       </div>
 
