@@ -101,6 +101,30 @@ const entries: ChangelogEntry[] = [
         kind: "polish",
         text: "/help page contact footer wording — generic 'email us' instead of personalized.",
       },
+      {
+        kind: "fix",
+        text: "Calendar conflict warning on inquiry cards is now scoped to booked events only — marking interest in two leads on the same date no longer warns against itself.",
+      },
+      {
+        kind: "fix",
+        text: "Pre-settled events: the contract amount now shows up in the Net Sales column (with a 'contract' pill) instead of leaving the column reading $0 until walk-up sales are entered. Weather adjustment indicator no longer fires on pre-settled events — revenue is contractually fixed, so a weather adjustment is misleading.",
+      },
+      {
+        kind: "fix",
+        text: "Form input borders are now visible across the site in light mode — previously a token mistake left every input borderless on white card surfaces. Most visible on the contact form.",
+      },
+      {
+        kind: "fix",
+        text: "Manager accept-invite flow rewritten end-to-end. Managers were silently ending up half-linked (active in one view, unlinked in another) because the previous client-side flow couldn't write through team_members RLS. New server-side activation atomically links the profile and clears any operator-side fields managers shouldn't carry.",
+      },
+      {
+        kind: "polish",
+        text: "Marketing site footer is now consistent across every page — homepage, pricing, contact, help, changelog, status, request-event, roadmap, and the calculator tool all share the same link group and tagline.",
+      },
+      {
+        kind: "polish",
+        text: "Pricing page founder story rewritten to a first-person operator-origin narrative.",
+      },
     ],
   },
   {
