@@ -32,6 +32,32 @@ interface AdminProfileRow {
   last_payment_failure_reason: string | null;
 }
 
+async function fetchManagerUserIds(
+  service: NonNullable<Awaited<ReturnType<typeof getServiceClient>>>
+): Promise<Set<string>> {
+  // Defense in depth (2026-05-02): the original manager filter only
+  // excluded profiles where owner_user_id IS NULL. But if a manager
+  // signed up via /signup before being added to a team (or otherwise
+  // got a profile without going through the accept-invite flow that
+  // sets owner_user_id), they'd slip through.
+  //
+  // This second-level filter pulls every active team_members row and
+  // excludes any profile whose ID appears as member_user_id. Together
+  // with the owner_user_id filter, no manager can show up in the
+  // admin operator-users list regardless of which signup path they
+  // took.
+  const out = new Set<string>();
+  const { data } = await service
+    .from("team_members")
+    .select("member_user_id")
+    .eq("status", "active")
+    .not("member_user_id", "is", null);
+  for (const row of (data ?? []) as { member_user_id: string | null }[]) {
+    if (row.member_user_id) out.add(row.member_user_id);
+  }
+  return out;
+}
+
 async function fetchAllProfiles(
   service: NonNullable<Awaited<ReturnType<typeof getServiceClient>>>
 ): Promise<AdminProfileRow[]> {
@@ -39,6 +65,9 @@ async function fetchAllProfiles(
   // staff seats invited via the operator's settings → Team Members
   // flow, not separate vendor signups. Counting them in admin user
   // metrics inflated growth + tier breakdown.
+  //
+  // The team_members second-level filter is applied in GET() below
+  // to catch managers whose profile owner_user_id never got set.
   const all: AdminProfileRow[] = [];
   let offset = 0;
   while (true) {
@@ -101,11 +130,13 @@ export async function GET() {
   let profiles: Awaited<ReturnType<typeof fetchAllProfiles>>;
   let eventCounts: Awaited<ReturnType<typeof fetchAllEvents>>;
   let authUsers: Awaited<ReturnType<typeof fetchAllAuthUsers>>;
+  let managerIds: Set<string>;
   try {
-    [profiles, eventCounts, authUsers] = await Promise.all([
+    [profiles, eventCounts, authUsers, managerIds] = await Promise.all([
       fetchAllProfiles(service),
       fetchAllEvents(service),
       fetchAllAuthUsers(service),
+      fetchManagerUserIds(service),
     ]);
   } catch (err) {
     return NextResponse.json(
@@ -133,15 +164,21 @@ export async function GET() {
     emailMap[u.id] = u.email ?? "";
   }
 
-  const users = (profiles ?? []).map((p) => ({
-    ...p,
-    email: emailMap[p.id] ?? null,
-    event_count: countMap[p.id] ?? 0,
-    booked_count: bookedMap[p.id] ?? 0,
-    sales_count: salesMap[p.id] ?? 0,
-    last_event_date: lastEventMap[p.id] ?? null,
-    trial_extended_until: p.trial_extended_until ?? null,
-  }));
+  // Defensive second filter — drop any profile whose ID also appears in
+  // active team_members.member_user_id. Catches managers whose profile
+  // owner_user_id never got set by the accept-invite flow (signup
+  // happened before invite, or otherwise bypassed the proper path).
+  const users = (profiles ?? [])
+    .filter((p) => !managerIds.has(p.id))
+    .map((p) => ({
+      ...p,
+      email: emailMap[p.id] ?? null,
+      event_count: countMap[p.id] ?? 0,
+      booked_count: bookedMap[p.id] ?? 0,
+      sales_count: salesMap[p.id] ?? 0,
+      last_event_date: lastEventMap[p.id] ?? null,
+      trial_extended_until: p.trial_extended_until ?? null,
+    }));
 
   return NextResponse.json({ users });
 }
