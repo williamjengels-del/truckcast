@@ -367,6 +367,10 @@ export interface EventInquiry {
   status: EventInquiryStatus;
   matched_operator_ids: string[];
   operator_actions: Record<string, EventInquiryOperatorAction>;
+  // Per-operator private notes, keyed by user_id. Each operator
+  // sees only their own slot. Server-enforced via RLS on the parent
+  // row.
+  operator_notes_by_user: Record<string, string>;
   created_at: string;
   updated_at: string;
 }
