@@ -135,12 +135,25 @@ export const DAY_OF_WEEK_COEFFICIENTS: Record<string, number> = {
   Thursday: 0.85,
 };
 
-// Tier colors for UI
+// Event-quality tier colors (A/B/C/D grades from forecast engine).
+// Data semantics — kept on raw palette per v23-design rule (financial /
+// data classification colors aren't brand-relevant).
 export const TIER_COLORS: Record<string, string> = {
   A: "bg-green-100 text-green-800 border-green-300",
   B: "bg-blue-100 text-blue-800 border-blue-300",
   C: "bg-yellow-100 text-yellow-800 border-yellow-300",
   D: "bg-gray-100 text-gray-800 border-gray-300",
+};
+
+// Subscription tier colors (starter / pro / premium). On brand tokens
+// per Verdict #25: premium = brand-orange (the differentiator/closer),
+// pro = brand-teal (default brand presence), starter = muted (lowest
+// emphasis). Single source of truth — admin users-client + user-detail
+// page both read this.
+export const SUBSCRIPTION_TIER_COLORS: Record<string, string> = {
+  starter: "bg-muted text-muted-foreground",
+  pro: "bg-brand-teal/15 text-brand-teal",
+  premium: "bg-brand-orange/15 text-brand-orange",
 };
 
 // Confidence colors

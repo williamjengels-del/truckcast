@@ -9,6 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { RefreshCw, CheckCircle, Trash2, Search } from "lucide-react";
 import { formatDate } from "@/lib/format-time";
+import { SUBSCRIPTION_TIER_COLORS } from "@/lib/constants";
 
 interface AdminUser {
   id: string;
@@ -34,12 +35,6 @@ interface AdminUser {
 function isPaymentFailing(u: AdminUser): boolean {
   return u.last_payment_status === "payment_failed" || u.last_payment_status === "past_due";
 }
-
-const TIER_COLORS: Record<string, string> = {
-  starter: "bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300",
-  pro: "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400",
-  premium: "bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400",
-};
 
 export function UsersClient() {
   const [users, setUsers] = useState<AdminUser[]>([]);
@@ -321,7 +316,7 @@ export function UsersClient() {
                             onValueChange={(val) => { if (val) handleTierChange(user.id, val); }}
                             disabled={saving === user.id}
                           >
-                            <SelectTrigger className={`w-28 h-7 text-xs border-0 ${TIER_COLORS[user.subscription_tier] ?? ""}`}>
+                            <SelectTrigger className={`w-28 h-7 text-xs border-0 ${SUBSCRIPTION_TIER_COLORS[user.subscription_tier] ?? ""}`}>
                               <SelectValue />
                             </SelectTrigger>
                             <SelectContent>
