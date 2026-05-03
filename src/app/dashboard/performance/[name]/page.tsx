@@ -458,14 +458,14 @@ export default async function EventDrilldownPage({ params }: PageProps) {
 
       {/* Unlogged warning */}
       {unlogged.length > 0 && (
-        <div className="rounded-lg border border-amber-200 bg-amber-50 dark:border-amber-800/40 dark:bg-amber-950/10 p-4 text-sm">
-          <p className="font-medium text-amber-800 dark:text-amber-300">
+        <div className="rounded-lg border border-warning/40 bg-warning/5 p-4 text-sm">
+          <p className="font-medium text-warning">
             {unlogged.length} past booking{unlogged.length !== 1 ? "s" : ""} without revenue logged
           </p>
-          <p className="text-amber-700 dark:text-amber-400 text-xs mt-1">
+          <p className="text-warning text-xs mt-1">
             Log sales for these events to improve forecast accuracy.
           </p>
-          <Link href="/dashboard/events?tab=past" className="text-xs font-medium text-amber-700 hover:underline mt-2 inline-block">
+          <Link href="/dashboard/events?tab=past" className="text-xs font-medium text-warning hover:underline mt-2 inline-block">
             Go to Past Events →
           </Link>
         </div>

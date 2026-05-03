@@ -69,7 +69,7 @@ function anomalyBadge(flag: string | null) {
   const value = flag ?? "normal";
   if (value === "disrupted") {
     return (
-      <Badge variant="outline" className="text-amber-700 border-amber-300 dark:text-amber-400">
+      <Badge variant="outline" className="text-warning border-warning/50">
         disrupted
       </Badge>
     );

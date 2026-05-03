@@ -34,6 +34,8 @@
   --color-input: var(--input);
   --color-border: var(--border);
   --color-destructive: var(--destructive);
+  --color-warning: var(--warning);
+  --color-warning-foreground: var(--warning-foreground);
   --color-accent-foreground: var(--accent-foreground);
   --color-accent: var(--accent);
   --color-muted-foreground: var(--muted-foreground);
@@ -84,6 +86,12 @@
   --accent-foreground: #030213;
   --destructive: #d4183d;
   --destructive-foreground: #fff;
+  /* Warning — amber-grade caution color for "needs attention but not failing"
+     states (payment failed soft-warn, validation hints, unresolved-but-fixable
+     queues). Distinct from --destructive (red, action-required errors) and
+     --vendcast-orange (brand call-to-action). */
+  --warning: #b45309;
+  --warning-foreground: #fff;
   --border: #0000001a;
   --input: transparent;
   --input-background: #f3f3f5;
@@ -128,6 +136,9 @@
   --accent: oklch(0.269 0 0);
   --accent-foreground: oklch(0.985 0 0);
   --destructive: oklch(0.704 0.191 22.216);
+  /* Warning — lifted in dark mode for contrast against near-black bg */
+  --warning: oklch(0.78 0.16 70);
+  --warning-foreground: oklch(0.2 0 0);
   --border: oklch(1 0 0 / 10%);
   --input: oklch(1 0 0 / 15%);
   --ring: oklch(0.556 0 0);
