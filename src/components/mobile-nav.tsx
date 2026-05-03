@@ -53,6 +53,17 @@ export function MobileNav() {
       }
     }
     load();
+
+    // See sidebar.tsx — same custom-event refresh pattern so badges
+    // stay in sync after in-page mutations (inquiry action, event log,
+    // etc.) without forcing a full reload.
+    const handler = () => {
+      load();
+    };
+    window.addEventListener("vendcast:sidebar-stale", handler);
+    return () => {
+      window.removeEventListener("vendcast:sidebar-stale", handler);
+    };
   }, [effectiveUserId]);
 
   // Close sheet when route changes

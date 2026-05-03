@@ -130,6 +130,11 @@ export function InquiriesInbox({
           [inquiryId]: responseBody.eventId!,
         }));
       }
+      // Nudge the sidebar / mobile-nav badge counts. router.refresh()
+      // re-runs Server Components but doesn't re-trigger client-side
+      // useEffects, so the open-inquiry pill would otherwise show the
+      // stale pre-action count until the next full reload.
+      window.dispatchEvent(new Event("vendcast:sidebar-stale"));
       router.refresh();
     } catch (e) {
       alert(e instanceof Error ? e.message : "Network error");

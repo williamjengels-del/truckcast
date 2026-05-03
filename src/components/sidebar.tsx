@@ -53,6 +53,19 @@ export function Sidebar() {
       }
     }
     load();
+
+    // Re-fetch when any in-page mutation affects sidebar counts.
+    // router.refresh() re-runs Server Components but not client-side
+    // effects, so the inbox / events-list / etc. need a way to nudge
+    // the badge counts without a full reload. Custom DOM event keeps
+    // the coupling loose — anywhere can dispatch, sidebar listens.
+    const handler = () => {
+      load();
+    };
+    window.addEventListener("vendcast:sidebar-stale", handler);
+    return () => {
+      window.removeEventListener("vendcast:sidebar-stale", handler);
+    };
   }, [effectiveUserId]);
 
   async function handleSignOut() {
