@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useMemo, useRef, useCallback } from "react";
+import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -88,6 +89,16 @@ export function EventForm({
 }: EventFormProps) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Cross-operator Phase 1 hints — populated when this event has any
+  // peer data on platform_events. Operators see "median across N
+  // operators" hints under Expected Attendance + Other Trucks. Null
+  // when there's no peer data (privacy floor not met or no shared
+  // bookings of this event_name).
+  const [platformHints, setPlatformHints] = useState<{
+    median_other_trucks: number | null;
+    median_attendance: number | null;
+    operator_count: number;
+  } | null>(null);
   const [isPrivate, setIsPrivate] = useState<boolean>(initialData?.is_private ?? false);
   const [bookedValue, setBookedValue] = useState<string>(initialData?.booked === false ? "false" : "true");
   const [cancellationReason, setCancellationReason] = useState<string>(initialData?.cancellation_reason ?? "");
@@ -276,6 +287,46 @@ export function EventForm({
       if (debounceRef.current) clearTimeout(debounceRef.current);
     };
   }, [cityValue, stateValue, dateValue, open, fetchWeatherSuggestion]);
+
+  // Cross-operator hints — pull median_attendance + median_other_trucks
+  // from platform_events for this event_name when the dialog opens.
+  // RLS allows authenticated reads on platform_events. Fires only when
+  // the form opens AND we have an event_name (most common: editing an
+  // existing event). Brand-new events with no name yet get no hints
+  // until the operator types — staying out of the way for cold creates.
+  useEffect(() => {
+    if (!open) {
+      setPlatformHints(null);
+      return;
+    }
+    const name = initialData?.event_name?.trim();
+    if (!name) {
+      setPlatformHints(null);
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      const supabase = createClient();
+      const { data } = await supabase
+        .from("platform_events")
+        .select("median_other_trucks, median_attendance, operator_count")
+        .eq("event_name_normalized", name.toLowerCase())
+        .maybeSingle();
+      if (cancelled) return;
+      if (data) {
+        setPlatformHints({
+          median_other_trucks: data.median_other_trucks,
+          median_attendance: data.median_attendance,
+          operator_count: data.operator_count,
+        });
+      } else {
+        setPlatformHints(null);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [open, initialData?.event_name]);
 
   function toggleAdvancedMode() {
     setAdvancedMode((prev) => {
@@ -841,6 +892,16 @@ export function EventForm({
                       defaultValue={initialData?.expected_attendance ?? ""}
                     />
                     <p className="text-xs text-muted-foreground">Refines the forecast when crowd size differs from your average</p>
+                    {/* Cross-operator hint — Phase 1, 2026-05-02. */}
+                    {platformHints?.median_attendance != null && (
+                      <p className="text-xs text-brand-teal">
+                        Other operators at this event: typically ~{platformHints.median_attendance.toLocaleString()} attendees
+                        {" "}
+                        <span className="text-muted-foreground">
+                          (median across {platformHints.operator_count} operator{platformHints.operator_count === 1 ? "" : "s"})
+                        </span>
+                      </p>
+                    )}
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="other_trucks">Other Trucks</Label>
@@ -852,6 +913,16 @@ export function EventForm({
                       min="0"
                       defaultValue={initialData?.other_trucks ?? ""}
                     />
+                    {/* Cross-operator hint — Phase 1, 2026-05-02. */}
+                    {platformHints?.median_other_trucks != null && (
+                      <p className="text-xs text-brand-teal">
+                        Other operators at this event: typically ~{platformHints.median_other_trucks} trucks
+                        {" "}
+                        <span className="text-muted-foreground">
+                          (median across {platformHints.operator_count} operator{platformHints.operator_count === 1 ? "" : "s"})
+                        </span>
+                      </p>
+                    )}
                   </div>
                 </div>
               </div>
