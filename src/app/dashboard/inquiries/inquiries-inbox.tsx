@@ -1,8 +1,9 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
-import { useRouter } from "next/navigation";
+import { useState, useEffect, useRef, useMemo } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
+import { EVENT_TYPES } from "@/lib/constants";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -122,9 +123,29 @@ export function InquiriesInbox({
   operatorBusinessName = "",
 }: Props) {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [inquiries, setInquiries] = useState(initialInquiries);
   const [busy, setBusy] = useState<string | null>(null);
   const [filter, setFilter] = useState<"all" | "open" | "responded">("open");
+  // Event-type filter, URL-persisted via ?event_type=. Empty value =
+  // "All event types" (no filter). Persisting in URL means a refresh
+  // and a shared link both keep the operator's chosen scope.
+  const eventTypeFilter = searchParams.get("event_type") ?? "";
+  // Active types present in this operator's actual inquiry set —
+  // dropdown shows only event types they've actually received, not
+  // the entire EVENT_TYPES catalog. Avoids dead options.
+  const availableEventTypes = useMemo(() => {
+    const present = new Set<string>();
+    for (const inq of inquiries) present.add(inq.event_type);
+    return EVENT_TYPES.filter((t) => present.has(t));
+  }, [inquiries]);
+  function handleEventTypeChange(next: string) {
+    const params = new URLSearchParams(searchParams.toString());
+    if (next) params.set("event_type", next);
+    else params.delete("event_type");
+    const qs = params.toString();
+    router.replace(qs ? `/dashboard/inquiries?${qs}` : `/dashboard/inquiries`);
+  }
   const [claimedEventByInquiry, setClaimedEventByInquiry] = useState(
     initialClaimedEventByInquiry
   );
@@ -255,6 +276,7 @@ export function InquiriesInbox({
   }, []);
 
   const filtered = inquiries.filter((inq) => {
+    if (eventTypeFilter && inq.event_type !== eventTypeFilter) return false;
     const my = myActionFor(inq);
     if (filter === "open") return inq.status === "open" && my !== "declined";
     if (filter === "responded") return my === "claimed" || my === "contacted";
@@ -355,22 +377,41 @@ export function InquiriesInbox({
 
   return (
     <div className="space-y-4">
-      {/* Filter chips */}
-      <div className="flex items-center gap-1 border rounded-md p-0.5 w-fit text-sm">
-        {(["open", "responded", "all"] as const).map((f) => (
-          <button
-            key={f}
-            type="button"
-            onClick={() => setFilter(f)}
-            className={
-              filter === f
-                ? "px-3 py-1 rounded bg-background shadow-sm text-foreground"
-                : "px-3 py-1 rounded text-muted-foreground hover:text-foreground"
-            }
+      {/* Filter row — status chips + event-type dropdown. Dropdown
+          only renders when the operator has inquiries spanning more
+          than one event type; otherwise it's noise. */}
+      <div className="flex items-center gap-3 flex-wrap">
+        <div className="flex items-center gap-1 border rounded-md p-0.5 w-fit text-sm">
+          {(["open", "responded", "all"] as const).map((f) => (
+            <button
+              key={f}
+              type="button"
+              onClick={() => setFilter(f)}
+              className={
+                filter === f
+                  ? "px-3 py-1 rounded bg-background shadow-sm text-foreground"
+                  : "px-3 py-1 rounded text-muted-foreground hover:text-foreground"
+              }
+            >
+              {f === "open" ? "Open" : f === "responded" ? "Responded" : "All"}
+            </button>
+          ))}
+        </div>
+        {availableEventTypes.length > 1 && (
+          <select
+            aria-label="Filter by event type"
+            value={eventTypeFilter}
+            onChange={(e) => handleEventTypeChange(e.target.value)}
+            className="text-sm border rounded-md px-3 py-1.5 bg-background hover:bg-muted/40 focus:outline-none focus:ring-2 focus:ring-brand-teal/40"
           >
-            {f === "open" ? "Open" : f === "responded" ? "Responded" : "All"}
-          </button>
-        ))}
+            <option value="">All event types</option>
+            {availableEventTypes.map((t) => (
+              <option key={t} value={t}>
+                {t}
+              </option>
+            ))}
+          </select>
+        )}
       </div>
 
       {filtered.length === 0 ? (
