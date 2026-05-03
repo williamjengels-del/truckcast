@@ -2,6 +2,7 @@ import {
   LayoutDashboard,
   Calendar,
   Inbox,
+  Megaphone,
   Users,
   Sparkles,
   Plug,
@@ -23,6 +24,10 @@ export interface NavItem {
 export const navItems: NavItem[] = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { href: "/dashboard/bookings", label: "Inbox", icon: Inbox },
+  // Phase 7 marketplace inquiry inbox — separate from /bookings (which
+  // is the 1:1 direct-to-operator booking flow). Inquiries here are
+  // routed to multiple operators via city + event_type matching.
+  { href: "/dashboard/inquiries", label: "Inquiries", icon: Megaphone },
   { href: "/dashboard/events", label: "Events", icon: Calendar },
   { href: "/dashboard/contacts", label: "Contacts", icon: Users },
   { href: "/dashboard/insights", label: "Insights", icon: Sparkles },
