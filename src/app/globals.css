@@ -93,7 +93,12 @@
   --warning: #b45309;
   --warning-foreground: #fff;
   --border: #0000001a;
-  --input: transparent;
+  /* Was `transparent` (Brad's tokens shipped that way), which made
+     every <Input>/<Textarea> render borderless on white card
+     surfaces — the contact form was the most visible offender, but
+     it affected all forms in light mode. Now matches sidebar-border
+     so input boundaries are clearly visible without being heavy. */
+  --input: oklch(0.922 0 0);
   --input-background: #f3f3f5;
   --switch-background: #cbced4;
   --ring: oklch(70.8% 0 0);

@@ -4,6 +4,7 @@ import Link from "next/link";
 import { createClient as createServiceClient } from "@supabase/supabase-js";
 import { Button } from "@/components/ui/button";
 import { FindVendorLink } from "@/components/find-vendor-link";
+import { MarketingFooter } from "@/components/marketing-footer";
 import { RoiCalculator } from "@/components/roi-calculator";
 import { WEATHER_COEFFICIENTS } from "@/lib/constants";
 import {
@@ -291,20 +292,21 @@ export default async function LandingPage() {
               </p>
             </div>
 
-            {/* Block 3 — Revenue timing (prep + staffing decision; no
-                invented number) */}
+            {/* Block 3 — Inquiry pipeline (Phase 7 marketplace
+                positioning; replaces the prior revenue-timing block
+                now that the marketplace is the leading differentiator). */}
             <div
-              data-testid="insight-block-timing"
+              data-testid="insight-block-inquiry-pipeline"
               className={`${cardBase} ${tintA}`}
             >
               <h2 className="text-xl font-bold tracking-tight sm:text-2xl">
-                Match prep and staffing to when the money actually arrives.
+                Inquiries that don&apos;t fall through the cracks.
               </h2>
               <p className="text-lg font-semibold">
-                A 6-hour event isn&apos;t 6 hours of revenue.
+                Event requests hit your inbox and your calendar — auto-flagged, conflict-checked.
               </p>
               <p className="text-sm text-muted-foreground">
-                VendCast tracks when, not just when the day ends.
+                Respond once, schedule once, move on.
               </p>
             </div>
           </div>
@@ -435,20 +437,7 @@ export default async function LandingPage() {
       </section>
 
       {/* Footer */}
-      <footer className="border-t py-8 pb-24 md:pb-8">
-        <div className="container mx-auto px-4 text-center text-sm text-muted-foreground space-y-2">
-          <div className="flex flex-wrap items-center justify-center gap-x-6 gap-y-2">
-            <Link href="/pricing" className="hover:text-foreground transition-colors">Pricing</Link>
-            <Link href="/roadmap" className="hover:text-foreground transition-colors">Roadmap</Link>
-            <Link href="/changelog" className="hover:text-foreground transition-colors">Changelog</Link>
-            <Link href="/help" className="hover:text-foreground transition-colors">Help Center</Link>
-            <Link href="/contact" className="hover:text-foreground transition-colors">Contact</Link>
-            <Link href="/request-event" className="hover:text-foreground transition-colors">Need a vendor?</Link>
-            <Link href="/signup" className="hover:text-foreground transition-colors">Get Started</Link>
-          </div>
-          <p>&copy; {new Date().getFullYear()} VendCast — built by a food truck operator, for mobile vendors.</p>
-        </div>
-      </footer>
+      <MarketingFooter />
 
       {/* Phase 2.6 mobile sticky CTA — fixed-bottom action so the
           conversion path is always one tap away on mobile. Hidden on

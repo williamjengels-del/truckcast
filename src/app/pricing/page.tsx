@@ -3,6 +3,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { FindVendorLink } from "@/components/find-vendor-link";
+import { MarketingFooter } from "@/components/marketing-footer";
 import { PricingTiers } from "./pricing-tiers";
 
 export const metadata: Metadata = {
@@ -133,36 +134,7 @@ export default function PricingPage() {
         </div>
       </section>
 
-      {/* Footer — matches the homepage. pb-24 on mobile so the sticky
-          CTA below doesn't overlap the copyright. */}
-      <footer className="border-t py-8 pb-24 md:pb-8">
-        <div className="container mx-auto space-y-2 px-4 text-center text-sm text-muted-foreground">
-          <div className="flex items-center justify-center gap-6">
-            <Link
-              href="/help"
-              className="transition-colors hover:text-foreground"
-            >
-              Help Center
-            </Link>
-            <Link
-              href="/signup"
-              className="transition-colors hover:text-foreground"
-            >
-              Get Started
-            </Link>
-            <Link
-              href="/contact"
-              className="transition-colors hover:text-foreground"
-            >
-              Contact
-            </Link>
-          </div>
-          <p>
-            &copy; {new Date().getFullYear()} VendCast — built by a food truck
-            operator, for mobile vendors.
-          </p>
-        </div>
-      </footer>
+      <MarketingFooter />
 
       {/* Mobile sticky CTA — mirrors the homepage's #44 treatment. The
           tier cards above each carry their own CTA, but on mobile the

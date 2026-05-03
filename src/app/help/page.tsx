@@ -4,6 +4,7 @@ import Link from "next/link";
 import { ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { FindVendorLink } from "@/components/find-vendor-link";
+import { MarketingFooter } from "@/components/marketing-footer";
 
 export const metadata: Metadata = {
   title: "Help Center — VendCast",
@@ -47,7 +48,7 @@ const sections = [
       },
       {
         q: "How does weather affect the forecast?",
-        a: "VendCast applies a weather coefficient to outdoor events based on the forecast for that day. Rain During Event = 53% of normal, Storms = 30%, Hot (90°F+) = 63%, Cold (≤40°F) = 55%. These coefficients come from 244+ real food truck events and recalibrate as your own data accumulates.",
+        a: "VendCast applies a weather coefficient to outdoor events based on the forecast for that day. Rain During Event = 53% of normal, Storms = 30%, Hot (90°F+) = 63%, Cold (≤40°F) = 55%. These coefficients come from years of real food truck event data and recalibrate as your own data accumulates.",
       },
       {
         q: "Can I override a forecast?",
@@ -234,12 +235,7 @@ export default function HelpPage() {
         </div>
       </main>
 
-      <footer className="border-t py-6">
-        <div className="container mx-auto px-4 text-center text-sm text-muted-foreground">
-          &copy; {new Date().getFullYear()} VendCast.{" "}
-          <Link href="/" className="hover:underline">Back to home</Link>
-        </div>
-      </footer>
+      <MarketingFooter />
     </div>
   );
 }

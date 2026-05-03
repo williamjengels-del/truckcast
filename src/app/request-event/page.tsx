@@ -3,6 +3,7 @@ import { RequestEventForm } from "@/components/request-event-form";
 import Image from "next/image";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
+import { MarketingFooter } from "@/components/marketing-footer";
 
 export const metadata: Metadata = {
   title: "Request a Mobile Vendor — VendCast",
@@ -112,17 +113,7 @@ export default function RequestEventPage() {
         </div>
       </main>
 
-      <footer className="border-t py-8">
-        <div className="container mx-auto px-4 text-center text-sm text-muted-foreground">
-          <Link href="/" className="hover:text-brand-teal">VendCast</Link>
-          {" · "}
-          <Link href="/pricing" className="hover:text-brand-teal">For operators</Link>
-          {" · "}
-          <Link href="/changelog" className="hover:text-brand-teal">Changelog</Link>
-          {" · "}
-          <Link href="/help" className="hover:text-brand-teal">Help</Link>
-        </div>
-      </footer>
+      <MarketingFooter />
     </div>
   );
 }
