@@ -79,5 +79,113 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: writeError.message }, { status: 500 });
   }
 
-  return NextResponse.json({ ok: true });
+  // On claim, auto-create a planning event pre-filled from the inquiry.
+  // Booked=false because Claim is "I want this lead" not "deal closed" —
+  // the operator confirms separately with the organizer. Idempotent via
+  // the unique index on (user_id, source_inquiry_id) plus an explicit
+  // pre-check, so re-clicking Claim is a no-op that returns the
+  // existing event id.
+  let eventId: string | undefined;
+  if (action === "claimed") {
+    eventId = await ensureEventForClaim(scope.client, scope.userId, inquiryId);
+  }
+
+  return NextResponse.json({ ok: true, eventId });
+}
+
+async function ensureEventForClaim(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  client: any,
+  userId: string,
+  inquiryId: string
+): Promise<string | undefined> {
+  // Pre-check: did this user already create an event from this inquiry?
+  const { data: existing } = await client
+    .from("events")
+    .select("id")
+    .eq("user_id", userId)
+    .eq("source_inquiry_id", inquiryId)
+    .maybeSingle();
+  if (existing?.id) return existing.id as string;
+
+  // Pull just the fields the events row needs. RLS allows the read
+  // because this user is in matched_operator_ids (they wouldn't have
+  // gotten here otherwise — the action route's earlier read already
+  // validated that).
+  const { data: inquiry, error: readError } = await client
+    .from("event_inquiries")
+    .select(
+      "event_name, event_date, event_start_time, event_end_time, event_type, expected_attendance, city, location_details, organizer_name, organizer_email, organizer_phone, notes"
+    )
+    .eq("id", inquiryId)
+    .maybeSingle();
+  if (readError || !inquiry) return undefined;
+
+  // event_name fallback: organizer name + event type makes the row
+  // readable in the events list before the operator edits it.
+  const eventName =
+    (inquiry.event_name as string | null) ??
+    `${inquiry.event_type} for ${inquiry.organizer_name}`;
+
+  // Stitch organizer contact into notes so the operator has it on the
+  // event row without having to bounce back to the inbox. Original
+  // organizer notes lead, contact block follows.
+  const contactLines = [
+    `— Source: marketplace inquiry`,
+    `— Organizer: ${inquiry.organizer_name} <${inquiry.organizer_email}>`,
+  ];
+  if (inquiry.organizer_phone) {
+    contactLines.push(`— Phone: ${inquiry.organizer_phone}`);
+  }
+  const stitchedNotes = [
+    inquiry.notes ? String(inquiry.notes).trim() : null,
+    contactLines.join("\n"),
+  ]
+    .filter(Boolean)
+    .join("\n\n");
+
+  const { data: inserted, error: insertError } = await client
+    .from("events")
+    .insert({
+      user_id: userId,
+      event_name: eventName,
+      event_date: inquiry.event_date,
+      start_time: inquiry.event_start_time,
+      end_time: inquiry.event_end_time,
+      event_type: inquiry.event_type,
+      expected_attendance: inquiry.expected_attendance,
+      city: inquiry.city,
+      location: inquiry.location_details,
+      notes: stitchedNotes,
+      booked: false,
+      source_inquiry_id: inquiryId,
+    })
+    .select("id")
+    .single();
+
+  if (!insertError && inserted) {
+    return inserted.id as string;
+  }
+
+  // Race-safe fallback: if the unique index trips because a parallel
+  // request just inserted, refetch and return that one. Postgres
+  // unique-violation error code is 23505.
+  if ((insertError as { code?: string } | null)?.code === "23505") {
+    const { data: existingAfterRace } = await client
+      .from("events")
+      .select("id")
+      .eq("user_id", userId)
+      .eq("source_inquiry_id", inquiryId)
+      .maybeSingle();
+    if (existingAfterRace?.id) return existingAfterRace.id as string;
+  }
+
+  // Insert failed for some other reason — don't fail the whole action
+  // (operator_actions is the source of truth for "I claimed this"), just
+  // surface no eventId in the response. Logged for follow-up.
+  console.error(
+    `[event-inquiries/action] auto-create event failed for user=${userId} inquiry=${inquiryId}:`,
+    insertError?.message ?? "unknown"
+  );
+  return undefined;
 }

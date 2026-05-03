@@ -21,6 +21,22 @@ export default async function InquiriesPage() {
 
   const inquiries = (data ?? []) as EventInquiry[];
 
+  // Look up which inquiries already have a planning event so the inbox
+  // can show "View event →" instead of just a Claimed badge. Empty list
+  // is fine — `.in()` with [] returns no rows.
+  const inquiryIds = inquiries.map((i) => i.id);
+  const claimedEventByInquiry: Record<string, string> = {};
+  if (inquiryIds.length > 0) {
+    const { data: events } = await scope.client
+      .from("events")
+      .select("id, source_inquiry_id")
+      .eq("user_id", scope.userId)
+      .in("source_inquiry_id", inquiryIds);
+    for (const ev of (events ?? []) as { id: string; source_inquiry_id: string | null }[]) {
+      if (ev.source_inquiry_id) claimedEventByInquiry[ev.source_inquiry_id] = ev.id;
+    }
+  }
+
   return (
     <div className="space-y-6">
       <div>
@@ -30,7 +46,11 @@ export default async function InquiriesPage() {
         </p>
       </div>
 
-      <InquiriesInbox initialInquiries={inquiries} currentUserId={scope.userId} />
+      <InquiriesInbox
+        initialInquiries={inquiries}
+        currentUserId={scope.userId}
+        initialClaimedEventByInquiry={claimedEventByInquiry}
+      />
     </div>
   );
 }
