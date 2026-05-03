@@ -84,7 +84,13 @@ export async function POST(request: Request) {
     }
 
     // Extended beta trial — all signups get a free trial through July 1, 2026.
-    // After that date, remove this block and rely on Stripe price-level trial settings.
+    // Stripe is on live mode (live price IDs in env). When TRIAL_END_DATE
+    // passes, this block becomes a no-op (`trialEnd = undefined`) and
+    // checkout sessions fall through to Stripe price-level trial settings.
+    // Either bump the date string above to extend further, OR configure a
+    // trial period on each price in the Stripe Dashboard and delete this
+    // block entirely. Don't delete it without verifying Stripe-side trials
+    // are configured — silent removal would result in zero-trial signups.
     const TRIAL_END_DATE = new Date("2026-07-01T00:00:00Z");
     const trialEnd =
       TRIAL_END_DATE > new Date()
