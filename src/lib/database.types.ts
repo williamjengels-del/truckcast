@@ -148,6 +148,10 @@ export interface Event {
    *  without operator action. Null = still active OR operator-marked
    *  complete OR not yet ended. */
   auto_ended_at: string | null;
+  /** Sample-data flag (migration 20260502000005). True for rows seeded
+   *  by the new-user "see VendCast with data" experience preview.
+   *  Cleared via /api/sample-data/clear. Default false on all real rows. */
+  is_sample: boolean;
   created_at: string;
   updated_at: string;
 }

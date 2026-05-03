@@ -27,6 +27,7 @@ import { DayOfEventBlock } from "@/components/day-of-event-block";
 import { DunningBanner } from "@/components/dunning-banner";
 import { JourneyCallout } from "@/components/journey-callout";
 import { KeyTakeaways } from "@/components/key-takeaways";
+import { SampleDataSeedButton, SampleDataBanner } from "@/components/sample-data-controls";
 import { computeJourneyState } from "@/lib/user-journey";
 import { computeReportsAggregates } from "@/lib/reports-aggregates";
 import type { Event, EventPerformance } from "@/lib/database.types";
@@ -348,6 +349,9 @@ export default async function DashboardPage() {
   const showDataQuality = pastBookedEvents.length >= 5 && dataScore < 85 && dataQualityGaps.length > 0;
 
   const isNewUser = events.length === 0;
+  // Sample-data preview state: count is_sample rows for the banner +
+  // whether to show the seed CTA on the empty-dashboard layout.
+  const sampleEventCount = events.filter((e) => e.is_sample).length;
 
   return (
     // Phase 6 visual polish 2026-05-02: bumped space-y from 6 to 8 for
@@ -359,6 +363,13 @@ export default async function DashboardPage() {
         status={profile?.last_payment_status ?? null}
         failureReason={profile?.last_payment_failure_reason ?? null}
       />
+
+      {/* Sample-data preview banner — renders whenever the operator has
+          any is_sample=true rows. Reminds them they're in preview and
+          gives one-click clear. */}
+      {sampleEventCount > 0 && (
+        <SampleDataBanner count={sampleEventCount} />
+      )}
 
       {scopedClient && scopedUserId && (
         <DayOfEventBlock
@@ -492,6 +503,11 @@ export default async function DashboardPage() {
               </Link>
             </div>
           </div>
+
+          {/* Sample-data preview CTA — lets operators see VendCast's
+              full UX before importing their own data. Reduces empty-
+              dashboard bounce per v33 brief suggestion #1. */}
+          <SampleDataSeedButton />
 
           {/* Quick explainer */}
           <div className="grid gap-3 sm:grid-cols-3 text-center">

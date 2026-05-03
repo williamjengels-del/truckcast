@@ -52,6 +52,7 @@ function makeEvent(partial: Partial<Event> & { id: string; event_date: string })
     content_capture_notes: null,
     after_event_summary: null,
     auto_ended_at: null,
+    is_sample: false,
     created_at: "",
     updated_at: "",
   };
