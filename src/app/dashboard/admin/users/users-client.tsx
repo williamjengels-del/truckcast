@@ -297,7 +297,7 @@ export function UsersClient() {
                           {user.last_payment_status === "payment_failed" && (
                             <Badge
                               variant="outline"
-                              className="text-xs border-amber-300 text-amber-800 dark:border-amber-800/60 dark:text-amber-300"
+                              className="text-xs border-warning/50 text-warning"
                               title={user.last_payment_failure_reason ?? undefined}
                             >
                               Payment failed

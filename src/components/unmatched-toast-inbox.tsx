@@ -120,17 +120,17 @@ export function UnmatchedToastInbox() {
   }
 
   return (
-    <div className="rounded-lg border border-amber-200 bg-amber-50 dark:border-amber-900/50 dark:bg-amber-950/20">
-      <div className="flex items-center gap-2 border-b border-amber-200 dark:border-amber-900/50 px-4 py-2.5">
-        <AlertCircle className="h-4 w-4 text-amber-600 dark:text-amber-400" />
-        <h3 className="text-sm font-semibold text-amber-900 dark:text-amber-200">
+    <div className="rounded-lg border border-warning/40 bg-warning/5">
+      <div className="flex items-center gap-2 border-b border-warning/40 px-4 py-2.5">
+        <AlertCircle className="h-4 w-4 text-warning" />
+        <h3 className="text-sm font-semibold text-warning">
           Toast payments waiting for review
         </h3>
-        <Badge variant="outline" className="ml-auto border-amber-600/50 text-amber-700 dark:border-amber-400/50 dark:text-amber-300">
+        <Badge variant="outline" className="ml-auto border-warning/50 text-warning">
           {payments.length}
         </Badge>
       </div>
-      <div className="divide-y divide-amber-200 dark:divide-amber-900/50">
+      <div className="divide-y divide-warning/30">
         {payments.map((payment) => (
           <UnmatchedPaymentRow
             key={payment.id}
@@ -140,7 +140,7 @@ export function UnmatchedToastInbox() {
           />
         ))}
       </div>
-      <div className="border-t border-amber-200 dark:border-amber-900/50 px-4 py-2 text-xs text-amber-800 dark:text-amber-300">
+      <div className="border-t border-warning/40 px-4 py-2 text-xs text-warning">
         Toast reported sales for these dates but no booked event matched. Assign to the
         event the payment belongs to (deposits usually precede the event date by weeks;
         remainders come after), or dismiss if it&apos;s a duplicate.

@@ -39,6 +39,7 @@ These are what most components consume. Don't reference brand tokens directly in
 | `--muted` / `--muted-foreground` | `#ececf0` / `#717182` | Muted surfaces + text |
 | `--accent` / `--accent-foreground` | `#e9ebef` / `#030213` | Accent surfaces |
 | `--destructive` / `--destructive-foreground` | `#d4183d` / `#fff` | Errors, delete confirmations |
+| `--warning` / `--warning-foreground` | `#b45309` / `#fff` (light) · `oklch(0.78 0.16 70)` / `oklch(0.2 0 0)` (dark) | Caution states — payment-failed, validation hints, unresolved-but-fixable. Distinct from `--destructive` (red errors) and `--vendcast-orange` (brand CTA). Use `bg-warning/15 text-warning` for soft tints. |
 | `--border` | `#0000001a` (10% black) | Default borders |
 | `--input` / `--input-background` | `transparent` / `#f3f3f5` | Inputs |
 | `--switch-background` | `#cbced4` | Switch off-state |

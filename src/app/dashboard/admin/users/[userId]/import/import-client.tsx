@@ -736,8 +736,8 @@ export function ImportEventsClient({ userId, targetLabel }: Props) {
             </div>
 
             {result.errors.length > 0 && (
-              <div className="rounded-md border border-amber-300 bg-amber-50 dark:bg-amber-950/20 dark:border-amber-800 p-3 text-sm">
-                <div className="font-medium text-amber-800 dark:text-amber-300 mb-2">
+              <div className="rounded-md border border-warning/40 bg-warning/5 p-3 text-sm">
+                <div className="font-medium text-warning mb-2">
                   {result.errors.length} row{result.errors.length === 1 ? "" : "s"} failed to insert:
                 </div>
                 <ul className="space-y-1 text-xs font-mono max-h-40 overflow-y-auto">

@@ -202,7 +202,7 @@ export default async function UserDetailPage({ params }: PageProps) {
             {profile.subscription_tier}
           </Badge>
           {!profile.onboarding_completed && (
-            <Badge variant="outline" className="text-amber-700 border-amber-300">
+            <Badge variant="outline" className="text-warning border-warning/50">
               Onboarding incomplete
             </Badge>
           )}
