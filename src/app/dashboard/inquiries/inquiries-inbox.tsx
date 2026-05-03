@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
@@ -76,11 +76,86 @@ export function InquiriesInbox({
   const [claimedEventByInquiry, setClaimedEventByInquiry] = useState(
     initialClaimedEventByInquiry
   );
+  // Tracks which inquiries this operator has already viewed in this
+  // session — used to flip the unread dot off optimistically the
+  // moment the IntersectionObserver fires, before the API round-trip
+  // resolves. Server-side viewed_at is the durable store; this set is
+  // a per-mount cache.
+  const [locallyViewed, setLocallyViewed] = useState<Set<string>>(new Set());
 
   function myActionFor(inq: EventInquiry): EventInquiryAction | null {
     const slot = inq.operator_actions?.[currentUserId];
     return (slot?.action as EventInquiryAction) ?? null;
   }
+
+  function isUnread(inq: EventInquiry): boolean {
+    if (locallyViewed.has(inq.id)) return false;
+    const slot = (inq.operator_actions ?? {})[currentUserId] as
+      | { viewed_at?: string; action?: string }
+      | undefined;
+    // Read = ever-viewed OR ever-actioned. Action without viewed_at
+    // (e.g. legacy rows) still counts as read because the operator
+    // clearly saw it to act.
+    return !slot?.viewed_at && !slot?.action;
+  }
+
+  // IntersectionObserver: once an inquiry's card crosses 25%
+  // visibility, mark it as viewed. Batches IDs with a 300ms debounce
+  // so a fast scroll doesn't fire 20 separate POSTs.
+  const pendingViewsRef = useRef<Set<string>>(new Set());
+  const flushTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  function queueMarkViewed(inquiryId: string) {
+    pendingViewsRef.current.add(inquiryId);
+    setLocallyViewed((prev) => {
+      const next = new Set(prev);
+      next.add(inquiryId);
+      return next;
+    });
+    if (flushTimerRef.current) clearTimeout(flushTimerRef.current);
+    flushTimerRef.current = setTimeout(() => {
+      const ids = Array.from(pendingViewsRef.current);
+      pendingViewsRef.current.clear();
+      flushTimerRef.current = null;
+      if (ids.length === 0) return;
+      fetch("/api/event-inquiries/mark-viewed", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ inquiryIds: ids }),
+      })
+        .then(() => {
+          // Server-side viewed_at is now stamped — nudge the sidebar
+          // badge in case any other UI reads viewed/unread counts.
+          // Open-inquiry count is unaffected (it's keyed off action,
+          // not viewed_at) but harmless to re-fetch.
+          window.dispatchEvent(new Event("vendcast:sidebar-stale"));
+        })
+        .catch(() => {
+          // Silent failure — locallyViewed already flipped UI optimistically.
+          // On reload, server state will reconcile (or re-mark on next view).
+        });
+    }, 300);
+  }
+  // Flush pending views on unmount so a fast page-leave doesn't lose
+  // the last batch.
+  useEffect(() => {
+    const pendingRef = pendingViewsRef;
+    const timerRef = flushTimerRef;
+    return () => {
+      if (timerRef.current) {
+        clearTimeout(timerRef.current);
+        const ids = Array.from(pendingRef.current);
+        if (ids.length > 0) {
+          // Beacon-style fire-and-forget on teardown.
+          navigator.sendBeacon?.(
+            "/api/event-inquiries/mark-viewed",
+            new Blob([JSON.stringify({ inquiryIds: ids })], {
+              type: "application/json",
+            })
+          );
+        }
+      }
+    };
+  }, []);
 
   const filtered = inquiries.filter((inq) => {
     const my = myActionFor(inq);
@@ -143,6 +218,29 @@ export function InquiriesInbox({
     }
   }
 
+  // IntersectionObserver: any inquiry card crossing 25% visibility
+  // gets queued for mark-viewed. Observer is created once per filter
+  // change so newly-rendered cards (after switching from Open → All)
+  // are picked up.
+  useEffect(() => {
+    if (typeof IntersectionObserver === "undefined") return;
+    const obs = new IntersectionObserver(
+      (entries) => {
+        for (const entry of entries) {
+          if (entry.isIntersecting && entry.intersectionRatio >= 0.25) {
+            const id = entry.target.getAttribute("data-inquiry-id");
+            if (id) queueMarkViewed(id);
+          }
+        }
+      },
+      { threshold: 0.25 }
+    );
+    document.querySelectorAll("[data-inquiry-id]").forEach((el) => {
+      obs.observe(el);
+    });
+    return () => obs.disconnect();
+  }, [filter, inquiries]);
+
   if (inquiries.length === 0) {
     return (
       <div className="rounded-2xl border bg-card p-10 text-center">
@@ -188,18 +286,32 @@ export function InquiriesInbox({
             const my = myActionFor(inq);
             const timeRange = formatTimeRange(inq.event_start_time, inq.event_end_time);
             const claimedEventId = claimedEventByInquiry[inq.id];
+            const unread = isUnread(inq);
             return (
               <div
                 key={inq.id}
-                className="rounded-xl border bg-card p-5 md:p-6 space-y-4"
+                data-inquiry-id={inq.id}
+                className={`rounded-xl border bg-card p-5 md:p-6 space-y-4 ${
+                  unread ? "border-brand-orange/40 bg-brand-orange/[0.02]" : ""
+                }`}
               >
                 {/* Header — date + status badges */}
                 <div className="flex items-start justify-between gap-3 flex-wrap">
                   <div>
-                    <p className="text-xs uppercase tracking-widest text-muted-foreground mb-1">
+                    <p className="text-xs uppercase tracking-widest text-muted-foreground mb-1 flex items-center gap-1.5">
+                      {/* Unread dot — small orange marker. Subtle but
+                          unmistakable next to the date/time meta line.
+                          Disappears the moment the card crosses the
+                          IntersectionObserver threshold. */}
+                      {unread && (
+                        <span
+                          aria-label="Unread"
+                          className="inline-block w-1.5 h-1.5 rounded-full bg-brand-orange"
+                        />
+                      )}
                       {relativeTime(inq.created_at)} · {inq.event_type}
                     </p>
-                    <h3 className="text-lg font-semibold">
+                    <h3 className={`text-lg ${unread ? "font-bold" : "font-semibold"}`}>
                       {inq.event_name ?? `${inq.event_type} event`}
                     </h3>
                   </div>

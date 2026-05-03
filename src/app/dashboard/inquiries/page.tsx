@@ -12,10 +12,15 @@ export default async function InquiriesPage() {
   const scope = await resolveScopedSupabase();
   if (scope.kind === "unauthorized") redirect("/login");
 
+  // Triage order = soonest event first. Operator's job is "what do I
+  // need to act on next?" not "what came in most recently." Tie-break
+  // on created_at desc so two events on the same date show the
+  // newer-arriving inquiry on top (rare in practice).
   const { data } = await scope.client
     .from("event_inquiries")
     .select("*")
     .contains("matched_operator_ids", [scope.userId])
+    .order("event_date", { ascending: true })
     .order("created_at", { ascending: false })
     .limit(100);
 

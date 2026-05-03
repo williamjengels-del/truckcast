@@ -45,10 +45,14 @@ interface UnloggedRow {
 // hasn't acted on it yet (no entry under operator_actions[userId]).
 // Same predicate as the inbox's default "Open" filter, surfaced as a
 // badge so operators see new inquiries without opening the page.
+// operator_actions slot shape: { action?, at?, viewed_at? }. We count
+// inquiries where this user hasn't taken an action yet — viewing
+// alone (viewed_at without action) still counts toward the badge
+// because the inquiry still needs a decision.
 interface InquiryActionRow {
   id: string;
   status: string;
-  operator_actions: Record<string, { action: string }> | null;
+  operator_actions: Record<string, { action?: string }> | null;
 }
 
 export async function GET() {
@@ -103,7 +107,7 @@ export async function GET() {
 
   const inquiryRows = (inquiriesRes.data ?? []) as InquiryActionRow[];
   const open_inquiry_count = inquiryRows.filter(
-    (i) => !i.operator_actions?.[scope.userId]
+    (i) => !i.operator_actions?.[scope.userId]?.action
   ).length;
 
   return NextResponse.json({
