@@ -3,6 +3,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { createClient as createServiceClient } from "@supabase/supabase-js";
 import { Button } from "@/components/ui/button";
+import { FindVendorLink } from "@/components/find-vendor-link";
 import { RoiCalculator } from "@/components/roi-calculator";
 import { WEATHER_COEFFICIENTS } from "@/lib/constants";
 import {
@@ -176,6 +177,7 @@ export default async function LandingPage() {
             <Link href="/roadmap" className="hidden sm:block text-sm text-muted-foreground hover:text-foreground transition-colors">
               Roadmap
             </Link>
+            <FindVendorLink />
             <Link href="/login">
               <Button variant="ghost">Sign in</Button>
             </Link>

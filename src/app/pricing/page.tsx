@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Image from "next/image";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
+import { FindVendorLink } from "@/components/find-vendor-link";
 import { PricingTiers } from "./pricing-tiers";
 
 export const metadata: Metadata = {
@@ -35,6 +36,7 @@ export default function PricingPage() {
             >
               Roadmap
             </Link>
+            <FindVendorLink />
             <Link href="/login">
               <Button variant="ghost">Sign in</Button>
             </Link>

@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Image from "next/image";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
+import { FindVendorLink } from "@/components/find-vendor-link";
 import { ContactForm } from "./contact-form";
 
 export const metadata: Metadata = {
@@ -32,6 +33,7 @@ export default function ContactPage() {
             />
           </Link>
           <div className="flex items-center gap-3">
+            <FindVendorLink />
             <Link
               href="/login"
               className="text-sm text-muted-foreground hover:text-foreground transition-colors"
