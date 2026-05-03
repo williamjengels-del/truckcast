@@ -402,6 +402,11 @@ interface ListViewProps {
   // in localStorage so it survives reloads.
   tableDensity: "compact" | "advanced";
   handleTableDensity: (v: "compact" | "advanced") => void;
+  // Event id to flash-highlight on render — used by the marketplace
+  // inquiry inbox's "View event →" deep-link. Null when no highlight
+  // is requested. The ring + bg-orange/10 fade on a setTimeout in
+  // EventsClient.
+  highlightedEventId: string | null;
 }
 
 function ListView({
@@ -434,6 +439,7 @@ function ListView({
   handleDismiss,
   tableDensity,
   handleTableDensity,
+  highlightedEventId,
 }: ListViewProps) {
   function carryOverLabel(event: Event): string | null {
     if (!event.caused_by_event_id) return null;
@@ -852,7 +858,12 @@ function ListView({
                 {sorted.map((event) => (
                   <TableRow
                     key={event.id}
+                    data-event-id={event.id}
                     className={`cursor-pointer hover:bg-muted/50 transition-colors ${
+                      highlightedEventId === event.id
+                        ? "ring-2 ring-brand-orange ring-inset bg-brand-orange/10 "
+                        : ""
+                    }${
                       (event.event_mode ?? "food_truck") === "catering"
                         ? "border-l-[3px] border-l-brand-teal bg-brand-teal/[0.04] "
                         : activeTab === "all"
@@ -1220,6 +1231,33 @@ export function EventsClient({ initialEvents, userId = "", businessName = "", us
       setShowForm(true);
     }
   }, [searchParams]);
+
+  // Highlight a specific event row when arrived via
+  // ?highlight=<event_id>. Used by the marketplace inquiry inbox's
+  // "View event →" link so the operator's eye lands on the just-
+  // claimed event without scrolling. Highlight fades after 3s.
+  //
+  // Two-step deps: re-run if URL changes OR if the events list
+  // re-populates (filter/refresh). Without the second dep, deep-
+  // linking from a fresh tab can race the events fetch and find
+  // nothing in the DOM.
+  const [highlightedEventId, setHighlightedEventId] = useState<string | null>(null);
+  useEffect(() => {
+    const targetId = searchParams.get("highlight");
+    if (!targetId || initialEvents.length === 0) return;
+    setHighlightedEventId(targetId);
+    const scrollTimer = setTimeout(() => {
+      const el = document.querySelector(`[data-event-id="${targetId}"]`);
+      if (el instanceof HTMLElement) {
+        el.scrollIntoView({ behavior: "smooth", block: "center" });
+      }
+    }, 150);
+    const clearTimer = setTimeout(() => setHighlightedEventId(null), 3000);
+    return () => {
+      clearTimeout(scrollTimer);
+      clearTimeout(clearTimer);
+    };
+  }, [searchParams, initialEvents]);
 
   // URL → state sync. Two paths:
   //   1. Modern: ?tab=<EventsTab>&chips=<comma list>
@@ -2459,6 +2497,7 @@ export function EventsClient({ initialEvents, userId = "", businessName = "", us
             handleDismiss={handleDismiss}
             tableDensity={tableDensity}
             handleTableDensity={handleTableDensity}
+            highlightedEventId={highlightedEventId}
           />
         </>
       )}
