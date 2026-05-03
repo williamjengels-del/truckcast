@@ -68,11 +68,13 @@ export default async function InquiriesPage() {
   const inquiryIds = inquiries.map((i) => i.id);
   const claimedEventByInquiry: Record<string, string> = {};
   // Calendar conflict map: inquiry_id → array of conflicting event names.
-  // Conflict definition v1 = same calendar date, operator-owned, NOT
-  // the inquiry's own auto-created planning event (excluded via
-  // source_inquiry_id != inquiry.id). Same-date is enough for v1; time-
-  // of-day overlap is fancier but most catering gigs span hours and
-  // a same-date warning catches what actually matters.
+  // Conflict definition: same calendar date, operator-owned, BOOKED
+  // (not unbooked planning rows — those are leads being pursued, not
+  // schedule commitments), NOT the inquiry's own auto-created planning
+  // event (excluded via source_inquiry_id != inquiry.id). Same-date is
+  // enough for v1; time-of-day overlap is fancier but most catering
+  // gigs span hours and a same-date warning catches what actually
+  // matters.
   const conflictsByInquiry: Record<string, string[]> = {};
   if (inquiryIds.length > 0) {
     const inquiryDates = Array.from(new Set(inquiries.map((i) => i.event_date)));
@@ -82,14 +84,16 @@ export default async function InquiriesPage() {
         .select("id, source_inquiry_id")
         .eq("user_id", scope.userId)
         .in("source_inquiry_id", inquiryIds),
-      // Exclude cancelled events from the conflict check — a row with
-      // a cancellation_reason set is a non-event from the operator's
-      // schedule perspective. Pull source_inquiry_id alongside so the
-      // self-exclusion can apply per-inquiry below.
+      // Booked + non-cancelled only. Unbooked planning rows are leads
+      // the operator is pursuing, not committed schedule items —
+      // warning about them would discourage operators from marking
+      // interest in multiple inquiries on the same date (which is
+      // exactly what we want them to do until one converts).
       scope.client
         .from("events")
         .select("id, event_name, event_date, source_inquiry_id, cancellation_reason")
         .eq("user_id", scope.userId)
+        .eq("booked", true)
         .in("event_date", inquiryDates)
         .is("cancellation_reason", null),
     ]);
