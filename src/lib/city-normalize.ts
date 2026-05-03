@@ -22,11 +22,13 @@
 // Canonical form examples:
 //   "St. Louis"      → "Saint Louis"
 //   "St Louis"       → "Saint Louis"
+//   "St.Louis"       → "Saint Louis" (period-attached, no space)
 //   "saint louis"    → "Saint Louis" (title-case side effect; see below)
 //   "Mt. Pleasant"   → "Mount Pleasant"
 //   "Ft. Collins"    → "Fort Collins"
 //   "Pt. Reyes"      → "Point Reyes"
 //   "N. Bend"        → "North Bend"
+//   "N.Bend"         → "North Bend" (period-attached, no space)
 //   "W. Palm Beach"  → "West Palm Beach"
 //   "New York City"  → "New York City" (unchanged, no abbreviations)
 //   ""               → "" (empty stays empty)
@@ -38,24 +40,35 @@
 // this (Saint → St for Open-Meteo's index). That stays in
 // normalizeCityForGeocoding(); this module is upstream of that.
 
-// Regex note: the pattern shape is `\b<abbr>\b\.?(?=\s|$)`.
-// The inner `\b` anchors the abbreviation as a whole word (so "St" in
-// "Station" won't match), then `\.?` optionally consumes a trailing
-// period, then the lookahead requires end-of-string or whitespace so
-// single-letter directionals like "N" don't match inside "Nashville".
-// Putting the period BEFORE a closing `\b` fails because there's no
-// word boundary between "." and " " (both non-word chars).
+// Regex note: pattern shape is `\b<abbr>\b\.?` (with a trailing-context
+// lookahead for the directionals). `\b` anchors the abbreviation as a
+// whole word so "St" in "Station" / "Sturgis" / "Newark" / "Salinas"
+// is never touched. `\.?` optionally consumes a trailing period.
+//
+// Replacement strings end with a trailing space so the period-attached
+// form ("St.Louis" / "Mt.Pleasant" / "N.Bend") expands cleanly without
+// gluing the next word on. Double spaces from cases like "St. Louis"
+// collapse in the whitespace pass at the end of canonicalizeCity().
+//
+// For multi-letter abbreviations (St/Mt/Ft/Pt) the word boundary alone
+// is enough because the abbreviation can't start a real city name on
+// its own. "St" / "St." / "St.Marys" / "St Louis" all fold to the same
+// canonical form.
+//
+// For single-letter directionals (N/S/E/W) the word boundary isn't
+// enough — a bare "N" at the end of an input string is too ambiguous
+// to expand. The lookahead requires whitespace OR a letter so we still
+// catch "N.Bend" (period then letter) without converting standalone
+// "N" / "N." into "North" against the user's intent.
 const ABBREVIATIONS: Array<[RegExp, string]> = [
-  [/\bSt\b\.?(?=\s|$)/gi, "Saint"],
-  [/\bMt\b\.?(?=\s|$)/gi, "Mount"],
-  [/\bFt\b\.?(?=\s|$)/gi, "Fort"],
-  [/\bPt\b\.?(?=\s|$)/gi, "Point"],
-  // Directional prefixes — lookahead requires whitespace (strict
-  // enough that "Newark" / "Salinas" / "Edmond" aren't touched).
-  [/\bN\b\.?(?=\s)/gi, "North"],
-  [/\bS\b\.?(?=\s)/gi, "South"],
-  [/\bE\b\.?(?=\s)/gi, "East"],
-  [/\bW\b\.?(?=\s)/gi, "West"],
+  [/\bSt\b\.?/gi, "Saint "],
+  [/\bMt\b\.?/gi, "Mount "],
+  [/\bFt\b\.?/gi, "Fort "],
+  [/\bPt\b\.?/gi, "Point "],
+  [/\bN\b\.?(?=\s|[A-Za-z])/gi, "North "],
+  [/\bS\b\.?(?=\s|[A-Za-z])/gi, "South "],
+  [/\bE\b\.?(?=\s|[A-Za-z])/gi, "East "],
+  [/\bW\b\.?(?=\s|[A-Za-z])/gi, "West "],
 ];
 
 function titleCase(s: string): string {

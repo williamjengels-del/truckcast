@@ -35,6 +35,40 @@ describe("canonicalizeCity — Saint / Mount / Fort / Point", () => {
   });
 });
 
+describe("canonicalizeCity — period-attached, no space", () => {
+  // The bug a real operator hit: typed "St.louis" with no space between
+  // the period and the next word. The original lookahead-for-whitespace
+  // pattern left this alone. New behavior expands it like the spaced
+  // form. Same logic for the rest of the abbreviation dictionary.
+  it('"St.Louis" → "Saint Louis"', () => {
+    expect(canonicalizeCity("St.Louis")).toBe("Saint Louis");
+  });
+  it('lowercase "st.louis" → "Saint Louis"', () => {
+    expect(canonicalizeCity("st.louis")).toBe("Saint Louis");
+  });
+  it('all caps "ST.LOUIS" → "Saint Louis"', () => {
+    expect(canonicalizeCity("ST.LOUIS")).toBe("Saint Louis");
+  });
+  it('"Mt.Pleasant" → "Mount Pleasant"', () => {
+    expect(canonicalizeCity("Mt.Pleasant")).toBe("Mount Pleasant");
+  });
+  it('"Ft.Collins" → "Fort Collins"', () => {
+    expect(canonicalizeCity("Ft.Collins")).toBe("Fort Collins");
+  });
+  it('"Pt.Reyes" → "Point Reyes"', () => {
+    expect(canonicalizeCity("Pt.Reyes")).toBe("Point Reyes");
+  });
+  it('"St.Marys" → "Saint Marys" (real city name pattern)', () => {
+    expect(canonicalizeCity("St.Marys")).toBe("Saint Marys");
+  });
+  it('"N.Bend" → "North Bend"', () => {
+    expect(canonicalizeCity("N.Bend")).toBe("North Bend");
+  });
+  it('"W.Palm Beach" → "West Palm Beach"', () => {
+    expect(canonicalizeCity("W.Palm Beach")).toBe("West Palm Beach");
+  });
+});
+
 describe("canonicalizeCity — directional prefixes", () => {
   it('"N. Bend" → "North Bend"', () => {
     expect(canonicalizeCity("N. Bend")).toBe("North Bend");
@@ -53,6 +87,12 @@ describe("canonicalizeCity — directional prefixes", () => {
     expect(canonicalizeCity("Newark")).toBe("Newark");
     // "Salinas" starts with "S".
     expect(canonicalizeCity("Salinas")).toBe("Salinas");
+  });
+  it("does not expand a bare directional letter at end of input", () => {
+    // Single trailing letter is too ambiguous to assume directional
+    // intent — leave it alone. Title-case still applies.
+    expect(canonicalizeCity("Some Place N")).toBe("Some Place N");
+    expect(canonicalizeCity("Some Place N.")).toBe("Some Place N.");
   });
 });
 
