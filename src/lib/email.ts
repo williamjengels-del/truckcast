@@ -966,6 +966,11 @@ export async function sendEventInquiryConfirmation(p: EventInquiryConfirmationPa
 
   await resend.emails.send({
     from: FROM,
+    // Reply-To routes "Reply" clicks to the inbox a human actually
+    // monitors (Cloudflare Email Routing forwards to Julian's
+    // personal account). Without this, replies go to the FROM
+    // sender (hello@vendcast.co) which may not forward.
+    replyTo: "support@vendcast.co",
     to: p.to,
     subject: `We received your event request — ${escapeHtml(p.eventType)} on ${dateLabel}`,
     html: `
@@ -999,7 +1004,7 @@ export async function sendEventInquiryConfirmation(p: EventInquiryConfirmationPa
           VendCast doesn't take a commission and doesn't sit between you and the operator. Operators reach out to you directly — you negotiate everything (menu, pricing, logistics) with them.
         </p>
         <p style="margin:0;font-size:14px;color:#374151;line-height:1.5;">
-          Most operators respond within 24-48 hours. If you don't hear back from anyone in 3 days, reply to this email and we'll help.
+          Most operators respond within 24-48 hours. <strong>If you don't hear back within 48 hours</strong>, reply to this email or write to <a href="mailto:support@vendcast.co" style="color:#0d4f5c;">support@vendcast.co</a> and we'll follow up directly.
         </p>
       </div>
 

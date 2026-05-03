@@ -97,8 +97,18 @@ export function RequestEventForm() {
             <>Your request is being shared with <strong className="text-foreground">{done.matchedOperatorCount} operators</strong>. Interested operators will reach out directly via email.</>
           )}
         </p>
-        <p className="text-sm text-muted-foreground mb-6">
+        <p className="text-sm text-muted-foreground mb-2">
           Check your inbox for a confirmation. Most operators respond within 24-48 hours.
+        </p>
+        <p className="text-xs text-muted-foreground mb-6">
+          If you don&apos;t hear back within 48 hours, email{" "}
+          <a
+            href="mailto:support@vendcast.co"
+            className="text-brand-teal hover:underline"
+          >
+            support@vendcast.co
+          </a>{" "}
+          and we&apos;ll follow up directly.
         </p>
         <Button
           variant="outline"
