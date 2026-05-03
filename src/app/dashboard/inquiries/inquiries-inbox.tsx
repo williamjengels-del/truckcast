@@ -17,6 +17,7 @@ import {
   MessageSquare,
   Loader2,
   ExternalLink,
+  AlertTriangle,
 } from "lucide-react";
 import type { EventInquiry, EventInquiryAction } from "@/lib/database.types";
 
@@ -27,6 +28,11 @@ interface Props {
   // claimed. Populated by the server-side page; the component layers
   // freshly-claimed event IDs from the action-route response on top.
   initialClaimedEventByInquiry?: Record<string, string>;
+  // Map of inquiry_id → array of conflicting event names already on
+  // the operator's calendar for that date. Empty / missing = no
+  // conflict. Self-conflicts (the inquiry's own auto-created planning
+  // event) are excluded server-side.
+  conflictsByInquiry?: Record<string, string[]>;
 }
 
 function formatDate(iso: string): string {
@@ -68,6 +74,7 @@ export function InquiriesInbox({
   initialInquiries,
   currentUserId,
   initialClaimedEventByInquiry = {},
+  conflictsByInquiry = {},
 }: Props) {
   const router = useRouter();
   const [inquiries, setInquiries] = useState(initialInquiries);
@@ -287,6 +294,8 @@ export function InquiriesInbox({
             const timeRange = formatTimeRange(inq.event_start_time, inq.event_end_time);
             const claimedEventId = claimedEventByInquiry[inq.id];
             const unread = isUnread(inq);
+            const conflictNames = conflictsByInquiry[inq.id] ?? [];
+            const hasConflict = conflictNames.length > 0;
             return (
               <div
                 key={inq.id}
@@ -333,6 +342,28 @@ export function InquiriesInbox({
                     )}
                   </div>
                 </div>
+
+                {/* Calendar conflict warning — surfaces when the
+                    operator already has another (non-cancelled, non-
+                    self-created) event on this date. Warn-only; doesn't
+                    disable any action button. Operator can still mark
+                    Interested and double-book if they want — the
+                    warning is information, not a guard. */}
+                {hasConflict && (
+                  <div className="flex items-start gap-2 rounded-md border border-amber-300/60 bg-amber-50 dark:bg-amber-950/20 dark:border-amber-700/40 p-3 text-sm">
+                    <AlertTriangle className="h-4 w-4 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
+                    <div>
+                      <p className="font-medium text-amber-900 dark:text-amber-100">
+                        You already have an event scheduled on this date
+                      </p>
+                      <p className="text-xs text-amber-800 dark:text-amber-200/80 mt-0.5">
+                        {conflictNames.length === 1
+                          ? conflictNames[0]
+                          : `${conflictNames.length} events: ${conflictNames.join(", ")}`}
+                      </p>
+                    </div>
+                  </div>
+                )}
 
                 {/* Detail grid */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">

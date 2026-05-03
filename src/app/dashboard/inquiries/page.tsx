@@ -31,14 +31,48 @@ export default async function InquiriesPage() {
   // is fine — `.in()` with [] returns no rows.
   const inquiryIds = inquiries.map((i) => i.id);
   const claimedEventByInquiry: Record<string, string> = {};
+  // Calendar conflict map: inquiry_id → array of conflicting event names.
+  // Conflict definition v1 = same calendar date, operator-owned, NOT
+  // the inquiry's own auto-created planning event (excluded via
+  // source_inquiry_id != inquiry.id). Same-date is enough for v1; time-
+  // of-day overlap is fancier but most catering gigs span hours and
+  // a same-date warning catches what actually matters.
+  const conflictsByInquiry: Record<string, string[]> = {};
   if (inquiryIds.length > 0) {
-    const { data: events } = await scope.client
-      .from("events")
-      .select("id, source_inquiry_id")
-      .eq("user_id", scope.userId)
-      .in("source_inquiry_id", inquiryIds);
-    for (const ev of (events ?? []) as { id: string; source_inquiry_id: string | null }[]) {
+    const inquiryDates = Array.from(new Set(inquiries.map((i) => i.event_date)));
+    const [claimedEventsRes, conflictEventsRes] = await Promise.all([
+      scope.client
+        .from("events")
+        .select("id, source_inquiry_id")
+        .eq("user_id", scope.userId)
+        .in("source_inquiry_id", inquiryIds),
+      // Exclude cancelled events from the conflict check — a row with
+      // a cancellation_reason set is a non-event from the operator's
+      // schedule perspective. Pull source_inquiry_id alongside so the
+      // self-exclusion can apply per-inquiry below.
+      scope.client
+        .from("events")
+        .select("id, event_name, event_date, source_inquiry_id, cancellation_reason")
+        .eq("user_id", scope.userId)
+        .in("event_date", inquiryDates)
+        .is("cancellation_reason", null),
+    ]);
+    for (const ev of (claimedEventsRes.data ?? []) as { id: string; source_inquiry_id: string | null }[]) {
       if (ev.source_inquiry_id) claimedEventByInquiry[ev.source_inquiry_id] = ev.id;
+    }
+    const conflictRows = (conflictEventsRes.data ?? []) as {
+      id: string;
+      event_name: string;
+      event_date: string;
+      source_inquiry_id: string | null;
+    }[];
+    for (const inq of inquiries) {
+      const matchingEvents = conflictRows.filter(
+        (ev) => ev.event_date === inq.event_date && ev.source_inquiry_id !== inq.id
+      );
+      if (matchingEvents.length > 0) {
+        conflictsByInquiry[inq.id] = matchingEvents.map((ev) => ev.event_name);
+      }
     }
   }
 
@@ -55,6 +89,7 @@ export default async function InquiriesPage() {
         initialInquiries={inquiries}
         currentUserId={scope.userId}
         initialClaimedEventByInquiry={claimedEventByInquiry}
+        conflictsByInquiry={conflictsByInquiry}
       />
     </div>
   );
