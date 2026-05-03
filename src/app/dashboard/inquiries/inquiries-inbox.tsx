@@ -19,6 +19,7 @@ import {
   Loader2,
   ExternalLink,
   AlertTriangle,
+  Radar,
 } from "lucide-react";
 import type { EventInquiry, EventInquiryAction } from "@/lib/database.types";
 
@@ -42,6 +43,10 @@ interface Props {
   // Empty string is acceptable — the template falls back to a
   // neutral phrasing.
   operatorBusinessName?: string;
+  // Engagement signal copy per inquiry (e.g. "On a few operators'
+  // radars"). Absent / empty = no signal — render nothing for that
+  // card. Computed server-side; fresh on each load.
+  engagementSignalByInquiry?: Record<string, string>;
 }
 
 function formatDate(iso: string): string {
@@ -121,6 +126,7 @@ export function InquiriesInbox({
   conflictsByInquiry = {},
   initialOperatorNotes = {},
   operatorBusinessName = "",
+  engagementSignalByInquiry = {},
 }: Props) {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -427,6 +433,7 @@ export function InquiriesInbox({
             const unread = isUnread(inq);
             const conflictNames = conflictsByInquiry[inq.id] ?? [];
             const hasConflict = conflictNames.length > 0;
+            const engagementCopy = engagementSignalByInquiry[inq.id];
             return (
               <div
                 key={inq.id}
@@ -473,6 +480,19 @@ export function InquiriesInbox({
                     )}
                   </div>
                 </div>
+
+                {/* Engagement signal — soft qualitative copy that
+                    other operators are pursuing this lead. No counts,
+                    no names, suppressed below 2 engaged operators or
+                    on past-date / expired inquiries. Privacy-
+                    preserving by design (verdict in the brainstorm
+                    spec). */}
+                {engagementCopy && (
+                  <p className="flex items-center gap-1.5 text-xs text-muted-foreground -mt-1">
+                    <Radar className="h-3 w-3" />
+                    {engagementCopy}
+                  </p>
+                )}
 
                 {/* Calendar conflict warning — surfaces when the
                     operator already has another (non-cancelled, non-

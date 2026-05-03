@@ -3,6 +3,7 @@ import { resolveScopedSupabase } from "@/lib/dashboard-scope";
 import { redirect } from "next/navigation";
 import { InquiriesInbox } from "./inquiries-inbox";
 import type { EventInquiry } from "@/lib/database.types";
+import { engagementSignalForInquiry } from "@/lib/inquiry-engagement";
 
 export const metadata: Metadata = { title: "Event Inquiries — VendCast" };
 export const dynamic = "force-dynamic";
@@ -43,6 +44,22 @@ export default async function InquiriesPage() {
   for (const inq of inquiries) {
     const slot = (inq.operator_notes_by_user ?? {}) as Record<string, string>;
     if (slot[scope.userId]) initialOperatorNotes[inq.id] = slot[scope.userId];
+  }
+
+  // Engagement signal copy per inquiry. Computed server-side so the
+  // tier logic stays in one place and the component just renders the
+  // string. Suppression rules (past event_date, status=expired) are
+  // applied here — see src/lib/inquiry-engagement.ts.
+  const todayIso = new Date().toISOString().slice(0, 10);
+  const engagementSignalByInquiry: Record<string, string> = {};
+  for (const inq of inquiries) {
+    const copy = engagementSignalForInquiry({
+      operatorActions: inq.operator_actions ?? null,
+      eventDate: inq.event_date,
+      status: inq.status,
+      todayIso,
+    });
+    if (copy) engagementSignalByInquiry[inq.id] = copy;
   }
 
   // Look up which inquiries already have a planning event so the inbox
@@ -111,6 +128,7 @@ export default async function InquiriesPage() {
         conflictsByInquiry={conflictsByInquiry}
         initialOperatorNotes={initialOperatorNotes}
         operatorBusinessName={operatorBusinessName}
+        engagementSignalByInquiry={engagementSignalByInquiry}
       />
     </div>
   );
