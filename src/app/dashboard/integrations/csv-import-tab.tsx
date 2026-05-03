@@ -1033,7 +1033,7 @@ export function CsvImportTab() {
             </div>
 
             {importError && (
-              <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-800">
+              <div className="rounded-lg border border-destructive/40 bg-destructive/5 p-4 text-sm text-destructive">
                 <AlertCircle className="h-4 w-4 inline mr-2" />
                 {importError}
               </div>
@@ -1221,7 +1221,7 @@ export function CsvImportTab() {
 
             {/* Import errors */}
             {importError && (
-              <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-800 whitespace-pre-wrap">
+              <div className="rounded-lg border border-destructive/40 bg-destructive/5 p-4 text-sm text-destructive whitespace-pre-wrap">
                 <div className="flex items-center gap-2 font-medium mb-1">
                   <AlertCircle className="h-4 w-4" />
                   Import Error
