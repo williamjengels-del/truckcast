@@ -3,6 +3,7 @@ import { createClient as createServiceClient } from "@supabase/supabase-js";
 import { matchOperatorsForInquiry } from "@/lib/event-inquiry-routing";
 import { sendEventInquiryConfirmation } from "@/lib/email";
 import { EVENT_TYPES } from "@/lib/constants";
+import { canonicalizeCity } from "@/lib/city-normalize";
 
 /**
  * POST /api/event-inquiries/submit
@@ -94,7 +95,13 @@ function validate(p: unknown): { ok: true; payload: SubmitPayload } | { ok: fals
         typeof r.expected_attendance === "number" && Number.isFinite(r.expected_attendance) && r.expected_attendance > 0
           ? Math.floor(r.expected_attendance)
           : undefined,
-      city: (r.city as string).trim(),
+      // Canonicalize on submit so stored event_inquiries.city matches
+      // operator profiles after the same canonicalization runs there.
+      // Routing already canonicalizes both sides for the match, so this
+      // is mostly about display consistency — operators see "Saint
+      // Louis" everywhere instead of one inquiry showing "St. Louis"
+      // and another "Saint Louis" for the same city.
+      city: canonicalizeCity((r.city as string).trim()),
       state: (r.state as string).trim(),
       location_details: typeof r.location_details === "string" ? r.location_details.trim() || undefined : undefined,
       budget_estimate:

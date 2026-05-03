@@ -19,6 +19,7 @@ import type { Profile } from "@/lib/database.types";
 import { PRICING_PLANS } from "@/lib/pricing-plans";
 import { PublicSlugPicker } from "@/components/public-slug-picker";
 import { TwoFactorCard } from "@/components/two-factor-card";
+import { canonicalizeCity } from "@/lib/city-normalize";
 
 type SettingsTab = "profile" | "plan" | "customers" | "notifications" | "security";
 
@@ -173,7 +174,7 @@ function SettingsContent() {
       .from("profiles")
       .update({
         business_name: profile.business_name,
-        city: profile.city,
+        city: canonicalizeCity(profile.city),
         state: profile.state,
         timezone: profile.timezone,
       })
