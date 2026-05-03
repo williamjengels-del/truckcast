@@ -308,6 +308,12 @@ export interface PlatformEvent {
   sales_p75: number | null;
   most_common_event_type: string | null;
   most_common_city: string | null;
+  // Cross-operator Phase 1 aggregates (migration 20260502000001).
+  // Null until the next recompute pass populates them. Privacy floor
+  // 2+ contributing operators enforced at compute time in
+  // platform-registry.ts (same gate as median_sales).
+  median_other_trucks: number | null;
+  median_attendance: number | null;
   updated_at: string;
 }
 
