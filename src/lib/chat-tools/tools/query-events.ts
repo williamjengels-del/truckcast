@@ -23,7 +23,7 @@ const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
 export const queryEventsTool: ChatTool<QueryEventsInput> = {
   name: "query_events",
   description:
-    "Filter the operator's event history. Returns up to 50 rows. Use for questions like 'show me my August catering events' or 'what did I make at festivals last summer'. Date inputs are YYYY-MM-DD. Filters AND together.",
+    "Filter the operator's event history. Returns up to 50 rows. Use for questions like 'show me my August catering events' or 'what did I make at festivals last summer'. Date inputs are YYYY-MM-DD. Filters AND together. **By default returns ONLY booked events** — for 'what's coming up', 'next two weeks', 'upcoming events' style questions, leave booked_only unset (or true). Only set booked_only=false when the operator explicitly asks about unbooked inquiries, prospects, leads, or cancellations.",
   inputSchema: {
     type: "object",
     properties: {
@@ -54,7 +54,7 @@ export const queryEventsTool: ChatTool<QueryEventsInput> = {
       },
       booked_only: {
         type: "boolean",
-        description: "If true, exclude unbooked + cancelled events. Default true.",
+        description: "Default true. **Only set to false when the operator EXPLICITLY mentions unbooked, inquiries, prospects, leads, cancellations, or asks 'what's pending?' / 'what hasn't been confirmed?'.** For neutral questions like 'upcoming events' or 'what's next', leave unset (defaults to booked-only). Setting false includes both unbooked AND cancelled events.",
       },
       limit: {
         type: "integer",

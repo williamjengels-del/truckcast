@@ -300,13 +300,23 @@ export function ChatWidget({ isPro, isPremium, enabled }: ChatWidgetProps) {
                     className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}
                   >
                     <div
-                      className={`max-w-[85%] rounded-xl px-3 py-2 text-sm leading-relaxed ${
+                      className={`max-w-[85%] rounded-xl px-3.5 py-2.5 text-sm leading-relaxed ${
                         msg.role === "user"
                           ? "bg-primary text-primary-foreground"
                           : "bg-muted text-foreground"
                       }`}
                     >
-                      {msg.content || (
+                      {msg.content ? (
+                        // whitespace-pre-wrap preserves the assistant's
+                        // line breaks + bullet formatting (the model emits
+                        // newlines for lists; without this they collapse
+                        // into a wall of text). break-words handles long
+                        // event names that would otherwise overflow the
+                        // 85% bubble width.
+                        <div className="whitespace-pre-wrap break-words">
+                          {msg.content}
+                        </div>
+                      ) : (
                         <span className="flex items-center gap-1 text-muted-foreground">
                           <Loader2 className="h-3 w-3 animate-spin" />
                           Thinking…
