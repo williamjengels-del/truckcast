@@ -38,9 +38,11 @@ interface SubmitPayload {
   location_details?: string;
   budget_estimate?: number;
   notes?: string;
-  // Honeypot — real users won't fill this. Bots typically auto-fill
-  // anything labeled with "website" / "url".
-  company_website?: string;
+  // Honeypot — obscurely-named field. Real users don't see or fill it.
+  // Renamed from "company_website" because Chrome autofill matched the
+  // "website" substring and was filling it for legitimate users, silently
+  // dropping their submissions on the honeypot path.
+  __vc_attestation?: string;
 }
 
 function validate(p: unknown): { ok: true; payload: SubmitPayload } | { ok: false; error: string } {
@@ -49,7 +51,14 @@ function validate(p: unknown): { ok: true; payload: SubmitPayload } | { ok: fals
 
   // Honeypot check — silent acceptance with no actual insert. Bots
   // get a "thanks" response and never know they were filtered.
-  if (typeof r.company_website === "string" && r.company_website.trim() !== "") {
+  // Two field names checked: __vc_attestation (current) and the legacy
+  // company_website (still trapped to catch any bots scripted against
+  // the previous name; will never be sent by the renamed form).
+  const attestation =
+    typeof r.__vc_attestation === "string" ? r.__vc_attestation.trim() : "";
+  const legacyHoneypot =
+    typeof r.company_website === "string" ? r.company_website.trim() : "";
+  if (attestation !== "" || legacyHoneypot !== "") {
     return { ok: false, error: "HONEYPOT" };
   }
 
