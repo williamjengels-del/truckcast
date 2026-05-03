@@ -9,7 +9,6 @@ import type { ChatTool, ToolContext, ToolValidationResult } from "../types";
 // derived from events history server-side.
 
 export interface QueryPerformanceInput {
-  event_type?: string;
   min_times_booked?: number;
   trend?: string;
   limit?: number;
@@ -26,14 +25,10 @@ const TREND_VALUES = new Set([
 export const queryPerformanceTool: ChatTool<QueryPerformanceInput> = {
   name: "query_performance",
   description:
-    "Filter the operator's event_performance aggregates — per-event-name rolling history (avg sales, times booked, trend). Use for questions about repeat events: 'which of my recurring events are growing?' or 'what's my best festival?'. Sorted by avg_sales desc by default.",
+    "Filter the operator's event_performance aggregates — per-event-name rolling history (avg sales, times booked, trend). Use for questions about repeat events: 'which of my recurring events are growing?' or 'what's my best repeat booking?'. Sorted by avg_sales desc by default. Note: this aggregate is keyed by event_name only — there's no event_type column on event_performance, so filtering by type is NOT available here. Use query_events with event_type filter if the operator asks about a specific category.",
   inputSchema: {
     type: "object",
     properties: {
-      event_type: {
-        type: "string",
-        description: "Filter to one event type. Optional.",
-      },
       min_times_booked: {
         type: "integer",
         minimum: 1,
@@ -61,12 +56,6 @@ export const queryPerformanceTool: ChatTool<QueryPerformanceInput> = {
     }
     const r = raw as Record<string, unknown>;
     const out: QueryPerformanceInput = {};
-    if (r.event_type !== undefined) {
-      if (typeof r.event_type !== "string") {
-        return { ok: false, error: "event_type must be a string" };
-      }
-      out.event_type = r.event_type;
-    }
     if (r.min_times_booked !== undefined) {
       if (
         typeof r.min_times_booked !== "number" ||
@@ -107,12 +96,16 @@ export const queryPerformanceTool: ChatTool<QueryPerformanceInput> = {
   },
 
   async handle(input, ctx: ToolContext) {
+    // Note: event_performance is keyed by event_name only — there's no
+    // event_type column on this table (would require a JOIN to events).
+    // Selecting event_type here threw "column does not exist" until
+    // 2026-05-02. If type-filtering is needed, callers should use
+    // query_events with event_type filter instead.
     let q = ctx.supabase
       .from("event_performance")
-      .select("event_name, event_type, avg_sales, times_booked, trend, confidence")
+      .select("event_name, avg_sales, times_booked, trend, confidence")
       .eq("user_id", ctx.userId);
 
-    if (input.event_type) q = q.eq("event_type", input.event_type);
     if (input.min_times_booked !== undefined)
       q = q.gte("times_booked", input.min_times_booked);
     if (input.trend) q = q.eq("trend", input.trend);
