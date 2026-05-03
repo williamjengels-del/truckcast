@@ -151,7 +151,10 @@ export default async function DashboardPage() {
       }
     : null;
   // Unlogged past events — exactly mirrors the Needs Attention tab filter in events-client.tsx
-  // net_sales === null (not just falsy) so explicitly logged $0 events are excluded
+  // net_sales === null (not just falsy) so explicitly logged $0 events are excluded.
+  // pre_settled events are NOT excluded — operators routinely append walk-up sales
+  // on top of the contract, so a pre_settled event with no logged sales is a
+  // legitimate "needs attention" candidate (matches events-client.tsx 2026-05-02 fix).
   const unloggedEvents = events
     .filter((e) =>
       e.event_date < today &&
@@ -159,8 +162,7 @@ export default async function DashboardPage() {
       !e.cancellation_reason &&
       e.net_sales === null &&
       !(e.event_mode === "catering" && e.invoice_revenue > 0) &&
-      e.anomaly_flag !== "disrupted" &&
-      e.fee_type !== "pre_settled"
+      e.anomaly_flag !== "disrupted"
     )
     .sort((a, b) => b.event_date.localeCompare(a.event_date)); // most recent first
 
