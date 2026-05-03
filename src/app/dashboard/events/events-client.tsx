@@ -66,6 +66,7 @@ import type { Event } from "@/lib/database.types";
 import type { EventFormData } from "@/app/dashboard/events/actions";
 import { DataImportTrigger } from "@/components/data-import-guide";
 import { ForecastInline } from "@/components/forecast-card";
+import { isFixedRevenueEvent, fixedRevenueAmount } from "@/lib/forecast-display";
 import {
   CHIP_CATALOG,
   TAB_DEFAULT_CHIPS,
@@ -227,6 +228,11 @@ const WeatherForecastImpact = React.memo(function WeatherForecastImpact({
 }) {
   if (!event.event_weather || !event.forecast_sales || event.forecast_sales <= 0) return null;
   if (event.event_date < today) return null; // only for upcoming events
+  // Suppress for fixed-revenue events (pre_settled, catering with
+  // invoice, commission_with_minimum). Their revenue is contractually
+  // locked, so a "weather is adjusting forecast by -$X" line is
+  // misleading — there's nothing to adjust.
+  if (isFixedRevenueEvent(event)) return null;
 
   const coeff = WEATHER_COEFFICIENTS[event.event_weather];
   if (coeff === undefined || coeff === null) return null;
@@ -612,9 +618,17 @@ function ListView({
             <div className="sm:hidden space-y-2">
               {sorted.map((event) => {
                 const isCatering = (event.event_mode ?? "food_truck") === "catering";
-                const displaySales = isCatering && (event.invoice_revenue ?? 0) > 0
-                  ? (event.net_sales ?? 0) + (event.invoice_revenue ?? 0)
-                  : event.net_sales;
+                // Fixed-revenue events (pre_settled, catering+invoice,
+                // commission_with_minimum) carry the contract amount
+                // outside net_sales — surface it here so the row's
+                // headline number reflects revenue, not just walk-up.
+                // Walk-up sales (event.net_sales) add on top.
+                const isFixed = isFixedRevenueEvent(event);
+                const displaySales = isFixed
+                  ? fixedRevenueAmount(event) + (event.net_sales ?? 0)
+                  : isCatering && (event.invoice_revenue ?? 0) > 0
+                    ? (event.net_sales ?? 0) + (event.invoice_revenue ?? 0)
+                    : event.net_sales;
                 const needsSales = event.event_date <= today && !event.net_sales && !event.cancellation_reason && !(isCatering && (event.invoice_revenue ?? 0) > 0);
                 const isUnbookedFuture = !event.booked && event.event_date >= today && !event.cancellation_reason;
                 return (
@@ -951,6 +965,15 @@ function ListView({
                         <span title={`Invoice: ${formatCurrency(event.invoice_revenue)}\nOn-site: ${formatCurrency(event.net_sales)}`}>
                           {formatCurrency((event.net_sales ?? 0) + (event.invoice_revenue ?? 0))}
                           <span className="text-[10px] text-brand-teal ml-1">inv</span>
+                        </span>
+                      ) : event.fee_type === "pre_settled" && fixedRevenueAmount(event) > 0 ? (
+                        // Pre-settled: contract amount IS the revenue.
+                        // Surface it here so the column doesn't read as
+                        // "no sales logged" when there's a signed contract
+                        // for $X. Walk-up sales add on top.
+                        <span title={`Contract: ${formatCurrency(fixedRevenueAmount(event))}\nWalk-up: ${formatCurrency(event.net_sales)}`}>
+                          {formatCurrency(fixedRevenueAmount(event) + (event.net_sales ?? 0))}
+                          <span className="text-[10px] text-brand-teal ml-1">contract</span>
                         </span>
                       ) : (
                         formatCurrency(event.net_sales)
