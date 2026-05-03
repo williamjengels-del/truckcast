@@ -3,6 +3,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { createClient as createServiceClient } from "@supabase/supabase-js";
 import { Button } from "@/components/ui/button";
+import { RoiCalculator } from "@/components/roi-calculator";
 import { WEATHER_COEFFICIENTS } from "@/lib/constants";
 import {
   BarChart3,
@@ -370,6 +371,16 @@ export default async function LandingPage() {
                 </div>
               ))}
             </div>
+          </div>
+        </div>
+
+        {/* ROI calculator — interactive demo using prospect's own
+            inputs. Sits between the feature grid (capability list) and
+            the stats row (credibility), making the strategic case
+            "this pays for itself for YOUR operation specifically." */}
+        <div className="border-t">
+          <div className="container mx-auto px-4 py-20 max-w-5xl">
+            <RoiCalculator />
           </div>
         </div>
 
