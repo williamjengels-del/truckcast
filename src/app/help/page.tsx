@@ -222,7 +222,7 @@ export default function HelpPage() {
           <div className="mt-14 rounded-lg border bg-muted/30 p-6 text-center">
             <p className="font-semibold">Still have questions?</p>
             <p className="text-sm text-muted-foreground mt-1">
-              Reach out and Julian will get back to you personally.
+              Email us and we&apos;ll get back to you.
             </p>
             <a
               href="mailto:support@vendcast.co"
