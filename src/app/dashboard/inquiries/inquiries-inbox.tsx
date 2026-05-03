@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -15,12 +16,17 @@ import {
   X,
   MessageSquare,
   Loader2,
+  ExternalLink,
 } from "lucide-react";
 import type { EventInquiry, EventInquiryAction } from "@/lib/database.types";
 
 interface Props {
   initialInquiries: EventInquiry[];
   currentUserId: string;
+  // Map of inquiry_id → event_id for inquiries this user has already
+  // claimed. Populated by the server-side page; the component layers
+  // freshly-claimed event IDs from the action-route response on top.
+  initialClaimedEventByInquiry?: Record<string, string>;
 }
 
 function formatDate(iso: string): string {
@@ -58,11 +64,18 @@ function relativeTime(iso: string): string {
   return new Date(iso).toLocaleDateString("en-US", { month: "short", day: "numeric" });
 }
 
-export function InquiriesInbox({ initialInquiries, currentUserId }: Props) {
+export function InquiriesInbox({
+  initialInquiries,
+  currentUserId,
+  initialClaimedEventByInquiry = {},
+}: Props) {
   const router = useRouter();
   const [inquiries, setInquiries] = useState(initialInquiries);
   const [busy, setBusy] = useState<string | null>(null);
   const [filter, setFilter] = useState<"all" | "open" | "responded">("open");
+  const [claimedEventByInquiry, setClaimedEventByInquiry] = useState(
+    initialClaimedEventByInquiry
+  );
 
   function myActionFor(inq: EventInquiry): EventInquiryAction | null {
     const slot = inq.operator_actions?.[currentUserId];
@@ -90,6 +103,10 @@ export function InquiriesInbox({ initialInquiries, currentUserId }: Props) {
         setBusy(null);
         return;
       }
+      const responseBody = (await res.json().catch(() => ({}))) as {
+        ok?: boolean;
+        eventId?: string;
+      };
       // Optimistic local update — also refresh from server.
       setInquiries((prev) =>
         prev.map((inq) =>
@@ -104,6 +121,15 @@ export function InquiriesInbox({ initialInquiries, currentUserId }: Props) {
             : inq
         )
       );
+      // If the server auto-created a planning event from this claim,
+      // remember the event_id so the row immediately shows "View event"
+      // instead of just a Claimed badge.
+      if (action === "claimed" && responseBody.eventId) {
+        setClaimedEventByInquiry((prev) => ({
+          ...prev,
+          [inquiryId]: responseBody.eventId!,
+        }));
+      }
       router.refresh();
     } catch (e) {
       alert(e instanceof Error ? e.message : "Network error");
@@ -156,6 +182,7 @@ export function InquiriesInbox({ initialInquiries, currentUserId }: Props) {
           {filtered.map((inq) => {
             const my = myActionFor(inq);
             const timeRange = formatTimeRange(inq.event_start_time, inq.event_end_time);
+            const claimedEventId = claimedEventByInquiry[inq.id];
             return (
               <div
                 key={inq.id}
@@ -293,6 +320,19 @@ export function InquiriesInbox({ initialInquiries, currentUserId }: Props) {
                     <X className="h-3.5 w-3.5 mr-1" />
                     {my === "declined" ? "Declined" : "Not interested"}
                   </Button>
+                  {/* Surfaces the planning event auto-created from the
+                      claim. Only shown when this user has claimed the
+                      inquiry AND the event_id is known (server-loaded
+                      or from the action response). */}
+                  {my === "claimed" && claimedEventId && (
+                    <Link
+                      href="/dashboard/events"
+                      className="inline-flex items-center gap-1.5 text-sm font-medium text-brand-teal hover:text-brand-teal/80 ml-auto"
+                    >
+                      View event
+                      <ExternalLink className="h-3.5 w-3.5" />
+                    </Link>
+                  )}
                 </div>
               </div>
             );
