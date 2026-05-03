@@ -104,6 +104,31 @@ describe("fixedRevenueAmount", () => {
     expect(fixedRevenueAmount(event)).toBe(1750);
   });
 
+  it("reads the contracted amount from sales_minimum on pre_settled events when fee_rate is empty", () => {
+    // Operators routinely put the contract amount in sales_minimum
+    // (reads as "guaranteed amount") rather than fee_rate. Without
+    // this branch the headline falls through to forecast_sales —
+    // exactly the "$590 contract on a $1800 prepaid" bug.
+    const event = eventOf({
+      fee_type: "pre_settled",
+      fee_rate: 0,
+      sales_minimum: 1800,
+      forecast_sales: 590,
+    });
+    expect(fixedRevenueAmount(event)).toBe(1800);
+  });
+
+  it("takes the larger of fee_rate and sales_minimum on pre_settled events", () => {
+    // Defensive: if both are populated we take the larger so we never
+    // under-report the contract.
+    const event = eventOf({
+      fee_type: "pre_settled",
+      fee_rate: 1500,
+      sales_minimum: 1800,
+    });
+    expect(fixedRevenueAmount(event)).toBe(1800);
+  });
+
   it("returns the minimum for commission_with_minimum", () => {
     const event = eventOf({
       fee_type: "commission_with_minimum",
