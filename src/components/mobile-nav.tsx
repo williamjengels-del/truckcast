@@ -28,6 +28,7 @@ export function MobileNav() {
   const { effectiveUserId } = useImpersonation();
   const [tier, setTier] = useState<SubscriptionTier | null>(null);
   const [unloggedCount, setUnloggedCount] = useState(0);
+  const [openInquiryCount, setOpenInquiryCount] = useState(0);
   const [isManager, setIsManager] = useState(false);
 
   useEffect(() => {
@@ -41,10 +42,12 @@ export function MobileNav() {
           subscription_tier: SubscriptionTier;
           is_manager: boolean;
           unlogged_count: number;
+          open_inquiry_count?: number;
         };
         setTier(data.subscription_tier);
         setIsManager(data.is_manager);
         setUnloggedCount(data.unlogged_count);
+        setOpenInquiryCount(data.open_inquiry_count ?? 0);
       } catch {
         // Non-fatal
       }
@@ -105,6 +108,11 @@ export function MobileNav() {
                   {item.href === "/dashboard/events" && unloggedCount > 0 && (
                     <span className="ml-auto flex h-5 min-w-5 items-center justify-center rounded-full bg-amber-500 px-1.5 text-[10px] font-bold text-white">
                       {unloggedCount > 99 ? "99+" : unloggedCount}
+                    </span>
+                  )}
+                  {item.href === "/dashboard/inquiries" && openInquiryCount > 0 && (
+                    <span className="ml-auto flex h-5 min-w-5 items-center justify-center rounded-full bg-amber-500 px-1.5 text-[10px] font-bold text-white">
+                      {openInquiryCount > 99 ? "99+" : openInquiryCount}
                     </span>
                   )}
                 </Link>

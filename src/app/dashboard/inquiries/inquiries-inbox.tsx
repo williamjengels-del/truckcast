@@ -326,7 +326,7 @@ export function InquiriesInbox({
                       or from the action response). */}
                   {my === "claimed" && claimedEventId && (
                     <Link
-                      href="/dashboard/events"
+                      href="/dashboard/events?tab=unbooked"
                       className="inline-flex items-center gap-1.5 text-sm font-medium text-brand-teal hover:text-brand-teal/80 ml-auto"
                     >
                       View event
