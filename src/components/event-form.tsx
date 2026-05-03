@@ -100,6 +100,7 @@ export function EventForm({
     modal_fee_type: string | null;
     median_fee_rate: number | null;
     modal_weather_by_month: Record<string, { weather: string; count: number }> | null;
+    dow_lift: Record<string, { lift_pct: number; count: number }> | null;
     operator_count: number;
   } | null>(null);
   const [isPrivate, setIsPrivate] = useState<boolean>(initialData?.is_private ?? false);
@@ -312,7 +313,7 @@ export function EventForm({
       const supabase = createClient();
       const { data } = await supabase
         .from("platform_events")
-        .select("median_other_trucks, median_attendance, modal_fee_type, median_fee_rate, modal_weather_by_month, operator_count")
+        .select("median_other_trucks, median_attendance, modal_fee_type, median_fee_rate, modal_weather_by_month, dow_lift, operator_count")
         .eq("event_name_normalized", name.toLowerCase())
         .maybeSingle();
       if (cancelled) return;
@@ -323,6 +324,7 @@ export function EventForm({
           modal_fee_type: data.modal_fee_type,
           median_fee_rate: data.median_fee_rate,
           modal_weather_by_month: data.modal_weather_by_month,
+          dow_lift: data.dow_lift,
           operator_count: data.operator_count,
         });
       } else {
@@ -568,6 +570,32 @@ export function EventForm({
                   value={dateValue}
                   onChange={(e) => setDateValue(e.target.value)}
                 />
+                {/* Cross-operator Phase 3 DOW lift — when operator picks a
+                    date, surface how that day-of-week historically performs
+                    at this event across peers. Privacy floor 3+ ops per
+                    DOW cell enforced upstream. */}
+                {(() => {
+                  if (!dateValue || !platformHints?.dow_lift) return null;
+                  const dow = String(new Date(dateValue + "T00:00:00").getDay());
+                  const cell = platformHints.dow_lift[dow];
+                  if (!cell) return null;
+                  const dayName = new Date(dateValue + "T00:00:00").toLocaleDateString("en-US", { weekday: "long" });
+                  const direction = cell.lift_pct > 0 ? "above" : cell.lift_pct < 0 ? "below" : "matches";
+                  if (cell.lift_pct === 0) {
+                    return (
+                      <p className="text-xs text-brand-teal">
+                        {dayName}s at this event match the cross-operator average
+                        {" "}<span className="text-muted-foreground">({cell.count} ops)</span>
+                      </p>
+                    );
+                  }
+                  return (
+                    <p className="text-xs text-brand-teal">
+                      {dayName}s at this event run <span className="font-medium">{Math.abs(cell.lift_pct)}% {direction}</span> the cross-operator average
+                      {" "}<span className="text-muted-foreground">({cell.count} ops)</span>
+                    </p>
+                  );
+                })()}
               </div>
               <div className="space-y-2">
                 <Label htmlFor="booked">Status</Label>

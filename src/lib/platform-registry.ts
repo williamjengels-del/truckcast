@@ -67,6 +67,11 @@ interface AggregateResult {
   // record (no null placeholder). Empty record when no month has enough
   // contributors.
   modal_weather_by_month: Record<string, { weather: string; count: number }>;
+  // Cross-operator Phase 3 DOW output. Per-day-of-week lift vs the event's
+  // own median across operators. lift_pct is the integer percent above
+  // (positive) or below (negative). Empty record when no DOW has 3+
+  // distinct operators contributing.
+  dow_lift: Record<string, { lift_pct: number; count: number }>;
 }
 
 /**
@@ -191,7 +196,52 @@ function computeAggregate(rows: AggregatableRow[]): AggregateResult | null {
     modal_fee_type,
     median_fee_rate,
     modal_weather_by_month,
+    dow_lift: computeDowLift(rows, median),
   };
+}
+
+// Cross-operator Phase 3 — per-DOW lift vs the event-wide median across
+// operators. Returns integer percent above (positive) / below (negative)
+// the event median, plus the count of distinct operators contributing
+// to that DOW cell. DOWs below the 3+ operator floor are absent.
+//
+// Why distinct operators (not bookings): a single operator with 8 Saturday
+// bookings doesn't satisfy the floor on its own — the cell still leaks
+// who that operator is. Need 3+ different operators to publish.
+//
+// Lift math: medianForDow / eventMedian - 1, rounded to integer percent.
+// Returns 0 lift when the DOW median equals the event median (no signal).
+// Negative when DOW underperforms.
+function computeDowLift(
+  rows: AggregatableRow[],
+  eventMedian: number
+): Record<string, { lift_pct: number; count: number }> {
+  const out: Record<string, { lift_pct: number; count: number }> = {};
+  if (eventMedian <= 0) return out;
+  // Group by DOW: dowSales[dow] = sales[]; dowOps[dow] = Set<user_id>
+  const dowSales: Record<string, number[]> = {};
+  const dowOps: Record<string, Set<string>> = {};
+  for (const r of rows) {
+    if (!r.event_date) continue;
+    const dow = String(new Date(r.event_date + "T00:00:00").getDay());
+    if (!dowSales[dow]) {
+      dowSales[dow] = [];
+      dowOps[dow] = new Set();
+    }
+    dowSales[dow].push(r.net_sales);
+    dowOps[dow].add(r.user_id);
+  }
+  for (const [dow, sales] of Object.entries(dowSales)) {
+    const opCount = dowOps[dow].size;
+    if (opCount < 3) continue; // privacy floor
+    const sorted = [...sales].sort((a, b) => a - b);
+    const n = sorted.length;
+    const dowMedian =
+      n % 2 === 0 ? (sorted[n / 2 - 1] + sorted[n / 2]) / 2 : sorted[Math.floor(n / 2)];
+    const lift_pct = Math.round((dowMedian / eventMedian - 1) * 100);
+    out[dow] = { lift_pct, count: opCount };
+  }
+  return out;
 }
 
 // Median of the non-null entries, rounded to 2 decimals. Returns null
@@ -288,6 +338,7 @@ async function upsertPlatformEvent(
       modal_fee_type: agg.modal_fee_type,
       median_fee_rate: agg.median_fee_rate,
       modal_weather_by_month: agg.modal_weather_by_month,
+      dow_lift: agg.dow_lift,
       updated_at: new Date().toISOString(),
     },
     { onConflict: "event_name_normalized" }
@@ -429,6 +480,7 @@ export async function getPlatformEventsExcludingUser(
       modal_fee_type: agg.modal_fee_type,
       median_fee_rate: agg.median_fee_rate,
       modal_weather_by_month: agg.modal_weather_by_month,
+      dow_lift: agg.dow_lift,
       updated_at: new Date().toISOString(),
     } as PlatformEvent);
   }

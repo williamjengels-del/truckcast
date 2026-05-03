@@ -185,6 +185,44 @@ describe("computeAggregate (platform-registry)", () => {
     expect(agg?.modal_weather_by_month["11"]).toBeUndefined(); // below floor
   });
 
+  it("computes dow_lift at the 3+ per-cell distinct-operator floor", () => {
+    // 3 operators each book a Saturday + a Tuesday at this event.
+    // Saturdays earn $1500 each, Tuesdays $500 each. Event median across
+    // all 6 bookings = $1000. Saturday lift = +50%, Tuesday lift = -50%.
+    const rows = [
+      row({ user_id: "u1", net_sales: 1500, event_date: "2026-04-04" }), // Sat
+      row({ user_id: "u2", net_sales: 1500, event_date: "2026-04-11" }), // Sat
+      row({ user_id: "u3", net_sales: 1500, event_date: "2026-04-18" }), // Sat
+      row({ user_id: "u1", net_sales: 500, event_date: "2026-04-07" }),  // Tue
+      row({ user_id: "u2", net_sales: 500, event_date: "2026-04-14" }),  // Tue
+      row({ user_id: "u3", net_sales: 500, event_date: "2026-04-21" }),  // Tue
+    ];
+    const agg = __computeAggregate(rows);
+    expect(agg?.dow_lift["6"]).toEqual({ lift_pct: 50, count: 3 });  // Sat
+    expect(agg?.dow_lift["2"]).toEqual({ lift_pct: -50, count: 3 }); // Tue
+  });
+
+  it("does NOT publish dow cells with <3 distinct operators (one operator's many Saturdays)", () => {
+    // u1 owns 5 Saturdays at this event, u2 + u3 each have one. 3 ops
+    // total satisfies the EVENT-level floor (so the row publishes), but
+    // the Sunday cell only has u3 (1 distinct op). Saturday cell has
+    // 3 distinct ops — should publish.
+    const rows = [
+      row({ user_id: "u1", net_sales: 1000, event_date: "2026-04-04" }),  // Sat
+      row({ user_id: "u1", net_sales: 1000, event_date: "2026-04-11" }),  // Sat
+      row({ user_id: "u1", net_sales: 1000, event_date: "2026-04-18" }),  // Sat
+      row({ user_id: "u1", net_sales: 1000, event_date: "2026-04-25" }),  // Sat
+      row({ user_id: "u1", net_sales: 1000, event_date: "2026-05-02" }),  // Sat
+      row({ user_id: "u2", net_sales: 1000, event_date: "2026-05-09" }),  // Sat
+      row({ user_id: "u3", net_sales: 1000, event_date: "2026-05-16" }),  // Sat
+      row({ user_id: "u3", net_sales: 800, event_date: "2026-05-17" }),   // Sun
+    ];
+    const agg = __computeAggregate(rows);
+    expect(agg?.dow_lift["6"]).toBeDefined();         // 3 distinct ops on Sat
+    expect(agg?.dow_lift["6"].count).toBe(3);
+    expect(agg?.dow_lift["0"]).toBeUndefined();       // 1 op on Sun, below floor
+  });
+
   it("counts DISTINCT operators per (month × weather) cell, not bookings", () => {
     // u1 booked April-Clear 3 times, u2 once. Cell has 2 distinct ops, NOT 4.
     // Should NOT publish (below 3+ floor).
