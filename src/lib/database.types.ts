@@ -319,6 +319,11 @@ export interface PlatformEvent {
   // aggregates because fee + event_name combined leans more identifying).
   modal_fee_type: string | null;
   median_fee_rate: number | null;
+  // Cross-operator Phase 2 — modal weather per (event_name × month-of-year).
+  // Shape: { "1": { weather: "Cold", count: 4 }, ..., "12": { ... } }.
+  // Months below 3+ operator floor are absent from the jsonb. Migration
+  // 20260502000003.
+  modal_weather_by_month: Record<string, { weather: string; count: number }> | null;
   updated_at: string;
 }
 
