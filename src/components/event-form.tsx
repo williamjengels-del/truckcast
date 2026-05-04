@@ -319,10 +319,21 @@ export function EventForm({
     let cancelled = false;
     (async () => {
       const supabase = createClient();
+      // Resolve via aliases so an operator typing the alias-form name
+      // still gets the canonical bucket's hints.
+      const inputNormalized = name.toLowerCase();
+      const { data: aliasRow } = await supabase
+        .from("event_name_aliases")
+        .select("canonical_normalized")
+        .eq("alias_normalized", inputNormalized)
+        .maybeSingle();
+      const lookupKey =
+        (aliasRow as { canonical_normalized: string } | null)?.canonical_normalized ??
+        inputNormalized;
       const { data } = await supabase
         .from("platform_events")
         .select("median_other_trucks, median_attendance, modal_fee_type, median_fee_rate, modal_weather_by_month, dow_lift, operator_count")
-        .eq("event_name_normalized", name.toLowerCase())
+        .eq("event_name_normalized", lookupKey)
         .maybeSingle();
       if (cancelled) return;
       if (data) {

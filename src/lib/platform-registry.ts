@@ -261,6 +261,8 @@ function medianOfNonNull(values: (number | null | undefined)[]): number | null {
 // Exported for tests.
 export const __computeAggregate = computeAggregate;
 
+import { resolveAliases, expandCanonicalsToAliases } from "@/lib/event-name-aliases";
+
 /**
  * Updates the platform_events registry for the given event names.
  * Only includes data from users with data_sharing_enabled = true.
@@ -286,9 +288,54 @@ export async function updatePlatformRegistry(eventNames: string[]): Promise<void
   const sharingUserIds = new Set((sharingUsers ?? []).map((u: { id: string }) => u.id));
   if (sharingUserIds.size === 0) return;
 
-  for (const eventName of eventNames) {
+  // Resolve each input event_name to its canonical normalized form via
+  // the aliases table. Two inputs that differ only by aliased spelling
+  // collapse to the same canonical, so we de-dupe after resolving.
+  const inputNormalized = eventNames.map((n) => n.toLowerCase().trim());
+  const resolveMap = await resolveAliases(client, inputNormalized);
+  const canonicalSet = new Set<string>();
+  // Track display strings keyed by canonical so the upsert preserves
+  // the canonical's preferred casing rather than picking whichever
+  // alias triggered the recompute.
+  const canonicalDisplay = new Map<string, string>();
+  for (let i = 0; i < eventNames.length; i++) {
+    const canon = resolveMap.get(inputNormalized[i]) ?? inputNormalized[i];
+    canonicalSet.add(canon);
+    if (!canonicalDisplay.has(canon)) {
+      // Default to the input display; will be replaced by the alias-
+      // table's canonical_display below if one exists.
+      canonicalDisplay.set(canon, eventNames[i]);
+    }
+  }
+
+  // Pull the alias-table's display label for each canonical so the
+  // upsert writes the curated display, not whichever alias-form
+  // happened to trigger the recompute.
+  if (canonicalSet.size > 0) {
+    const { data: canonRows } = await client
+      .from("event_name_aliases")
+      .select("canonical_normalized, canonical_display")
+      .in("canonical_normalized", Array.from(canonicalSet));
+    for (const row of (canonRows ?? []) as {
+      canonical_normalized: string;
+      canonical_display: string;
+    }[]) {
+      canonicalDisplay.set(row.canonical_normalized, row.canonical_display);
+    }
+  }
+
+  // Expand each canonical to all its alias-form normalized strings so
+  // we can fold them into the bucket at compute time.
+  const expandMap = await expandCanonicalsToAliases(
+    client,
+    Array.from(canonicalSet)
+  );
+
+  for (const canonical of canonicalSet) {
     try {
-      await upsertPlatformEvent(client, eventName, sharingUserIds);
+      const aliases = expandMap.get(canonical) ?? new Set([canonical]);
+      const display = canonicalDisplay.get(canonical) ?? canonical;
+      await upsertPlatformEvent(client, canonical, display, aliases, sharingUserIds);
     } catch {
       // Non-fatal
     }
@@ -297,21 +344,65 @@ export async function updatePlatformRegistry(eventNames: string[]): Promise<void
 
 async function upsertPlatformEvent(
   client: AnyClient,
-  eventName: string,
+  canonical: string,
+  display: string,
+  matchNormalized: Set<string>,
   sharingUserIds: Set<string>
 ): Promise<void> {
-  const normalized = eventName.toLowerCase().trim();
+  // Pull events whose lower(trim(event_name)) is the canonical OR any
+  // of its alias forms. .ilike() doesn't natively OR over multiple
+  // patterns, so we do the case-insensitive grouping client-side
+  // after fetching by event_name presence in the raw set (case-
+  // sensitive .in won't match — fall back to a broader fetch + filter).
+  const lcSet = new Set(Array.from(matchNormalized).map((s) => s.toLowerCase()));
 
-  const { data: rows } = await client
-    .from("events")
-    .select("user_id, net_sales, event_type, city, other_trucks, expected_attendance, fee_type, fee_rate, event_date, event_weather")
-    .ilike("event_name", normalized)
-    .eq("booked", true)
-    .not("net_sales", "is", null)
-    .gt("net_sales", 0)
-    .neq("anomaly_flag", "disrupted");
+  // Query by display strings — we don't have those, so use broad
+  // ilike on each canonical/alias and union. For small alias counts
+  // (< 5 typical) the overhead is negligible.
+  const allRows: AggregatableRow[] = [];
+  for (const norm of matchNormalized) {
+    const { data: rows } = await client
+      .from("events")
+      .select("user_id, net_sales, event_type, city, other_trucks, expected_attendance, fee_type, fee_rate, event_date, event_weather, event_name")
+      .ilike("event_name", norm)
+      .eq("booked", true)
+      .not("net_sales", "is", null)
+      .gt("net_sales", 0)
+      .neq("anomaly_flag", "disrupted");
+    for (const r of (rows ?? []) as (AggregatableRow & { event_name: string })[]) {
+      // Belt-and-suspenders: ilike already case-insensitive-matched, so
+      // anything we got back has lower(trim(event_name)) in lcSet.
+      // Keep the extra check for whitespace-trim safety.
+      if (lcSet.has(r.event_name.toLowerCase().trim())) {
+        // Deduplicate via primary-key-ish proxy — same user + date + name
+        // shouldn't enter twice from overlapping ilike fetches.
+        allRows.push(r);
+      }
+    }
+  }
 
-  if (!rows || rows.length === 0) return;
+  if (allRows.length === 0) {
+    // No backing data for this bucket — clear any stale platform_events
+    // row so we don't keep a phantom aggregate alive after a recompute.
+    await client
+      .from("platform_events")
+      .delete()
+      .eq("event_name_normalized", canonical);
+    // Also clear any alias-form rows that may exist from before the
+    // alias was added — the canonical is the only legitimate row.
+    const aliasOnly = Array.from(matchNormalized).filter((s) => s !== canonical);
+    if (aliasOnly.length > 0) {
+      await client
+        .from("platform_events")
+        .delete()
+        .in("event_name_normalized", aliasOnly);
+    }
+    return;
+  }
+
+  const eventName = display;
+  const normalized = canonical;
+  const rows = allRows;
 
   const eligible = (rows as AggregatableRow[]).filter((r) =>
     sharingUserIds.has(r.user_id)
@@ -343,6 +434,16 @@ async function upsertPlatformEvent(
     },
     { onConflict: "event_name_normalized" }
   );
+
+  // Drop any platform_events rows for the alias forms — they're
+  // superseded by the canonical row we just wrote.
+  const aliasOnly = Array.from(matchNormalized).filter((s) => s !== canonical);
+  if (aliasOnly.length > 0) {
+    await client
+      .from("platform_events")
+      .delete()
+      .in("event_name_normalized", aliasOnly);
+  }
 }
 
 /**
@@ -360,18 +461,34 @@ export async function getPlatformEvents(
 ): Promise<Map<string, PlatformEvent>> {
   if (eventNames.length === 0) return new Map();
   const client = getServiceClient();
-  const normalized = eventNames.map((n) => n.toLowerCase().trim());
+  const inputNormalized = eventNames.map((n) => n.toLowerCase().trim());
+
+  // Resolve aliases so an operator typing the alias-form name still
+  // sees the canonical bucket's aggregate. Map is keyed by the
+  // operator's input form; values point to whichever PlatformEvent
+  // row is canonical for that input.
+  const resolveMap = await resolveAliases(client, inputNormalized);
+  const canonicalSet = Array.from(new Set(resolveMap.values()));
 
   const { data } = await client
     .from("platform_events")
     .select("*")
-    .in("event_name_normalized", normalized);
+    .in("event_name_normalized", canonicalSet);
 
-  const map = new Map<string, PlatformEvent>();
+  const byCanonical = new Map<string, PlatformEvent>();
   for (const row of data ?? []) {
-    map.set(row.event_name_normalized, row as PlatformEvent);
+    byCanonical.set(row.event_name_normalized, row as PlatformEvent);
   }
-  return map;
+
+  // Re-key by input normalized so callers can do
+  // `map.get(name.toLowerCase().trim())` and not think about aliases.
+  const out = new Map<string, PlatformEvent>();
+  for (const input of inputNormalized) {
+    const canonical = resolveMap.get(input) ?? input;
+    const row = byCanonical.get(canonical);
+    if (row) out.set(input, row);
+  }
+  return out;
 }
 
 /**
@@ -404,7 +521,11 @@ export async function getPlatformEventsExcludingUser(
 ): Promise<Map<string, PlatformEvent>> {
   if (eventNames.length === 0) return new Map();
   const client = getServiceClient();
-  const normalized = eventNames.map((n) => n.toLowerCase().trim());
+  const inputNormalized = eventNames.map((n) => n.toLowerCase().trim());
+
+  // Resolve aliases so events typed under any alias form roll up to
+  // their canonical bucket — same shape as the cached writer.
+  const resolveMap = await resolveAliases(client, inputNormalized);
 
   // Sharing list — same gate as the cached aggregator. We don't need
   // to recompute this per event; one fetch covers all.
@@ -446,15 +567,17 @@ export async function getPlatformEventsExcludingUser(
     (r) => r.user_id !== excludeUserId && sharingUserIds.has(r.user_id)
   );
 
-  // Group by normalized event name, then compute aggregate per group.
+  // Group by canonical normalized event name (resolve through aliases),
+  // then compute aggregate per group.
   const groups = new Map<string, EventRowWithName[]>();
   for (const r of eligible) {
-    const key = r.event_name.toLowerCase().trim();
+    const lc = r.event_name.toLowerCase().trim();
+    const key = resolveMap.get(lc) ?? lc;
     if (!groups.has(key)) groups.set(key, []);
     groups.get(key)!.push(r);
   }
 
-  const out = new Map<string, PlatformEvent>();
+  const byCanonical = new Map<string, PlatformEvent>();
   for (const [key, groupRows] of groups) {
     const agg = computeAggregate(groupRows);
     if (!agg) continue;
@@ -462,7 +585,7 @@ export async function getPlatformEventsExcludingUser(
     // branch. Fields the cached table tracks (event_name_normalized,
     // event_name_display, updated_at) are filled best-effort.
     const display = groupRows[0].event_name;
-    out.set(key, {
+    byCanonical.set(key, {
       event_name_normalized: key,
       event_name_display: display,
       operator_count: agg.operator_count,
@@ -483,6 +606,15 @@ export async function getPlatformEventsExcludingUser(
       dow_lift: agg.dow_lift,
       updated_at: new Date().toISOString(),
     } as PlatformEvent);
+  }
+
+  // Re-key by input normalized so callers can do
+  // `map.get(name.toLowerCase().trim())` and not think about aliases.
+  const out = new Map<string, PlatformEvent>();
+  for (const input of inputNormalized) {
+    const canonical = resolveMap.get(input) ?? input;
+    const row = byCanonical.get(canonical);
+    if (row) out.set(input, row);
   }
   return out;
 }
