@@ -142,9 +142,6 @@ function FixedRevenueCard({ event }: { event: Event }) {
       <p className="text-sm text-muted-foreground">
         Flat fee · Catering
       </p>
-      {/* TODO(Phase 3): once events.revenue_model, deposit, balance_due, and
-          payment_status columns land, render the live payment state here:
-          e.g. "Deposit $750 received · Balance $750 due May 5". */}
     </div>
   );
 }

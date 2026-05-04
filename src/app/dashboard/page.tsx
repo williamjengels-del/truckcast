@@ -173,6 +173,24 @@ export default async function DashboardPage() {
     (sum, e) => sum + (e.forecast_sales ?? 0),
     0
   );
+
+  // Weather-not-set candidates: upcoming events within 7 days that
+  // have a city (so weather lookup is even possible) but no
+  // event_weather selected. Surfacing this on the dashboard nudges
+  // the operator to pick a forecast on time so the prep + staffing
+  // call lines up with reality. Sorted by date ascending so the
+  // soonest-needing-attention event surfaces first.
+  const sevenDaysOut = new Date(today + "T00:00:00");
+  sevenDaysOut.setDate(sevenDaysOut.getDate() + 7);
+  const sevenDaysOutIso = sevenDaysOut.toISOString().split("T")[0];
+  const weatherNotSetEvents = upcomingEvents
+    .filter(
+      (e) =>
+        e.event_date <= sevenDaysOutIso &&
+        !e.event_weather &&
+        (e.city ?? "").trim() !== ""
+    )
+    .sort((a, b) => a.event_date.localeCompare(b.event_date));
   const projectedSeason = ytdRevenue + upcomingForecastSum;
 
   // YTD profitability — only calculated when at least some events have cost data
@@ -626,10 +644,41 @@ export default async function DashboardPage() {
                   </p>
                 )}
               </div>
-              {/* TODO(Phase 3): unmatched-payment flags slot — renders when
-                  POS sync finds sales periods without a matching event. */}
-              {/* TODO(Phase 3): weather-not-set slot — renders when upcoming
-                  events within 7 days have city but no event_weather. */}
+            </div>
+          )}
+
+          {/* Weather-not-set nudge: upcoming events within 7 days with
+              a city set but no event_weather. Operators routinely
+              forget to pick a forecast for next-week events; without
+              one the forecast engine falls back to base/no-weather
+              and the prep/staffing call drifts. */}
+          {weatherNotSetEvents.length > 0 && (
+            <div className="rounded-lg border border-brand-teal/30 bg-brand-teal/5 p-4 mt-4">
+              <p className="text-sm font-medium text-foreground">
+                Set weather: {weatherNotSetEvents.length} upcoming event
+                {weatherNotSetEvents.length === 1 ? "" : "s"} within the next 7 days
+                {" "}{weatherNotSetEvents.length === 1 ? "needs" : "need"} a weather pick
+              </p>
+              <div className="mt-2 space-y-1">
+                {weatherNotSetEvents.slice(0, 4).map((e) => (
+                  <div key={e.id} className="flex items-center justify-between text-xs">
+                    <Link
+                      href="/dashboard/events?tab=upcoming"
+                      className="font-medium text-foreground hover:text-brand-teal truncate"
+                    >
+                      {e.event_name}
+                    </Link>
+                    <span className="text-muted-foreground tabular-nums shrink-0 ml-2">
+                      {new Date(e.event_date + "T00:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+                    </span>
+                  </div>
+                ))}
+                {weatherNotSetEvents.length > 4 && (
+                  <p className="text-xs font-medium text-brand-teal pt-1">
+                    +{weatherNotSetEvents.length - 4} more
+                  </p>
+                )}
+              </div>
             </div>
           )}
 
