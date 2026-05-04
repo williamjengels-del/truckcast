@@ -36,6 +36,7 @@ export type FieldKey =
   | "event_date"
   | "start_time"
   | "end_time"
+  | "time_range"
   | "setup_time"
   | "city"
   | "state"
@@ -106,6 +107,7 @@ export const FIELD_OPTIONS: { value: FieldKey | "skip"; label: string; descripti
   { value: "event_date", label: "Date", description: "Event date (various formats)" },
   { value: "start_time", label: "Start Time", description: "Can include date + time" },
   { value: "end_time", label: "End Time", description: "Can include date + time" },
+  { value: "time_range", label: "Time Range (Start–End)", description: "Single column with both start and end (e.g. \"5:00 PM - 9:00 PM\")" },
   { value: "setup_time", label: "Setup Time", description: "Can include date + time" },
   { value: "city", label: "City", description: "City name" },
   { value: "state", label: "State", description: "US 2-letter state code (MO, IL, CA, …)" },
@@ -135,6 +137,7 @@ export const BASIC_FIELD_VALUES: (FieldKey | "skip")[] = [
   "event_date",
   "start_time",
   "end_time",
+  "time_range",
   "city",
   "state",
   "location",
@@ -181,6 +184,11 @@ export const COLUMN_ALIASES: Record<FieldKey, string[]> = {
   end_time: [
     "end_time", "endtime", "end time", "end", "ends", "event end",
     "end date", "end date/time",
+  ],
+  time_range: [
+    "time_range", "timerange", "time range", "time", "hours", "schedule",
+    "service hours", "service time", "service times", "event hours",
+    "start_end", "start-end", "start_end_time", "start-end time",
   ],
   setup_time: [
     "setup_time", "setuptime", "setup time", "setup", "arrival",
@@ -331,6 +339,15 @@ export function normalizeTime(timeStr: string): string | null {
     if (ampm === "AM" && hours === 12) hours = 0;
     return `${String(hours).padStart(2, "0")}:${minutes}`;
   }
+  // Bare hour with AM/PM ('5 PM', '5pm') — accept and treat as :00.
+  const ampmHourOnly = s.match(/^(\d{1,2})\s*([AaPp][Mm])$/);
+  if (ampmHourOnly) {
+    let hours = parseInt(ampmHourOnly[1]);
+    const ampm = ampmHourOnly[2].toUpperCase();
+    if (ampm === "PM" && hours < 12) hours += 12;
+    if (ampm === "AM" && hours === 12) hours = 0;
+    return `${String(hours).padStart(2, "0")}:00`;
+  }
   const h24Match = s.match(/^(\d{1,2}):(\d{2})(?::(\d{2}))?$/);
   if (h24Match) {
     const hours = parseInt(h24Match[1]);
@@ -338,6 +355,82 @@ export function normalizeTime(timeStr: string): string | null {
     if (hours >= 0 && hours <= 23) return `${String(hours).padStart(2, "0")}:${minutes}`;
   }
   return null;
+}
+
+/**
+ * Parse a single-column time-range value into start/end 24h strings.
+ *
+ * Accepts:
+ *   - "5:00 PM - 9:00 PM" / "5pm-9pm" / "5–9 PM" / "11am to 3pm"
+ *   - "17:00-21:00" / "17:00 — 21:00"
+ *   - en-dash, em-dash, hyphen, " to " all valid separators
+ *
+ * Inheritance rule: if only one side has a meridiem (e.g. "5–9 PM"),
+ * the other side inherits it. This is the most common ambiguity in
+ * event listings and matches what a human reader would do.
+ *
+ * Returns { start: null, end: null } if either side fails to parse —
+ * the caller surfaces a row error so the operator can fix the source
+ * cell instead of getting a silently half-filled event.
+ */
+export function parseTimeRange(value: string): {
+  start: string | null;
+  end: string | null;
+} {
+  const s = value.trim();
+  if (!s) return { start: null, end: null };
+  // Split on " to " (case-insensitive) OR any dash variant. Pad
+  // ascii-hyphen with whitespace handling so "5pm-9pm" splits.
+  const parts = s.split(/\s*(?:\bto\b|[-–—])\s*/i);
+  if (parts.length !== 2) return { start: null, end: null };
+  const [rawA, rawB] = parts.map((p) => p.trim());
+  if (!rawA || !rawB) return { start: null, end: null };
+
+  // Try each side as-is first.
+  let a = normalizeTime(rawA);
+  let b = normalizeTime(rawB);
+  if (a && b) return { start: a, end: b };
+
+  // Meridiem inheritance: if one side parses with AM/PM and the other
+  // is bare (e.g. "5–9 PM"), append the parsed meridiem to the bare
+  // side and retry. We can detect "the parsed side had AM/PM" by
+  // looking at the raw input.
+  const hasAmpm = (raw: string) => /[AaPp][Mm]\s*$/.test(raw.trim());
+
+  if (!a && b && hasAmpm(rawB)) {
+    // Strip whatever meridiem markers the second side had and reuse
+    // them on the first.
+    const meridiem = rawB.match(/([AaPp][Mm])\s*$/)?.[1] ?? "";
+    a = normalizeTime(`${rawA} ${meridiem}`);
+    // If inheritance pushes start past end ("11–3 PM" → 23:00, 15:00),
+    // flip the inferred meridiem. Events generally don't cross
+    // midnight; the human reader's interpretation of "11–3 PM" is
+    // 11 AM → 3 PM, not 11 PM → 3 PM.
+    if (a && b && minutesOf(a) > minutesOf(b)) {
+      const flipped = meridiem.toUpperCase() === "PM" ? "AM" : "PM";
+      const retry = normalizeTime(`${rawA} ${flipped}`);
+      if (retry && minutesOf(retry) <= minutesOf(b)) a = retry;
+    }
+  }
+  if (!b && a && hasAmpm(rawA)) {
+    const meridiem = rawA.match(/([AaPp][Mm])\s*$/)?.[1] ?? "";
+    b = normalizeTime(`${rawB} ${meridiem}`);
+    if (a && b && minutesOf(a) > minutesOf(b)) {
+      const flipped = meridiem.toUpperCase() === "AM" ? "PM" : "AM";
+      const retry = normalizeTime(`${rawB} ${flipped}`);
+      if (retry && minutesOf(retry) >= minutesOf(a)) b = retry;
+    }
+  }
+
+  if (a && b) return { start: a, end: b };
+  return { start: null, end: null };
+}
+
+// Convert a normalized HH:MM string to a sortable minute count. Pure
+// helper for the meridiem-inheritance flip logic.
+function minutesOf(hhmm: string): number {
+  const [h, m] = hhmm.split(":").map((x) => parseInt(x));
+  return h * 60 + m;
 }
 
 // ═══════════════════════════════════════════════════════════════════════
@@ -564,6 +657,18 @@ export function parseWithMapping(
       const parsed = parseDatetime(rawEnd);
       endDate = parsed.date;
       endTime = parsed.time;
+    }
+
+    // Single-column time range ("5:00 PM - 9:00 PM"). Fills start/end
+    // only when the explicit columns above didn't already set them —
+    // discrete columns win on conflict so an operator who maps both a
+    // start/end pair AND a range column doesn't get silently
+    // overwritten.
+    const rawRange = getValue("time_range", values).trim();
+    if (rawRange && (!startTime || !endTime)) {
+      const range = parseTimeRange(rawRange);
+      if (!startTime && range.start) startTime = range.start;
+      if (!endTime && range.end) endTime = range.end;
     }
 
     const rawSetup = getValue("setup_time", values).trim();
