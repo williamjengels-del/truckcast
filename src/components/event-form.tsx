@@ -4,6 +4,7 @@ import { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { EventNameTypeahead } from "@/components/event-name-typeahead";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import {
@@ -559,7 +560,12 @@ export function EventForm({
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="sm:col-span-2 space-y-2">
                 <Label htmlFor="event_name">Event Name *</Label>
-                <Input
+                {/* Typeahead sources canonical names from
+                    platform_events.event_name_display so operators
+                    converge on shared bucket keys instead of typing
+                    near-miss variants. Free-text on no match still
+                    creates a new bucket — no merging. */}
+                <EventNameTypeahead
                   id="event_name"
                   name="event_name"
                   required
