@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
 import path from "node:path";
-import { parseCSV, parseTimeRange, normalizeTime } from "./parser";
+import { parseCSV, parseTimeRange, normalizeTime, parseDate } from "./parser";
 
 describe("parseCSV", () => {
   it("preserves embedded newlines inside quoted fields", () => {
@@ -67,6 +67,42 @@ describe("normalizeTime", () => {
   });
   it("still accepts 24h", () => {
     expect(normalizeTime("17:00")).toBe("17:00");
+  });
+  it("rejects out-of-range AM/PM hours", () => {
+    // Hour must be 1-12 on a 12-hour clock — '13 PM' / '13:00 PM' /
+    // '0 AM' are nonsense and should return null instead of producing
+    // a garbage 13:00.
+    expect(normalizeTime("13 PM")).toBe(null);
+    expect(normalizeTime("13:00 PM")).toBe(null);
+    expect(normalizeTime("0 AM")).toBe(null);
+  });
+});
+
+describe("parseDate", () => {
+  it("ISO 4-digit", () => {
+    expect(parseDate("2024-09-14")).toBe("2024-09-14");
+  });
+  it("US slash 4-digit year", () => {
+    expect(parseDate("9/14/2024")).toBe("2024-09-14");
+  });
+  it("US slash 2-digit year (20xx / 19xx pivot at 50)", () => {
+    expect(parseDate("9/14/24")).toBe("2024-09-14");
+    expect(parseDate("9/14/95")).toBe("1995-09-14");
+  });
+  it("rejects European DD/MM/YYYY rather than mismangling it", () => {
+    // 14 isn't a valid month — return null so the caller can flag it
+    // instead of producing 'YYYY-14-09'.
+    expect(parseDate("14/09/2024")).toBe(null);
+  });
+  it("rejects out-of-range day", () => {
+    expect(parseDate("2/35/2024")).toBe(null);
+  });
+  it("falls through to JS Date for long formats", () => {
+    expect(parseDate("September 14, 2024")).toBe("2024-09-14");
+  });
+  it("returns null for empty + garbage", () => {
+    expect(parseDate("")).toBe(null);
+    expect(parseDate("tomorrow")).toBe(null);
   });
 });
 

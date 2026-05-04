@@ -258,17 +258,36 @@ export function parseDate(dateStr: string): string | null {
   const s = dateStr.trim();
   if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
 
+  // Slash-separated MDY shapes. We assume US ordering (M/D/Y) — the
+  // operator base is US-only today and disambiguating M/D vs D/M
+  // without explicit locale signal would just silently miscategorize.
+  // What we DO check: the first number must be a valid month (1-12)
+  // and the second a valid day (1-31). When the first number is > 12
+  // (e.g. "14/09/2024"), we return null instead of producing a
+  // garbage 'YYYY-14-09' string — the caller surfaces a row error so
+  // the operator fixes the source instead of getting a silently
+  // mismangled event.
+  function buildIso(m: string, d: string, y: string): string | null {
+    const mi = parseInt(m, 10);
+    const di = parseInt(d, 10);
+    if (mi < 1 || mi > 12) return null;
+    if (di < 1 || di > 31) return null;
+    return `${y}-${String(mi).padStart(2, "0")}-${String(di).padStart(2, "0")}`;
+  }
+
   const mdyMatch = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
   if (mdyMatch) {
     const [, m, d, y] = mdyMatch;
-    return `${y}-${m.padStart(2, "0")}-${d.padStart(2, "0")}`;
+    const iso = buildIso(m, d, y);
+    if (iso) return iso;
   }
 
   const mdyShort = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2})$/);
   if (mdyShort) {
     const [, m, d, y] = mdyShort;
     const fullYear = parseInt(y) > 50 ? `19${y}` : `20${y}`;
-    return `${fullYear}-${m.padStart(2, "0")}-${d.padStart(2, "0")}`;
+    const iso = buildIso(m, d, fullYear);
+    if (iso) return iso;
   }
 
   const parsed = new Date(s);
@@ -334,15 +353,21 @@ export function normalizeTime(timeStr: string): string | null {
   if (ampmMatch) {
     let hours = parseInt(ampmMatch[1]);
     const minutes = ampmMatch[2];
+    // 12-hour clock: hour must be 1-12. '13:00 PM' is nonsense.
+    if (hours < 1 || hours > 12) return null;
     const ampm = ampmMatch[4].toUpperCase();
     if (ampm === "PM" && hours < 12) hours += 12;
     if (ampm === "AM" && hours === 12) hours = 0;
     return `${String(hours).padStart(2, "0")}:${minutes}`;
   }
   // Bare hour with AM/PM ('5 PM', '5pm') — accept and treat as :00.
+  // Hour must be 1-12; '13 PM' / '0 AM' are nonsense and return null
+  // so callers can surface a row error instead of silently producing
+  // a garbage 13:00.
   const ampmHourOnly = s.match(/^(\d{1,2})\s*([AaPp][Mm])$/);
   if (ampmHourOnly) {
     let hours = parseInt(ampmHourOnly[1]);
+    if (hours < 1 || hours > 12) return null;
     const ampm = ampmHourOnly[2].toUpperCase();
     if (ampm === "PM" && hours < 12) hours += 12;
     if (ampm === "AM" && hours === 12) hours = 0;
