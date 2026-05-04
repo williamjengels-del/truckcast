@@ -19,8 +19,9 @@ function getAdminClient() {
 
 /**
  * POST /api/team/invite
- * Body: { email, can_view_revenue, can_view_forecasts }
- * Invites a manager to the owner's account.
+ * Body: { email, financials_enabled? }
+ * Invites a manager to the owner's account. financials_enabled defaults
+ * to false — owner opts in deliberately.
  */
 export async function POST(request: Request) {
   const supabase = await createClient();
@@ -61,7 +62,7 @@ export async function POST(request: Request) {
     );
   }
 
-  const { email, can_view_revenue = false, can_view_forecasts = false } = await request.json();
+  const { email, financials_enabled = false } = await request.json();
 
   if (!email || typeof email !== "string") {
     return NextResponse.json({ error: "Email is required." }, { status: 400 });
@@ -89,8 +90,7 @@ export async function POST(request: Request) {
       owner_user_id: user.id,
       member_email: email.toLowerCase(),
       status: "pending",
-      can_view_revenue,
-      can_view_forecasts,
+      financials_enabled,
     });
 
   if (insertError) {
@@ -152,9 +152,9 @@ export async function GET() {
 
 /**
  * PATCH /api/team/invite
- * Body: { memberId, can_view_revenue?, can_view_forecasts? }
+ * Body: { memberId, financials_enabled }
  *
- * Update a manager's permission flags after invite. Only the
+ * Update a manager's Financials toggle after invite. Only the
  * caller's own team rows are mutable (RLS enforces this — the
  * "Owners manage their team" policy gates writes by
  * owner_user_id = auth.uid()), but we also gate by user.id in the
@@ -171,26 +171,16 @@ export async function PATCH(request: Request) {
     return NextResponse.json({ error: "memberId required" }, { status: 400 });
   }
 
-  // Build a partial update — only include keys that were explicitly
-  // sent. Lets the client toggle a single field without clobbering
-  // the other.
-  const updates: Record<string, boolean> = {};
-  if (typeof body.can_view_revenue === "boolean") {
-    updates.can_view_revenue = body.can_view_revenue;
-  }
-  if (typeof body.can_view_forecasts === "boolean") {
-    updates.can_view_forecasts = body.can_view_forecasts;
-  }
-  if (Object.keys(updates).length === 0) {
+  if (typeof body.financials_enabled !== "boolean") {
     return NextResponse.json(
-      { error: "No permission fields to update" },
+      { error: "financials_enabled (boolean) required" },
       { status: 400 }
     );
   }
 
   const { error: updateError } = await supabase
     .from("team_members")
-    .update(updates)
+    .update({ financials_enabled: body.financials_enabled })
     .eq("id", memberId)
     .eq("owner_user_id", user.id);
 
