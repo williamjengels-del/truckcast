@@ -41,6 +41,7 @@ export type AdminAction =
   | "user.mfa_reset"           // 2026-04-29 — admin reset of locked-out 2FA
   | "user.cap_override_set"    // 2026-04-29 — Tier-B monthly cap override set/cleared
   | "user.location_edit"       // 2026-05-03 — admin edit of operator city/state
+  | "user.onboarding_set"      // 2026-05-03 — admin flipped onboarding_completed
   | "event_alias.create"       // 2026-05-03 — admin alias map added
   | "event_alias.delete"       // 2026-05-03 — admin alias map removed
   | "event_alias.dismiss_suggestion"  // 2026-05-03 — admin marked a near-miss as not-an-alias
