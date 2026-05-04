@@ -12,6 +12,7 @@ import { ImpersonateButton } from "./impersonate-button";
 import { ResetTrialButton } from "./reset-trial-button";
 import { MfaResetButton } from "./mfa-reset-button";
 import { ChatCapOverride } from "./chat-cap-override";
+import { LocationEditCard } from "./location-edit-card";
 import { EventsAdminTable } from "./events-admin-table";
 import type { Event } from "@/lib/database.types";
 import { formatDate, formatTimestamp } from "@/lib/format-time";
@@ -364,6 +365,11 @@ export default async function UserDetailPage({ params }: PageProps) {
             currentOverrideCents={chatCapOverrideCents}
             envDefaultCents={chatCapEnvDefaultCents}
             spentCents={chatCapSpentCents}
+          />
+          <LocationEditCard
+            userId={profile.id}
+            initialCity={profile.city ?? null}
+            initialState={profile.state ?? null}
           />
           <p className="text-xs text-muted-foreground">
             For tier changes and trial extensions by custom day counts, use the
