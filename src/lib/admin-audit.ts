@@ -40,6 +40,7 @@ export type AdminAction =
   | "user.event_anomaly_flag"  // Commit 9
   | "user.mfa_reset"           // 2026-04-29 — admin reset of locked-out 2FA
   | "user.cap_override_set"    // 2026-04-29 — Tier-B monthly cap override set/cleared
+  | "user.location_edit"       // 2026-05-03 — admin edit of operator city/state
   // testimonial.*
   | "testimonial.create"
   | "testimonial.update"
