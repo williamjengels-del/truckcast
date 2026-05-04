@@ -278,16 +278,38 @@ export async function updateSession(request: NextRequest) {
       }
     }
 
-    // 1. Onboarding gate — if setup never completed, send them back to the wizard
-    //    (exempt the onboarding page itself so we don't loop)
-    if (profile && !profile.onboarding_completed && !isOnboardingRoute) {
+    // 1. Onboarding gate — if setup never completed, send them back to
+    //    the wizard (exempt the onboarding page itself so we don't loop).
+    //
+    //    Managers are exempt entirely. The /dashboard/team/accept flow
+    //    normalizes manager profiles with onboarding_completed=false
+    //    on purpose (so they can never accidentally complete the
+    //    operator wizard), and /dashboard/onboarding itself is on
+    //    MANAGER_BLOCKED_PATHS — so without this exemption the gate
+    //    bounces them between /dashboard and /dashboard/onboarding
+    //    forever (browser-side ERR_TOO_MANY_REDIRECTS). Surfaced
+    //    2026-05-04 when Rohini hit the loop on real login.
+    if (
+      profile &&
+      !profile.onboarding_completed &&
+      !isOnboardingRoute &&
+      !profile.owner_user_id
+    ) {
       const url = request.nextUrl.clone();
       url.pathname = "/dashboard/onboarding";
       return NextResponse.redirect(url);
     }
 
-    // 2. Trial gate — skip for exempt paths and the onboarding wizard
-    if (profile && !profile.stripe_subscription_id && !isTrialExempt && !isOnboardingRoute) {
+    // 2. Trial gate — skip for exempt paths, the onboarding wizard,
+    //    and managers (they don't have a subscription of their own —
+    //    the owner pays).
+    if (
+      profile &&
+      !profile.stripe_subscription_id &&
+      !isTrialExempt &&
+      !isOnboardingRoute &&
+      !profile.owner_user_id
+    ) {
       const now = new Date();
 
       // Admin-granted trial extension takes priority over created_at calculation
