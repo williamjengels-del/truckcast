@@ -75,6 +75,12 @@ interface EventFormProps {
    * the prior 3 days.
    */
   recentEventsForLinkage?: Event[];
+  /** Owner viewers + admins always true. Manager viewers only when
+   *  their owner has flipped Financials access on. When false, hide
+   *  the Net Sales / Invoice / Food Cost / Forecast sections —
+   *  manager can still edit operational fields (date, name, contact,
+   *  notes) without touching money. */
+  canSeeFinancials?: boolean;
 }
 
 export function EventForm({
@@ -86,6 +92,7 @@ export function EventForm({
   profileState,
   recentStates = [],
   recentEventsForLinkage = [],
+  canSeeFinancials: financialsVisible = true,
 }: EventFormProps) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -740,8 +747,11 @@ export function EventForm({
                   </Select>
                 </div>
               </div>
-              {/* Show net sales in simple mode only if past event */}
-              {(!advancedMode && isPastEvent) || advancedMode ? (
+              {/* Show net sales in simple mode only if past event.
+                  Hidden entirely for managers without Financials
+                  access — operations users edit dates/contacts/notes
+                  but don't touch money. */}
+              {financialsVisible && ((!advancedMode && isPastEvent) || advancedMode) ? (
                 <div className="space-y-2">
                   <Label htmlFor="net_sales">
                     {eventMode === "catering" ? "On-site Sales ($)" : "Net Sales ($)"}
@@ -762,8 +772,8 @@ export function EventForm({
                   )}
                 </div>
               ) : null}
-              {/* Invoice revenue — catering events only */}
-              {eventMode === "catering" && ((!advancedMode && isPastEvent) || advancedMode) && (
+              {/* Invoice revenue — catering events only, financials-gated */}
+              {financialsVisible && eventMode === "catering" && ((!advancedMode && isPastEvent) || advancedMode) && (
                 <div className="space-y-2">
                   <Label htmlFor="invoice_revenue">Invoice Amount ($)</Label>
                   <Input
@@ -961,7 +971,9 @@ export function EventForm({
                 </div>
               </div>
 
-              {/* Fees */}
+              {/* Fees — financials-gated. Manager-without-Financials
+                  doesn't set fee structure or sales minimums. */}
+              {financialsVisible && (
               <div className="space-y-4">
                 <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">
                   Fees
@@ -1042,8 +1054,10 @@ export function EventForm({
                   </div>
                 )}
               </div>
+              )}
 
-              {/* Event Costs */}
+              {/* Event Costs — financials-gated */}
+              {financialsVisible && (
               <div className="space-y-4">
                 <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">
                   Event Costs
@@ -1124,6 +1138,7 @@ export function EventForm({
                   })()
                 )}
               </div>
+              )}
 
               {/* Sales & Weather */}
               <div className="space-y-4">

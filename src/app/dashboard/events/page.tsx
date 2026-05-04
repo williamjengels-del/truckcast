@@ -2,8 +2,9 @@ import type { Metadata } from "next";
 export const metadata: Metadata = { title: "Events" };
 
 import { Suspense } from "react";
-import { resolveScopedSupabase } from "@/lib/dashboard-scope";
+import { resolveScopedSupabase, canSeeFinancials } from "@/lib/dashboard-scope";
 import { EventsClient } from "./events-client";
+import { stripFinancialFields } from "@/lib/event-financials";
 import type { Event, Profile } from "@/lib/database.types";
 
 async function EventsContent() {
@@ -16,9 +17,11 @@ async function EventsContent() {
   let events: Event[] = [];
   let profile: Profile | null = null;
   let realUserId = "";
+  let financialsVisible = true;
 
   if (scope.kind !== "unauthorized") {
     realUserId = scope.realUserId;
+    financialsVisible = canSeeFinancials(scope);
     const [eventsResult, profileResult] = await Promise.all([
       scope.client
         .from("events")
@@ -27,7 +30,13 @@ async function EventsContent() {
         .order("event_date", { ascending: false }),
       scope.client.from("profiles").select("*").eq("id", scope.userId).single(),
     ]);
-    events = (eventsResult.data ?? []) as Event[];
+    const rawEvents = (eventsResult.data ?? []) as Event[];
+    // Manager without Financials access: strip dollar columns so the
+    // existing client UI naturally renders nothing for them (fall-
+    // through nulls already collapse the display) — defense-in-depth
+    // alongside the explicit `canSeeFinancials` prop, which also hides
+    // sales-entry CTAs that would otherwise render for null values.
+    events = financialsVisible ? rawEvents : rawEvents.map(stripFinancialFields);
     profile = (profileResult.data ?? null) as Profile | null;
   }
 
@@ -38,6 +47,7 @@ async function EventsContent() {
       businessName={profile?.business_name ?? ""}
       userCity={profile?.city ?? ""}
       userState={profile?.state ?? ""}
+      canSeeFinancials={financialsVisible}
     />
   );
 }

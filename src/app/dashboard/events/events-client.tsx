@@ -113,6 +113,12 @@ interface EventsClientProps {
   userCity?: string;
   /** Operator's profile state code — pinned to top of dropdown, not a default. */
   userState?: string;
+  /** Owner viewers + admins always true. Manager viewers only when their
+   *  owner has flipped Financials access on. When false, hide all
+   *  sales-entry CTAs (the dollar fields are already null'd server-
+   *  side, so headline numbers and forecast inlines collapse on their
+   *  own). */
+  canSeeFinancials?: boolean;
 }
 
 // WMO weather code to icon/label
@@ -413,6 +419,10 @@ interface ListViewProps {
   // is requested. The ring + bg-orange/10 fade on a setTimeout in
   // EventsClient.
   highlightedEventId: string | null;
+  /** Hides Enter-sales / log-revenue CTAs for managers without
+   *  Financials access. The dollar columns themselves are already
+   *  null'd server-side, so the rest of the UI collapses naturally. */
+  financialsVisible: boolean;
 }
 
 function ListView({
@@ -446,6 +456,7 @@ function ListView({
   tableDensity,
   handleTableDensity,
   highlightedEventId,
+  financialsVisible,
 }: ListViewProps) {
   function carryOverLabel(event: Event): string | null {
     if (!event.caused_by_event_id) return null;
@@ -629,7 +640,7 @@ function ListView({
                   : isCatering && (event.invoice_revenue ?? 0) > 0
                     ? (event.net_sales ?? 0) + (event.invoice_revenue ?? 0)
                     : event.net_sales;
-                const needsSales = event.event_date <= today && !event.net_sales && !event.cancellation_reason && !(isCatering && (event.invoice_revenue ?? 0) > 0);
+                const needsSales = financialsVisible && event.event_date <= today && !event.net_sales && !event.cancellation_reason && !(isCatering && (event.invoice_revenue ?? 0) > 0);
                 const isUnbookedFuture = !event.booked && event.event_date >= today && !event.cancellation_reason;
                 return (
                   <button
@@ -1027,7 +1038,8 @@ function ListView({
                             (Enter sales / Disrupted / Charity). Other rows
                             in needs_attention (missing weather/location/type)
                             get standard actions; tab change doesn't gate. */}
-                        {activeTab === "needs_attention" &&
+                        {financialsVisible &&
+                        activeTab === "needs_attention" &&
                         event.event_date < today &&
                         event.booked &&
                         !event.cancellation_reason &&
@@ -1095,7 +1107,7 @@ function ListView({
                                 {bookingId === event.id ? "Booking..." : "Book It"}
                               </Button>
                             )}
-                            {event.event_date <= today && !event.net_sales && (
+                            {financialsVisible && event.event_date <= today && !event.net_sales && (
                               <Button
                                 variant="ghost"
                                 size="icon"
@@ -1150,7 +1162,7 @@ function ListView({
   );
 }
 
-export function EventsClient({ initialEvents, userId = "", businessName = "", userCity = "", userState = "" }: EventsClientProps) {
+export function EventsClient({ initialEvents, userId = "", businessName = "", userCity = "", userState = "", canSeeFinancials: financialsVisible = true }: EventsClientProps) {
   // Distinct state codes used by this operator's events — floats to
   // top of EventForm's state dropdown after the profile state.
   const recentStates = useMemo(() => {
@@ -2521,6 +2533,7 @@ export function EventsClient({ initialEvents, userId = "", businessName = "", us
             tableDensity={tableDensity}
             handleTableDensity={handleTableDensity}
             highlightedEventId={highlightedEventId}
+            financialsVisible={financialsVisible}
           />
         </>
       )}
@@ -2578,6 +2591,7 @@ export function EventsClient({ initialEvents, userId = "", businessName = "", us
         profileState={userState}
         recentStates={recentStates}
         recentEventsForLinkage={initialEvents}
+        canSeeFinancials={financialsVisible}
       />
 
       {/* Edit Event Dialog — always mounted so Base UI dialog can open/close correctly */}
@@ -2590,6 +2604,7 @@ export function EventsClient({ initialEvents, userId = "", businessName = "", us
         profileState={userState}
         recentStates={recentStates}
         recentEventsForLinkage={initialEvents}
+        canSeeFinancials={financialsVisible}
       />
 
       {/* Duplicate Event Dialog — opens a pre-filled create form with cleared sales/dates */}
@@ -2602,6 +2617,7 @@ export function EventsClient({ initialEvents, userId = "", businessName = "", us
         profileState={userState}
         recentStates={recentStates}
         recentEventsForLinkage={initialEvents}
+        canSeeFinancials={financialsVisible}
       />
 
       {/* Sales Entry Dialog — always mounted for same reason */}

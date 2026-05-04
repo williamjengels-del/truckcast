@@ -41,6 +41,10 @@ interface Props {
   supabase: SupabaseClient<any, "public", any>;
   userId: string;
   subscriptionTier: SubscriptionTier;
+  /** Hide sales pace + Log-sales CTA + after-event wrap-up for managers
+   *  whose owner has not granted Financials access. Defaults to true so
+   *  owners + admins keep full visibility. */
+  canSeeFinancials?: boolean;
 }
 
 const WIND_ALERT_THRESHOLD_MPH = 20; // Spec §5: canopy threshold.
@@ -160,6 +164,7 @@ export async function DayOfEventBlock({
   supabase,
   userId,
   subscriptionTier,
+  canSeeFinancials = true,
 }: Props) {
   const isPaidTier = subscriptionTier === "pro" || subscriptionTier === "premium";
   const isPremium = subscriptionTier === "premium";
@@ -278,6 +283,7 @@ export async function DayOfEventBlock({
   // event with no sales recorded (or any past row that slipped past
   // the cutoff), mirroring the unloggedEvents filter on page.tsx.
   const showLogSales =
+    canSeeFinancials &&
     event.event_date <= today &&
     event.net_sales === null &&
     !(event.event_mode === "catering" && event.invoice_revenue > 0);
@@ -289,7 +295,7 @@ export async function DayOfEventBlock({
             when a today event has just ended without a summary.
             Operator can fill or skip; "Skip for now" hides locally,
             saving for the events page. */}
-        {state.needsWrapUp && (
+        {canSeeFinancials && state.needsWrapUp && (
           <AfterEventSummary
             eventId={state.needsWrapUp.id}
             eventName={state.needsWrapUp.event_name}
@@ -576,8 +582,9 @@ export async function DayOfEventBlock({
         </div>
 
         {/* Sales pace bar — only on today's event. Hidden for catering
-            (compare-against-invoice is out of scope for v1). */}
-        {isToday && event.event_mode !== "catering" && (
+            (compare-against-invoice is out of scope for v1) and for
+            managers without Financials access (revenue display). */}
+        {canSeeFinancials && isToday && event.event_mode !== "catering" && (
           <div className="pt-2 border-t border-border/40">
             <SalesPaceBar
               currentSales={event.net_sales ?? 0}

@@ -63,6 +63,11 @@ export type DashboardScope =
       realUserId: string; // manager's own id
       client: SupabaseClient;
       isImpersonating: false;
+      // Owner-controlled, off by default. When false, managers cannot
+      // see revenue, forecasts, post-event sales entry, or historical
+      // performance data. Operations access (events, inquiries,
+      // calendar, contacts, notes) is independent of this flag.
+      financialsEnabled: boolean;
     }
   | {
       kind: "impersonating";
@@ -76,6 +81,16 @@ export type DashboardScope =
   | {
       kind: "unauthorized";
     };
+
+/**
+ * Can the current viewer see revenue, forecasts, sales entry, and
+ * historical performance? Owners + impersonating admins always can.
+ * Managers only when their owner has flipped financials_enabled on.
+ */
+export function canSeeFinancials(scope: DashboardScope): boolean {
+  if (scope.kind === "manager") return scope.financialsEnabled;
+  return scope.kind === "normal" || scope.kind === "impersonating";
+}
 
 /**
  * Resolve the current dashboard scope.
@@ -139,12 +154,26 @@ export async function resolveScopedSupabase(): Promise<DashboardScope> {
   const ownerId = (profile as { owner_user_id: string | null } | null)
     ?.owner_user_id;
   if (ownerId) {
+    // Fetch the manager's Financials toggle. Default to false on any
+    // failure — conservative bias keeps the owner-private money data
+    // out of view if we can't verify the grant.
+    const { data: membership } = await rlsClient
+      .from("team_members")
+      .select("financials_enabled")
+      .eq("member_user_id", user.id)
+      .eq("owner_user_id", ownerId)
+      .eq("status", "active")
+      .maybeSingle();
+    const financialsEnabled =
+      (membership as { financials_enabled: boolean | null } | null)
+        ?.financials_enabled === true;
     return {
       kind: "manager",
       userId: ownerId,
       realUserId: user.id,
       client: rlsClient,
       isImpersonating: false,
+      financialsEnabled,
     };
   }
 
