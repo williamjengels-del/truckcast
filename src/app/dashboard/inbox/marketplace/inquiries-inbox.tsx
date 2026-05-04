@@ -150,7 +150,7 @@ export function InquiriesInbox({
     if (next) params.set("event_type", next);
     else params.delete("event_type");
     const qs = params.toString();
-    router.replace(qs ? `/dashboard/inquiries?${qs}` : `/dashboard/inquiries`);
+    router.replace(qs ? `/dashboard/inbox/marketplace?${qs}` : `/dashboard/inbox/marketplace`);
   }
   const [claimedEventByInquiry, setClaimedEventByInquiry] = useState(
     initialClaimedEventByInquiry
