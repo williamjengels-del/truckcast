@@ -6,7 +6,10 @@ import { Button } from "@/components/ui/button";
 import { FindVendorLink } from "@/components/find-vendor-link";
 import { MarketingFooter } from "@/components/marketing-footer";
 import { RoiCalculator } from "@/components/roi-calculator";
-import { WEATHER_COEFFICIENTS } from "@/lib/constants";
+import {
+  WEATHER_LOSS_PER_EVENT,
+  WEATHER_LOSS_LAST_REVIEWED,
+} from "@/lib/homepage-stats";
 import {
   BarChart3,
   CalendarDays,
@@ -24,12 +27,6 @@ export const metadata: Metadata = {
   description:
     "Inquiries, bookings, calendar, sales, and forecasts — in one place. Built by a food truck operator. For mobile vendors.",
 };
-
-/* Julian's Supabase user_id — only operator with enough history to anchor
-   a credible "average loss per event" number on the marketing page. Keep
-   the query server-side-only via the service role key; homepage is public
-   but we only read an aggregate, not per-row data. */
-const JULIAN_USER_ID = "7f97040f-023d-4604-8b66-f5aa321c31de";
 
 function withTimeout<T>(promise: PromiseLike<T>, ms: number, fallback: T): Promise<T> {
   return Promise.race([
@@ -57,50 +54,16 @@ async function getEventCount(): Promise<number> {
   }
 }
 
-/** Weather-loss dollars = Julian's avg logged net_sales × (1 − Storms coefficient).
- *  Storms is the worst common disruption (0.30 ≈ 70% revenue loss per storm day).
- *  Returns a pre-formatted string ("$740") when the query succeeds, or the
- *  literal placeholder "{{WEATHER_LOSS_DOLLARS}}" when it can't — lets the
- *  homepage still render during builds without Supabase env vars. */
-async function getWeatherLossDollars(): Promise<string> {
-  if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
-    return "{{WEATHER_LOSS_DOLLARS}}";
-  }
-  try {
-    const serviceClient = createServiceClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL,
-      process.env.SUPABASE_SERVICE_ROLE_KEY
-    );
-    const query = serviceClient
-      .from("events")
-      .select("net_sales")
-      .eq("user_id", JULIAN_USER_ID)
-      .not("net_sales", "is", null)
-      .then(({ data }) => {
-        if (!data || data.length === 0) return null;
-        const total = data.reduce((sum, row) => sum + Number(row.net_sales ?? 0), 0);
-        const avg = total / data.length;
-        const loss = avg * (1 - WEATHER_COEFFICIENTS.Storms);
-        const rounded = Math.round(loss / 50) * 50; // snap to nearest $50
-        return `$${rounded.toLocaleString()}`;
-      });
-    const result = await withTimeout<string | null>(query, 3000, null);
-    return result ?? "{{WEATHER_LOSS_DOLLARS}}";
-  } catch {
-    return "{{WEATHER_LOSS_DOLLARS}}";
-  }
-}
-
-/** Apply numeric-emphasis classes only when the value is a resolved number.
- *  Placeholders get muted, normal-size treatment so they read as pending
- *  rather than shouting a literal template string. Resolved values use
- *  brand-teal so the homepage's data anchors carry brand presence into
- *  the body content, not just the hero band. */
-function isResolvedValue(s: string): boolean {
-  return !/^\{\{.*\}\}$/.test(s);
-}
 const EMPHASIS_RESOLVED = "text-4xl font-bold text-brand-teal";
-const EMPHASIS_PLACEHOLDER = "text-xl font-normal text-muted-foreground";
+
+function formatLastReviewed(iso: string): string {
+  const d = new Date(`${iso}T00:00:00Z`);
+  return d.toLocaleDateString("en-US", {
+    month: "long",
+    year: "numeric",
+    timeZone: "UTC",
+  });
+}
 
 const FEATURE_CARDS = [
   {
@@ -141,11 +104,9 @@ const FEATURE_CARDS = [
 ];
 
 export default async function LandingPage() {
-  const [eventCount, weatherLossDollars] = await Promise.all([
-    getEventCount(),
-    getWeatherLossDollars(),
-  ]);
-  const weatherEmphasis = isResolvedValue(weatherLossDollars) ? EMPHASIS_RESOLVED : EMPHASIS_PLACEHOLDER;
+  const eventCount = await getEventCount();
+  const weatherLossDollars = `$${WEATHER_LOSS_PER_EVENT.toLocaleString()}`;
+  const weatherLossReviewedLabel = formatLastReviewed(WEATHER_LOSS_LAST_REVIEWED);
 
   // Diagonal tint pairing (Row1:L + Row2:R share one tint, others share the other).
   // On desktop this is literal diagonal; on mobile it becomes alternating bands.
@@ -253,7 +214,7 @@ export default async function LandingPage() {
               <p className="text-lg font-semibold">
                 <span
                   data-testid="insight-finding-weather"
-                  className={weatherEmphasis}
+                  className={EMPHASIS_RESOLVED}
                 >
                   {weatherLossDollars}
                 </span>{" "}
@@ -261,6 +222,12 @@ export default async function LandingPage() {
               </p>
               <p className="text-sm text-muted-foreground">
                 Rain, heat, cold snaps — VendCast knows the patterns.
+              </p>
+              <p
+                className="text-xs text-muted-foreground/80"
+                data-testid="insight-finding-weather-footnote"
+              >
+                Average loss per weather-disrupted event, based on VendCast operator data. Last reviewed {weatherLossReviewedLabel}.
               </p>
             </div>
 
