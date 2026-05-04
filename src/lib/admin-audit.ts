@@ -43,6 +43,7 @@ export type AdminAction =
   | "user.location_edit"       // 2026-05-03 — admin edit of operator city/state
   | "event_alias.create"       // 2026-05-03 — admin alias map added
   | "event_alias.delete"       // 2026-05-03 — admin alias map removed
+  | "event_alias.dismiss_suggestion"  // 2026-05-03 — admin marked a near-miss as not-an-alias
   // testimonial.*
   | "testimonial.create"
   | "testimonial.update"
