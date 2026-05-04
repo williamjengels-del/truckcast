@@ -151,6 +151,57 @@ export async function GET() {
 }
 
 /**
+ * PATCH /api/team/invite
+ * Body: { memberId, can_view_revenue?, can_view_forecasts? }
+ *
+ * Update a manager's permission flags after invite. Only the
+ * caller's own team rows are mutable (RLS enforces this — the
+ * "Owners manage their team" policy gates writes by
+ * owner_user_id = auth.uid()), but we also gate by user.id in the
+ * WHERE clause as belt-and-suspenders.
+ */
+export async function PATCH(request: Request) {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  const body = await request.json();
+  const memberId = typeof body.memberId === "string" ? body.memberId : null;
+  if (!memberId) {
+    return NextResponse.json({ error: "memberId required" }, { status: 400 });
+  }
+
+  // Build a partial update — only include keys that were explicitly
+  // sent. Lets the client toggle a single field without clobbering
+  // the other.
+  const updates: Record<string, boolean> = {};
+  if (typeof body.can_view_revenue === "boolean") {
+    updates.can_view_revenue = body.can_view_revenue;
+  }
+  if (typeof body.can_view_forecasts === "boolean") {
+    updates.can_view_forecasts = body.can_view_forecasts;
+  }
+  if (Object.keys(updates).length === 0) {
+    return NextResponse.json(
+      { error: "No permission fields to update" },
+      { status: 400 }
+    );
+  }
+
+  const { error: updateError } = await supabase
+    .from("team_members")
+    .update(updates)
+    .eq("id", memberId)
+    .eq("owner_user_id", user.id);
+
+  if (updateError) {
+    return NextResponse.json({ error: updateError.message }, { status: 500 });
+  }
+
+  return NextResponse.json({ ok: true });
+}
+
+/**
  * DELETE /api/team/invite
  * Body: { memberId }
  * Revokes a manager's access.
