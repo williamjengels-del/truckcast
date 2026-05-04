@@ -1,3 +1,14 @@
+// Browser-side Sentry init. In Sentry 10 + Next 15/16 this file is
+// the canonical entry point for the client SDK — the legacy
+// `sentry.client.config.ts` filename at the project root is no
+// longer auto-detected. Without this file no Sentry browser code
+// loads, no errors ship from the browser, and `Sentry` isn't even
+// available on the page bundle.
+//
+// onRouterTransitionStart is the App Router equivalent of the
+// pageload-tx hook — has to be re-exported here so Sentry can wire
+// it into client-side navigations.
+
 import * as Sentry from "@sentry/nextjs";
 
 Sentry.init({
@@ -22,3 +33,5 @@ Sentry.init({
     /^Load failed/,
   ],
 });
+
+export const onRouterTransitionStart = Sentry.captureRouterTransitionStart;
