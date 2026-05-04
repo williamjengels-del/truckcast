@@ -96,7 +96,7 @@ export function MobileNav() {
         <nav className="flex-1 overflow-y-auto px-3 py-4 space-y-1">
           {navItems
             .filter((item) => {
-              if (isManager) return ["/dashboard", "/dashboard/events", "/dashboard/settings"].includes(item.href);
+              if (isManager) return ["/dashboard", "/dashboard/events", "/dashboard/inquiries", "/dashboard/settings"].includes(item.href);
               return !item.tier || item.tier === tier;
             })
             .map((item) => {

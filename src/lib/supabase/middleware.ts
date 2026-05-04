@@ -25,6 +25,29 @@ const TRIAL_GATE_EXEMPT = [
 ];
 
 /**
+ * Owner-only dashboard routes — bounce managers to /dashboard.
+ *
+ *   - /dashboard/insights — analytics + reports (revenue-heavy)
+ *   - /dashboard/integrations — POS connections + CSV import (data
+ *     ingestion is owner-controlled)
+ *   - /dashboard/forecasts — forecasting calculator (financial)
+ *   - /dashboard/onboarding — owner-only (managers run a separate
+ *     accept-invite flow at /dashboard/team/accept)
+ *   - /dashboard/upgrade — billing surface
+ *
+ * /dashboard/admin is gated separately by the admin allowlist; not
+ * listed here because admins aren't managers (they're a disjoint set
+ * — admin allowlist is by email, manager state is by team_members).
+ */
+const MANAGER_BLOCKED_PATHS = [
+  "/dashboard/insights",
+  "/dashboard/integrations",
+  "/dashboard/forecasts",
+  "/dashboard/onboarding",
+  "/dashboard/upgrade",
+];
+
+/**
  * Returns a 403 response when the request is a mutation under an active
  * impersonation session, null otherwise. Runs as the very first gate in
  * updateSession — cheap cookie-presence check, no DB/auth work needed
@@ -233,12 +256,27 @@ export async function updateSession(request: NextRequest) {
     const isOnboardingRoute = pathname.startsWith("/dashboard/onboarding");
     const isTrialExempt = TRIAL_GATE_EXEMPT.some((p) => pathname.startsWith(p));
 
-    // Single profile fetch covers both gates
+    // Single profile fetch covers all dashboard gates (onboarding,
+    // trial, manager owner-only-route block).
     const { data: profile } = await supabase
       .from("profiles")
-      .select("created_at, stripe_subscription_id, trial_extended_until, onboarding_completed")
+      .select("created_at, stripe_subscription_id, trial_extended_until, onboarding_completed, owner_user_id")
       .eq("id", user.id)
       .single();
+
+    // Owner-only-route gate. If this user is a manager (owner_user_id
+    // is set) and the path is on the block list, send them to the
+    // dashboard root. Sidebar already hides these links for managers
+    // (sidebar.tsx filter), but URL-bar navigation still reaches the
+    // page without a server-side block.
+    if (profile?.owner_user_id) {
+      const blocked = MANAGER_BLOCKED_PATHS.some((p) => pathname.startsWith(p));
+      if (blocked) {
+        const url = request.nextUrl.clone();
+        url.pathname = "/dashboard";
+        return NextResponse.redirect(url);
+      }
+    }
 
     // 1. Onboarding gate — if setup never completed, send them back to the wizard
     //    (exempt the onboarding page itself so we don't loop)
