@@ -2,7 +2,6 @@ import {
   LayoutDashboard,
   Calendar,
   Inbox,
-  Megaphone,
   Users,
   Sparkles,
   Plug,
@@ -18,16 +17,15 @@ export interface NavItem {
   tier?: SubscriptionTier;
 }
 
-// 7-item IA post-Phase-4. Insights consolidates Forecasts + Performance +
-// Analytics + Reports as tabs; Integrations consolidates POS + CSV Import;
-// Contacts consolidates Organizers + Followers.
+// 7-item IA post-Phase-4. Inbox consolidates direct booking requests
+// + marketplace inquiries as tabs (was two sidebar items, merged
+// 2026-05-03 because they're the same triage motion to the operator).
+// Insights consolidates Forecasts + Performance + Analytics + Reports
+// as tabs; Integrations consolidates POS + CSV Import; Contacts
+// consolidates Organizers + Followers.
 export const navItems: NavItem[] = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
-  { href: "/dashboard/bookings", label: "Inbox", icon: Inbox },
-  // Phase 7 marketplace inquiry inbox — separate from /bookings (which
-  // is the 1:1 direct-to-operator booking flow). Inquiries here are
-  // routed to multiple operators via city + event_type matching.
-  { href: "/dashboard/inquiries", label: "Inquiries", icon: Megaphone },
+  { href: "/dashboard/inbox", label: "Inbox", icon: Inbox },
   { href: "/dashboard/events", label: "Events", icon: Calendar },
   { href: "/dashboard/contacts", label: "Contacts", icon: Users },
   { href: "/dashboard/insights", label: "Insights", icon: Sparkles },

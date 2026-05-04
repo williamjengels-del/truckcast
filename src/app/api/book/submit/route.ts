@@ -182,7 +182,7 @@ async function notifyOperatorOfBooking(
   const result = await sendPushToSubscriptions(subs as PushSubscriptionRow[], {
     title: "New booking inquiry",
     body,
-    url: "/dashboard/bookings",
+    url: "/dashboard/inbox/direct",
     tag: `booking-${booking.bookingId}`,
   });
 

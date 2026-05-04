@@ -96,7 +96,7 @@ export function MobileNav() {
         <nav className="flex-1 overflow-y-auto px-3 py-4 space-y-1">
           {navItems
             .filter((item) => {
-              if (isManager) return ["/dashboard", "/dashboard/events", "/dashboard/inquiries", "/dashboard/settings"].includes(item.href);
+              if (isManager) return ["/dashboard", "/dashboard/events", "/dashboard/inbox", "/dashboard/settings"].includes(item.href);
               return !item.tier || item.tier === tier;
             })
             .map((item) => {
@@ -121,7 +121,7 @@ export function MobileNav() {
                       {unloggedCount > 99 ? "99+" : unloggedCount}
                     </span>
                   )}
-                  {item.href === "/dashboard/inquiries" && openInquiryCount > 0 && (
+                  {item.href === "/dashboard/inbox" && openInquiryCount > 0 && (
                     <span className="ml-auto flex h-5 min-w-5 items-center justify-center rounded-full bg-amber-500 px-1.5 text-[10px] font-bold text-white">
                       {openInquiryCount > 99 ? "99+" : openInquiryCount}
                     </span>

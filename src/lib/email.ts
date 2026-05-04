@@ -292,7 +292,7 @@ export async function sendBookingInquiryEmail(
         <tbody>${detailsHtml}</tbody>
       </table>
       ${messageBlock}
-      <a href="${APP_URL}/dashboard/bookings" style="display:inline-block;background:#f97316;color:white;font-weight:600;font-size:15px;padding:12px 28px;border-radius:8px;text-decoration:none;margin-top:16px;">
+      <a href="${APP_URL}/dashboard/inbox/direct" style="display:inline-block;background:#f97316;color:white;font-weight:600;font-size:15px;padding:12px 28px;border-radius:8px;text-decoration:none;margin-top:16px;">
         Open Inbox →
       </a>
       <p style="margin:24px 0 0;font-size:13px;color:#9ca3af;">
@@ -449,7 +449,7 @@ export async function sendInquiryNotificationEmail(
         <tbody>${detailsHtml}</tbody>
       </table>
       ${notesBlock}
-      <a href="${APP_URL}/dashboard/inquiries" style="display:inline-block;background:#f97316;color:white;font-weight:600;font-size:15px;padding:12px 28px;border-radius:8px;text-decoration:none;margin-top:16px;">
+      <a href="${APP_URL}/dashboard/inbox/marketplace" style="display:inline-block;background:#f97316;color:white;font-weight:600;font-size:15px;padding:12px 28px;border-radius:8px;text-decoration:none;margin-top:16px;">
         Open Inbox →
       </a>
       <p style="margin:24px 0 0;font-size:13px;color:#9ca3af;">

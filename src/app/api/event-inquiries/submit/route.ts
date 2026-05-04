@@ -339,7 +339,7 @@ async function pushOperator(
   const result = await sendPushToSubscriptions(subs as PushSubscriptionRow[], {
     title: "New event request",
     body,
-    url: "/dashboard/inquiries",
+    url: "/dashboard/inbox/marketplace",
     tag: `inquiry-${payload.inquiryId}`,
   });
 
