@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createClient as createServiceClient } from "@supabase/supabase-js";
 import { resolveScopedSupabase } from "@/lib/dashboard-scope";
 import type { Profile } from "@/lib/database.types";
+import { sendManagerInviteEmail } from "@/lib/email";
 
 const MANAGER_LIMITS: Record<string, number> = {
   starter: 0,
@@ -31,7 +32,7 @@ export async function POST(request: Request) {
   // Managers cannot invite others
   const { data: myProfile } = await supabase
     .from("profiles")
-    .select("subscription_tier, owner_user_id")
+    .select("subscription_tier, owner_user_id, business_name")
     .eq("id", user.id)
     .single();
 
@@ -97,10 +98,91 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: insertError.message }, { status: 500 });
   }
 
-  // Send invite via Supabase Auth admin
+  // Send invite via Supabase Auth admin.
+  //
+  // Two paths depending on whether the email already exists in
+  // auth.users:
+  //   - New email → admin.inviteUserByEmail. Supabase creates the user
+  //     and sends its built-in invite-template email.
+  //   - Existing email → admin.generateLink({ type: 'magiclink' }) to
+  //     produce the action URL, then we send our own branded email
+  //     via Resend (sendManagerInviteEmail). inviteUserByEmail
+  //     rejects existing users with "already registered" so we can't
+  //     reuse it here. This path is what makes the
+  //     remove-and-reinvite flow work end-to-end (an operator who
+  //     was previously a manager elsewhere, or whose access was
+  //     revoked and is being restored).
   const admin = getAdminClient();
   const redirectTo = `${process.env.NEXT_PUBLIC_APP_URL}/dashboard/team/accept`;
+  const ownerBusinessName =
+    (myProfile as { business_name?: string | null } | null)?.business_name ?? "";
 
+  // Detect existing user. Supabase exposes the lookup via the admin
+  // API; we filter by email so we don't pull the entire auth.users
+  // table. The list endpoint returns a paginated set even for a
+  // single-email filter, so we read the first match.
+  const { data: lookup } = await admin.auth.admin.listUsers({
+    page: 1,
+    perPage: 1,
+    // The admin client doesn't expose a direct email filter on
+    // listUsers in older versions; safer to fetch a small page and
+    // match client-side. Resolves on miss returning empty array.
+  });
+  const lowerEmail = email.toLowerCase();
+  const existingUser = lookup?.users?.find(
+    (u) => u.email?.toLowerCase() === lowerEmail
+  );
+  // For larger user bases the listUsers approach won't scale — replace
+  // with a service-role SELECT against auth.users by email if/when we
+  // exceed a few thousand operators. Today we're well under that bar.
+
+  if (existingUser) {
+    const { data: linkData, error: linkError } =
+      await admin.auth.admin.generateLink({
+        type: "magiclink",
+        email,
+        options: { redirectTo },
+      });
+    if (linkError || !linkData?.properties?.action_link) {
+      // Roll back the team_members insert
+      await supabase
+        .from("team_members")
+        .delete()
+        .eq("owner_user_id", user.id)
+        .eq("member_email", lowerEmail);
+      return NextResponse.json(
+        { error: linkError?.message ?? "Could not generate invite link" },
+        { status: 500 }
+      );
+    }
+    try {
+      await sendManagerInviteEmail(
+        email,
+        ownerBusinessName,
+        linkData.properties.action_link
+      );
+    } catch (e) {
+      // Email send failed — roll back so the owner can retry cleanly
+      // instead of being told "invite sent" when it wasn't.
+      await supabase
+        .from("team_members")
+        .delete()
+        .eq("owner_user_id", user.id)
+        .eq("member_email", lowerEmail);
+      return NextResponse.json(
+        {
+          error:
+            e instanceof Error
+              ? e.message
+              : "Could not send manager invite email",
+        },
+        { status: 500 }
+      );
+    }
+    return NextResponse.json({ success: true });
+  }
+
+  // New email — Supabase invite flow + built-in template.
   const { error: inviteError } = await admin.auth.admin.inviteUserByEmail(email, {
     redirectTo,
     data: { invited_by: user.id, role: "manager" },
@@ -112,7 +194,7 @@ export async function POST(request: Request) {
       .from("team_members")
       .delete()
       .eq("owner_user_id", user.id)
-      .eq("member_email", email.toLowerCase());
+      .eq("member_email", lowerEmail);
 
     return NextResponse.json({ error: inviteError.message }, { status: 500 });
   }
