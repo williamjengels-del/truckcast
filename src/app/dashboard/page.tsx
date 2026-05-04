@@ -3,7 +3,8 @@ export const metadata: Metadata = { title: "Dashboard" };
 
 import Link from "next/link";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { resolveScopedSupabase } from "@/lib/dashboard-scope";
+import { resolveScopedSupabase, canSeeFinancials } from "@/lib/dashboard-scope";
+import { stripFinancialFields } from "@/lib/event-financials";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import {
@@ -52,6 +53,8 @@ function hasRevenue(e: Event): boolean {
 
 export default async function DashboardPage() {
   const scope = await resolveScopedSupabase();
+  const financialsVisible =
+    scope.kind === "unauthorized" ? true : canSeeFinancials(scope);
 
   let profile = null;
   let events: Event[] = [];
@@ -82,8 +85,15 @@ export default async function DashboardPage() {
         .limit(1),
     ]);
     profile = profileRes.data;
-    events = (eventsRes.data ?? []) as Event[];
-    performances = (perfRes.data ?? []) as EventPerformance[];
+    const rawEvents = (eventsRes.data ?? []) as Event[];
+    // Manager-without-Financials: strip dollar columns server-side.
+    // Downstream aggregates (ytdRevenue, projectedSeason, kpis) all
+    // collapse to zero, but we also gate the financial sections on
+    // financialsVisible below — the strip is defense-in-depth.
+    events = financialsVisible ? rawEvents : rawEvents.map(stripFinancialFields);
+    performances = financialsVisible
+      ? ((perfRes.data ?? []) as EventPerformance[])
+      : [];
     posConnected = (posRes.data ?? []).length > 0;
   }
 
@@ -396,6 +406,7 @@ export default async function DashboardPage() {
           supabase={scopedClient}
           userId={scopedUserId}
           subscriptionTier={profile?.subscription_tier ?? "starter"}
+          canSeeFinancials={financialsVisible}
         />
       )}
 
@@ -456,7 +467,19 @@ export default async function DashboardPage() {
         </Link>
       </div>
 
-      {isNewUser ? (
+      {!financialsVisible ? (
+        /* Manager-without-Financials view: keep operations surfaces
+           above (DayOfEventBlock, SetupProgress, JourneyCallout) and
+           drop the entire revenue-heavy section. Replacing it with a
+           short note frames the gating as deliberate (not a bug or a
+           missing-data state). */
+        <div className="rounded-lg border border-muted bg-muted/30 p-5 text-sm text-muted-foreground">
+          <p className="font-medium text-foreground">Operations view</p>
+          <p className="mt-1">
+            Revenue, forecasts, and post-event sales entry are hidden because your owner has not granted Financials access. Events, inquiries, calendar, and notes remain available.
+          </p>
+        </div>
+      ) : isNewUser ? (
         /* ── Getting-started layout for new users ── */
         <div className="space-y-6">
           {/* Phase 4 design: getting-started hero migrated orange/amber

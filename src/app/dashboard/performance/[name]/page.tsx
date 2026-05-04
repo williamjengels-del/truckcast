@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { resolveScopedSupabase } from "@/lib/dashboard-scope";
+import { resolveScopedSupabase, canSeeFinancials } from "@/lib/dashboard-scope";
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -71,6 +71,10 @@ export default async function EventDrilldownPage({ params }: PageProps) {
 
   const scope = await resolveScopedSupabase();
   if (scope.kind === "unauthorized") redirect("/login");
+  // Performance pages are pure historical-revenue analytics — gated
+  // entirely behind Financials. Manager-without-Financials gets
+  // bounced to /dashboard, which renders the Operations view.
+  if (!canSeeFinancials(scope)) redirect("/dashboard");
 
   const [{ data: perfData }, { data: eventsData }] = await Promise.all([
     scope.client
