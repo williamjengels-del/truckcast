@@ -488,9 +488,9 @@ export function InquiriesInbox({
                     preserving by design (verdict in the brainstorm
                     spec). */}
                 {engagementCopy && (
-                  <p className="flex items-center gap-1.5 text-xs text-muted-foreground -mt-1">
+                  <p className="flex items-center gap-1.5 text-xs text-brand-teal/80 -mt-1">
                     <Radar className="h-3 w-3" />
-                    {engagementCopy}
+                    <span className="italic">{engagementCopy}</span>
                   </p>
                 )}
 
@@ -557,9 +557,11 @@ export function InquiriesInbox({
                   </div>
                 )}
 
-                {/* Contact */}
-                <div className="rounded-md border bg-brand-teal/5 p-3 text-sm">
-                  <p className="text-xs font-semibold uppercase tracking-widest text-brand-teal mb-2">
+                {/* Contact — primary action area for the operator;
+                    teal-tinted to anchor it as the next step after
+                    reading the inquiry details above. */}
+                <div className="rounded-lg border border-brand-teal/20 bg-brand-teal/5 p-3.5 text-sm">
+                  <p className="text-[11px] font-semibold uppercase tracking-widest text-brand-teal mb-2">
                     How to reach {inq.organizer_name}
                   </p>
                   <div className="flex flex-wrap gap-x-4 gap-y-1">
@@ -606,13 +608,26 @@ export function InquiriesInbox({
                   </div>
                 </div>
 
-                {/* Actions */}
+                {/* Actions — brand-aligned hierarchy:
+                    "I'm interested" = brand-teal primary (entry point,
+                       full brand presence)
+                    "Mark contacted" = brand-teal outline (follow-up,
+                       same hue family but subordinate weight)
+                    "Not interested" = ghost (dismissal, neutral)
+                    Per Verdict #25, both affirmative steps use teal —
+                    orange is reserved for differentiator/closer
+                    moments which doesn't apply to action chrome. */}
                 <div className="flex flex-wrap gap-2">
                   <Button
                     onClick={() => handleAction(inq.id, "claimed")}
                     disabled={busy === inq.id || my === "claimed"}
                     size="sm"
                     variant={my === "claimed" ? "outline" : "default"}
+                    className={
+                      my === "claimed"
+                        ? "border-brand-teal/40 text-brand-teal hover:bg-brand-teal/10"
+                        : "bg-brand-teal hover:bg-brand-teal/90 text-white"
+                    }
                   >
                     {busy === inq.id ? (
                       <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" />
@@ -626,6 +641,7 @@ export function InquiriesInbox({
                     disabled={busy === inq.id || my === "contacted"}
                     size="sm"
                     variant="outline"
+                    className="border-brand-teal/40 text-brand-teal hover:bg-brand-teal/10"
                   >
                     <MessageSquare className="h-3.5 w-3.5 mr-1" />
                     {my === "contacted" ? "Contacted" : "Mark contacted"}
@@ -672,7 +688,7 @@ export function InquiriesInbox({
                     value={operatorNotes[inq.id] ?? ""}
                     onChange={(e) => handleNotesChange(inq.id, e.target.value)}
                     placeholder="Follow-up reminders, things you told the organizer, anything you want to remember about this lead. Only you see this."
-                    className="w-full text-sm rounded-md border bg-background px-3 py-2 placeholder:text-muted-foreground/60 focus:outline-none focus:ring-2 focus:ring-brand-teal/40 resize-none"
+                    className="w-full text-sm rounded-md border border-input bg-background px-3 py-2 placeholder:text-muted-foreground/60 transition-colors focus:outline-none focus-visible:border-brand-teal focus-visible:ring-2 focus-visible:ring-brand-teal/20 resize-none"
                   />
                 </div>
 

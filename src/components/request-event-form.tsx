@@ -20,6 +20,33 @@ import { CheckCircle2, AlertCircle, Loader2 } from "lucide-react";
 // state inline (no navigation away — keeps the page bookmarkable
 // and lets organizers submit a second request if they have one).
 
+// Brand-aligned classNames for marketplace form fields. Override the
+// shared <Input> / <Textarea> / <SelectTrigger> default focus ring
+// (generic gray) with brand-teal so the marketplace surface visually
+// reads as a VendCast-branded interaction. Per Verdict #25, teal is
+// the default brand presence; orange is reserved for closer accents.
+const MARKETPLACE_INPUT_CN =
+  "focus-visible:border-brand-teal focus-visible:ring-brand-teal/20";
+
+// Required-asterisk treatment — small brand-teal mark instead of plain
+// text "*". Subtle accent that signals "required without shouting,"
+// matches the brand discipline of teal as default presence.
+function Required() {
+  return <span className="text-brand-teal font-semibold ml-0.5">*</span>;
+}
+
+// Refined fieldset legend with a small teal dot prefix. Visually
+// chunks the form into sections without resorting to heavy dividers
+// or bold typography that would compete with the field labels below.
+function SectionLegend({ children }: { children: React.ReactNode }) {
+  return (
+    <legend className="flex items-center gap-2 text-xs font-semibold uppercase tracking-widest text-muted-foreground mb-2">
+      <span className="inline-block w-1.5 h-1.5 rounded-full bg-brand-teal" />
+      {children}
+    </legend>
+  );
+}
+
 export function RequestEventForm() {
   const [submitting, setSubmitting] = useState(false);
   const [done, setDone] = useState<{
@@ -122,7 +149,10 @@ export function RequestEventForm() {
   }
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-6 rounded-2xl border bg-card p-6 md:p-8">
+    <form
+      onSubmit={handleSubmit}
+      className="space-y-7 rounded-2xl border border-t-4 border-t-brand-teal bg-card p-6 md:p-8 shadow-sm"
+    >
       {/* Honeypot — visually hidden CHECKBOX. Chrome's autofill is
           heuristic-based and fills any empty text input near identity
           fields regardless of name (verified: even "__vc_attestation"
@@ -140,55 +170,55 @@ export function RequestEventForm() {
       </div>
 
       <fieldset className="space-y-4">
-        <legend className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">About you</legend>
+        <SectionLegend>About you</SectionLegend>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div className="space-y-2">
-            <Label htmlFor="organizer_name">Your name *</Label>
-            <Input id="organizer_name" name="organizer_name" required placeholder="Sarah Johnson" />
+            <Label htmlFor="organizer_name">Your name<Required /></Label>
+            <Input id="organizer_name" name="organizer_name" required placeholder="Sarah Johnson" className={MARKETPLACE_INPUT_CN} />
           </div>
           <div className="space-y-2">
-            <Label htmlFor="organizer_email">Email *</Label>
-            <Input id="organizer_email" name="organizer_email" type="email" required placeholder="sarah@example.com" />
+            <Label htmlFor="organizer_email">Email<Required /></Label>
+            <Input id="organizer_email" name="organizer_email" type="email" required placeholder="sarah@example.com" className={MARKETPLACE_INPUT_CN} />
           </div>
           <div className="space-y-2">
             <Label htmlFor="organizer_phone">Phone</Label>
-            <Input id="organizer_phone" name="organizer_phone" type="tel" placeholder="Optional" />
+            <Input id="organizer_phone" name="organizer_phone" type="tel" placeholder="Optional" className={MARKETPLACE_INPUT_CN} />
           </div>
           <div className="space-y-2">
             <Label htmlFor="organizer_org">Organization</Label>
-            <Input id="organizer_org" name="organizer_org" placeholder="XYZ Events / Company name (optional)" />
+            <Input id="organizer_org" name="organizer_org" placeholder="XYZ Events / Company name (optional)" className={MARKETPLACE_INPUT_CN} />
           </div>
         </div>
       </fieldset>
 
-      <fieldset className="space-y-4">
-        <legend className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">About the event</legend>
+      <fieldset className="space-y-4 pt-2 border-t border-brand-teal/10">
+        <SectionLegend>About the event</SectionLegend>
 
         <div className="space-y-2">
           <Label htmlFor="event_name">Event name</Label>
-          <Input id="event_name" name="event_name" placeholder="Smith Wedding Reception · Office Holiday Party · etc." />
+          <Input id="event_name" name="event_name" placeholder="Smith Wedding Reception · Office Holiday Party · etc." className={MARKETPLACE_INPUT_CN} />
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           <div className="space-y-2">
-            <Label htmlFor="event_date">Date *</Label>
-            <Input id="event_date" name="event_date" type="date" required />
+            <Label htmlFor="event_date">Date<Required /></Label>
+            <Input id="event_date" name="event_date" type="date" required className={MARKETPLACE_INPUT_CN} />
           </div>
           <div className="space-y-2">
             <Label htmlFor="event_start_time">Start time</Label>
-            <Input id="event_start_time" name="event_start_time" type="time" />
+            <Input id="event_start_time" name="event_start_time" type="time" className={MARKETPLACE_INPUT_CN} />
           </div>
           <div className="space-y-2">
             <Label htmlFor="event_end_time">End time</Label>
-            <Input id="event_end_time" name="event_end_time" type="time" />
+            <Input id="event_end_time" name="event_end_time" type="time" className={MARKETPLACE_INPUT_CN} />
           </div>
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div className="space-y-2">
-            <Label htmlFor="event_type">Event type *</Label>
+            <Label htmlFor="event_type">Event type<Required /></Label>
             <Select name="event_type" required>
-              <SelectTrigger id="event_type">
+              <SelectTrigger id="event_type" className={MARKETPLACE_INPUT_CN}>
                 <SelectValue placeholder="Choose one" />
               </SelectTrigger>
               <SelectContent>
@@ -202,19 +232,19 @@ export function RequestEventForm() {
           </div>
           <div className="space-y-2">
             <Label htmlFor="expected_attendance">Expected attendance</Label>
-            <Input id="expected_attendance" name="expected_attendance" type="number" min={1} placeholder="Approx." />
+            <Input id="expected_attendance" name="expected_attendance" type="number" min={1} placeholder="Approx." className={MARKETPLACE_INPUT_CN} />
           </div>
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           <div className="space-y-2 sm:col-span-2">
-            <Label htmlFor="city">City *</Label>
-            <Input id="city" name="city" required placeholder="St. Louis" />
+            <Label htmlFor="city">City<Required /></Label>
+            <Input id="city" name="city" required placeholder="St. Louis" className={MARKETPLACE_INPUT_CN} />
           </div>
           <div className="space-y-2">
-            <Label htmlFor="state">State *</Label>
+            <Label htmlFor="state">State<Required /></Label>
             <Select name="state" required>
-              <SelectTrigger id="state">
+              <SelectTrigger id="state" className={MARKETPLACE_INPUT_CN}>
                 <SelectValue placeholder="Pick" />
               </SelectTrigger>
               <SelectContent>
@@ -234,6 +264,7 @@ export function RequestEventForm() {
             id="location_details"
             name="location_details"
             placeholder="Venue name, full address, parking notes — anything an operator should know"
+            className={MARKETPLACE_INPUT_CN}
           />
         </div>
 
@@ -245,6 +276,7 @@ export function RequestEventForm() {
             type="number"
             min={0}
             placeholder="Optional, helps operators decide if it's a fit"
+            className={MARKETPLACE_INPUT_CN}
           />
         </div>
 
@@ -255,6 +287,7 @@ export function RequestEventForm() {
             name="notes"
             rows={4}
             placeholder="What kind of food are you looking for? Dietary needs? Any special requests?"
+            className={MARKETPLACE_INPUT_CN}
           />
         </div>
       </fieldset>
@@ -266,7 +299,12 @@ export function RequestEventForm() {
         </div>
       )}
 
-      <Button type="submit" size="lg" disabled={submitting} className="w-full sm:w-auto">
+      <Button
+        type="submit"
+        size="lg"
+        disabled={submitting}
+        className="w-full sm:w-auto bg-brand-teal hover:bg-brand-teal/90 text-white shadow-sm"
+      >
         {submitting ? (
           <>
             <Loader2 className="h-4 w-4 mr-2 animate-spin" />
