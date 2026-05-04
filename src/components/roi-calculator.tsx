@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { ArrowRight, Sparkles } from "lucide-react";
 import Link from "next/link";
+import { WEATHER_LOSS_PER_EVENT } from "@/lib/homepage-stats";
 
 // ROI calculator — public homepage tool. Lets prospects answer "would
 // VendCast pay for itself for me?" without a signup gate.
@@ -15,7 +16,7 @@ import Link from "next/link";
 //
 // Outputs:
 //   - Annual revenue at stake
-//   - Estimated weather-disrupted dollars per year (at our $800/event observed loss)
+//   - Estimated weather-disrupted dollars per year (at the homepage anchor)
 //   - VendCast price (Pro tier $39/mo = $468/yr) vs single-event-saved comparison
 //   - "Pays for itself X times over" framing
 //
@@ -28,10 +29,6 @@ import Link from "next/link";
 
 const PRO_MONTHLY = 39;
 const PRO_ANNUAL = PRO_MONTHLY * 12;
-
-// Per the homepage weather-loss copy: $800 lost on average per
-// weather-disrupted event (ops history, anchored, defensible).
-const AVG_WEATHER_LOSS_PER_EVENT = 800;
 
 // Conservative assumption: VendCast catches roughly 1 in 4 weather-
 // disrupted events early enough for the operator to act (cancel, pivot,
@@ -50,11 +47,11 @@ export function RoiCalculator() {
   const annualEvents = eventsPerMonth * 12;
   const annualRevenue = annualEvents * avgRevenue;
   const weatherEvents = Math.round(annualEvents * (weatherPct / 100));
-  const annualWeatherLoss = weatherEvents * AVG_WEATHER_LOSS_PER_EVENT;
+  const annualWeatherLoss = weatherEvents * WEATHER_LOSS_PER_EVENT;
   const catchableLoss = Math.round(annualWeatherLoss * CATCH_RATE);
 
-  // Pays-for-itself math: how many catches at $800 per event would cover Pro annual.
-  const eventsToBreakEven = Math.ceil(PRO_ANNUAL / AVG_WEATHER_LOSS_PER_EVENT);
+  // Pays-for-itself math: how many catches at the anchor figure would cover Pro annual.
+  const eventsToBreakEven = Math.ceil(PRO_ANNUAL / WEATHER_LOSS_PER_EVENT);
   const paybackMultiple =
     catchableLoss > 0 ? Math.round(catchableLoss / PRO_ANNUAL) : 0;
 
@@ -181,7 +178,7 @@ export function RoiCalculator() {
               {formatDollars(annualWeatherLoss)}
             </p>
             <p className="text-xs text-muted-foreground mt-1">
-              {weatherEvents} events × $800 avg loss
+              {weatherEvents} events × {formatDollars(WEATHER_LOSS_PER_EVENT)} avg loss
             </p>
           </div>
           <div>
@@ -222,7 +219,7 @@ export function RoiCalculator() {
       </div>
 
       <p className="text-xs text-muted-foreground text-center">
-        $800 weather-loss anchor from real operator data. ~25% catch rate is conservative — operator + VendCast together. Your mileage will vary.
+        {formatDollars(WEATHER_LOSS_PER_EVENT)} weather-loss anchor from real operator data. ~25% catch rate is conservative — operator + VendCast together. Your mileage will vary.
       </p>
     </div>
   );
