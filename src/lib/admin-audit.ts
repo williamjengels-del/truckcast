@@ -41,6 +41,8 @@ export type AdminAction =
   | "user.mfa_reset"           // 2026-04-29 — admin reset of locked-out 2FA
   | "user.cap_override_set"    // 2026-04-29 — Tier-B monthly cap override set/cleared
   | "user.location_edit"       // 2026-05-03 — admin edit of operator city/state
+  | "event_alias.create"       // 2026-05-03 — admin alias map added
+  | "event_alias.delete"       // 2026-05-03 — admin alias map removed
   // testimonial.*
   | "testimonial.create"
   | "testimonial.update"
@@ -56,7 +58,14 @@ export type AdminAction =
 interface LogArgs {
   adminUserId: string;
   action: AdminAction;
-  targetType?: "user" | "testimonial" | "invite" | "feedback" | "event" | "self";
+  targetType?:
+    | "user"
+    | "testimonial"
+    | "invite"
+    | "feedback"
+    | "event"
+    | "self"
+    | "event_alias";
   targetId?: string | null;
   metadata?: Record<string, unknown> | null;
 }

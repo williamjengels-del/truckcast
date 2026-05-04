@@ -12,6 +12,7 @@ const TABS = [
   { href: "/dashboard/admin/users", label: "Users" },
   { href: "/dashboard/admin/activity", label: "Activity" },
   { href: "/dashboard/admin/data", label: "Event Data" },
+  { href: "/dashboard/admin/event-aliases", label: "Event Aliases" },
   { href: "/dashboard/admin/toast-inbox", label: "Toast Inbox" },
   { href: "/dashboard/admin/beta", label: "Invites" },
   { href: "/dashboard/admin/content", label: "Content" },
