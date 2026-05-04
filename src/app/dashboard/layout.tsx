@@ -37,6 +37,7 @@ export default async function DashboardLayout({
 
   let isPro = false;
   let isPremium = false;
+  let isManager = false;
   let managerBanner: { ownerName: string } | null = null;
   // Chat widget is enabled in production (ANTHROPIC_API_KEY is set in
   // Vercel). This guard remains as a safety net — if the key is ever
@@ -55,6 +56,7 @@ export default async function DashboardLayout({
     isPro = tier === "pro" || tier === "premium";
     isPremium = tier === "premium";
 
+    isManager = Boolean(profile?.owner_user_id);
     // If this user is a manager, fetch the owner's business name for the banner
     if (profile?.owner_user_id) {
       const { data: ownerProfile } = await supabase
@@ -148,7 +150,13 @@ export default async function DashboardLayout({
         </div>
         <FeedbackDialog />
         <WelcomeTour />
-        <ChatWidget isPro={isPro} isPremium={isPremium} enabled={chatEnabled} />
+        {/* Chat widget hidden for managers — Tier-A surfaces revenue
+            and historical performance via tools, which is owner-only
+            even when Financials access is granted (the assistant is
+            an operator-facing helper, not a managed-team feature). */}
+        {!isManager && (
+          <ChatWidget isPro={isPro} isPremium={isPremium} enabled={chatEnabled} />
+        )}
         <InstallPrompt />
       </div>
     </ImpersonationProvider>

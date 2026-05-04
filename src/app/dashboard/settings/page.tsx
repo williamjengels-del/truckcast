@@ -43,6 +43,15 @@ const SETTINGS_TABS: { value: SettingsTab; label: string }[] = [
   { value: "security", label: "Security & Privacy" },
 ];
 
+// Tabs a manager (a user whose profile carries owner_user_id) is
+// allowed to see. Profile / Team / Plan / Customers are owner-only —
+// they edit the operator's identity, billing, customer book, and the
+// manager allowlist itself, none of which a manager should touch.
+// Security + Notifications stay because the manager owns their own
+// password / 2FA / login-notification preferences regardless of the
+// owner relationship.
+const MANAGER_SETTINGS_TABS: SettingsTab[] = ["notifications", "security"];
+
 function isSettingsTab(v: string | null): v is SettingsTab {
   return (
     v === "profile" ||
@@ -165,6 +174,19 @@ function SettingsContent() {
     [router, searchParams]
   );
 
+  // Manager bounce: if the active tab isn't on the manager allow-list,
+  // drop them on Security (a tab they own personally). Runs when the
+  // profile finishes loading or the active tab changes — covers both
+  // direct deep-links and tab clicks.
+  useEffect(() => {
+    if (
+      profile?.owner_user_id &&
+      !MANAGER_SETTINGS_TABS.includes(activeTab)
+    ) {
+      handleTabChange("security");
+    }
+  }, [profile, activeTab, handleTabChange]);
+
   // Auto-sync when returning from Stripe checkout. Land back on the Plan
   // tab so the operator sees their freshly-upgraded tier — pre-tabs this
   // didn't matter (single scroll), post-tabs the default ?tab=profile
@@ -213,11 +235,15 @@ function SettingsContent() {
 
       <Tabs value={activeTab} onValueChange={handleTabChange} className="space-y-6">
         <TabsList className="flex flex-wrap h-auto p-1 w-full sm:w-fit">
-          {SETTINGS_TABS.map((tab) => (
-            <TabsTrigger key={tab.value} value={tab.value} className="text-sm">
-              {tab.label}
-            </TabsTrigger>
-          ))}
+          {SETTINGS_TABS
+            .filter((tab) =>
+              profile?.owner_user_id ? MANAGER_SETTINGS_TABS.includes(tab.value) : true
+            )
+            .map((tab) => (
+              <TabsTrigger key={tab.value} value={tab.value} className="text-sm">
+                {tab.label}
+              </TabsTrigger>
+            ))}
         </TabsList>
 
         {/* PROFILE — business identity + team / managers. v25 §2e: account-
