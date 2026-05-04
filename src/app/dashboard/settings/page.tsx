@@ -976,6 +976,8 @@ function ManagerInviteCard({ profile }: { profile: Profile | null }) {
   const [financialsEnabled, setFinancialsEnabled] = useState(false);
   const [inviting, setInviting] = useState(false);
   const [revoking, setRevoking] = useState<string | null>(null);
+  const [resending, setResending] = useState<string | null>(null);
+  const [resendSuccessId, setResendSuccessId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   // Track which manager row's Financials toggle is mid-flight so the
@@ -1076,6 +1078,36 @@ function ManagerInviteCard({ profile }: { profile: Profile | null }) {
     setRevoking(null);
   }
 
+  // Re-fire the manager invite email without touching the team_members
+  // row. Works for pending and active managers (active = the manager
+  // accepted but maybe lost / never opened the dashboard; resend hands
+  // them a fresh login link).
+  async function handleResend(memberId: string) {
+    setResending(memberId);
+    setError(null);
+    setResendSuccessId(null);
+    try {
+      const res = await fetch("/api/team/invite/resend", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ memberId }),
+      });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setError(body.error ?? "Resend failed");
+        return;
+      }
+      setResendSuccessId(memberId);
+      // Auto-clear the inline confirmation after a few seconds so the
+      // row doesn't stay stuck on 'Sent' indefinitely.
+      setTimeout(() => {
+        setResendSuccessId((prev) => (prev === memberId ? null : prev));
+      }, 4000);
+    } finally {
+      setResending(null);
+    }
+  }
+
   return (
     <Card className="max-w-2xl" id="managers">
       <CardHeader>
@@ -1113,17 +1145,36 @@ function ManagerInviteCard({ profile }: { profile: Profile | null }) {
                         <p className="font-medium">{m.member_email}</p>
                         <p className="text-xs text-muted-foreground">
                           {m.status === "pending" ? "⏳ Invite pending" : "✓ Active"}
+                          {resendSuccessId === m.id && (
+                            <span className="ml-2 font-medium text-brand-teal">
+                              · Email sent
+                            </span>
+                          )}
                         </p>
                       </div>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="text-destructive hover:text-destructive shrink-0"
-                        onClick={() => handleRevoke(m.id)}
-                        disabled={revoking === m.id}
-                      >
-                        {revoking === m.id ? "Removing…" : "Remove"}
-                      </Button>
+                      <div className="flex items-center gap-1 shrink-0">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleResend(m.id)}
+                          disabled={
+                            resending === m.id || revoking === m.id
+                          }
+                        >
+                          {resending === m.id ? "Sending…" : "Resend"}
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="text-destructive hover:text-destructive"
+                          onClick={() => handleRevoke(m.id)}
+                          disabled={
+                            revoking === m.id || resending === m.id
+                          }
+                        >
+                          {revoking === m.id ? "Removing…" : "Remove"}
+                        </Button>
+                      </div>
                     </div>
                     {/* Single Financials toggle. Operations access
                         (events, inquiries, calendar, contacts, notes)
