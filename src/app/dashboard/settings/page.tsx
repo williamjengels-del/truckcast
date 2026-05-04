@@ -20,11 +20,22 @@ import { PRICING_PLANS } from "@/lib/pricing-plans";
 import { PublicSlugPicker } from "@/components/public-slug-picker";
 import { TwoFactorCard } from "@/components/two-factor-card";
 import { canonicalizeCity } from "@/lib/city-normalize";
+import Link from "next/link";
 
-type SettingsTab = "profile" | "plan" | "customers" | "notifications" | "security";
+type SettingsTab =
+  | "profile"
+  | "team"
+  | "plan"
+  | "customers"
+  | "notifications"
+  | "security";
 
 const SETTINGS_TABS: { value: SettingsTab; label: string }[] = [
   { value: "profile", label: "Profile" },
+  // Team tab — promoted from a card buried inside the Profile tab.
+  // Permissions matrix expansion is queued as a follow-up; this PR
+  // ships the structural promotion only.
+  { value: "team", label: "Team" },
   { value: "plan", label: "Plan" },
   { value: "customers", label: "Customers" },
   { value: "notifications", label: "Notifications" },
@@ -34,6 +45,7 @@ const SETTINGS_TABS: { value: SettingsTab; label: string }[] = [
 function isSettingsTab(v: string | null): v is SettingsTab {
   return (
     v === "profile" ||
+    v === "team" ||
     v === "plan" ||
     v === "customers" ||
     v === "notifications" ||
@@ -286,6 +298,13 @@ function SettingsContent() {
             </CardContent>
           </Card>
 
+        </TabsContent>
+
+        {/* TEAM — manager invites + read-only schedule share token.
+            Promoted out of the Profile tab so team management gets
+            its own dedicated surface; permission expansion will land
+            here as a follow-up. */}
+        <TabsContent value="team" className="space-y-6">
           <TeamAccessCard profile={profile} />
           <ManagerInviteCard profile={profile} />
         </TabsContent>
@@ -435,9 +454,9 @@ function SettingsContent() {
               keep Settings readable. */}
           <div className="text-center text-sm text-muted-foreground py-2">
             Need help?{" "}
-            <a href="/contact" className="text-primary hover:underline">
+            <Link href="/contact" className="text-primary hover:underline">
               Contact support
-            </a>
+            </Link>
           </div>
 
           {/* Destructive actions — keep at the end of the security tab. */}
@@ -712,9 +731,9 @@ function DataPrivacyCard({
             <p className="text-sm text-muted-foreground">
               Allow VendCast to use your event data internally to improve forecast accuracy
               for all users. Your data is never sold or shared externally.{" "}
-              <a href="/privacy#model-improvement" className="text-primary hover:underline">
+              <Link href="/privacy#model-improvement" className="text-primary hover:underline">
                 Learn more
-              </a>
+              </Link>
             </p>
           </div>
           <Button
@@ -999,7 +1018,7 @@ function ManagerInviteCard({ profile }: { profile: Profile | null }) {
           <div className="rounded-md border border-brand-orange/40 bg-brand-orange/5 p-3">
             <p className="text-sm text-foreground">
               Manager access requires a Pro or Premium subscription.{" "}
-              <a href="/dashboard/settings" className="font-medium text-brand-orange underline-offset-2 hover:underline">Upgrade your plan</a>
+              <Link href="/dashboard/settings?tab=plan" className="font-medium text-brand-orange underline-offset-2 hover:underline">Upgrade your plan</Link>
             </p>
           </div>
         )}
@@ -1087,7 +1106,7 @@ function ManagerInviteCard({ profile }: { profile: Profile | null }) {
             {members.length >= limit && (
               <p className="text-xs text-muted-foreground">
                 You&apos;ve reached the manager limit for your plan.{" "}
-                {tier === "pro" && <a href="/dashboard/settings" className="font-medium text-brand-orange underline-offset-2 hover:underline">Upgrade to Premium for up to 5 managers.</a>}
+                {tier === "pro" && <Link href="/dashboard/settings?tab=plan" className="font-medium text-brand-orange underline-offset-2 hover:underline">Upgrade to Premium for up to 5 managers.</Link>}
               </p>
             )}
           </>
