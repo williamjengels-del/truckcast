@@ -940,23 +940,21 @@ interface TeamMemberRow {
   id: string;
   member_email: string;
   status: "pending" | "active";
-  can_view_revenue: boolean;
-  can_view_forecasts: boolean;
+  financials_enabled: boolean;
 }
 
 function ManagerInviteCard({ profile }: { profile: Profile | null }) {
   const [members, setMembers] = useState<TeamMemberRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [email, setEmail] = useState("");
-  const [canViewRevenue, setCanViewRevenue] = useState(false);
-  const [canViewForecasts, setCanViewForecasts] = useState(false);
+  const [financialsEnabled, setFinancialsEnabled] = useState(false);
   const [inviting, setInviting] = useState(false);
   const [revoking, setRevoking] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
-  // Track which permission toggle is mid-flight so the UI can show a
-  // disabled state. Keyed by `${memberId}:${field}` so multiple
-  // toggles on different rows can be in-flight simultaneously.
+  // Track which manager row's Financials toggle is mid-flight so the
+  // checkbox can show a disabled state. One key per member id is
+  // enough now that there's a single toggle.
   const [permissionSaving, setPermissionSaving] = useState<Set<string>>(
     new Set()
   );
@@ -972,47 +970,44 @@ function ManagerInviteCard({ profile }: { profile: Profile | null }) {
     setLoading(false);
   }
 
-  // Toggle a single permission field on a member. Optimistic UI flips
-  // the local row immediately so the checkbox feels instant; on
-  // server failure we revert and surface the error.
-  async function togglePermission(
-    memberId: string,
-    field: "can_view_revenue" | "can_view_forecasts",
-    next: boolean
-  ) {
-    const key = `${memberId}:${field}`;
+  // Toggle the Financials flag on a member. Optimistic UI flips the
+  // local row immediately so the checkbox feels instant; on server
+  // failure we revert and surface the error.
+  async function toggleFinancials(memberId: string, next: boolean) {
     setPermissionSaving((prev) => {
       const s = new Set(prev);
-      s.add(key);
+      s.add(memberId);
       return s;
     });
-    // Optimistic flip
     setMembers((prev) =>
-      prev.map((m) => (m.id === memberId ? { ...m, [field]: next } : m))
+      prev.map((m) => (m.id === memberId ? { ...m, financials_enabled: next } : m))
     );
     try {
       const res = await fetch("/api/team/invite", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ memberId, [field]: next }),
+        body: JSON.stringify({ memberId, financials_enabled: next }),
       });
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
-        // Revert on failure
         setMembers((prev) =>
-          prev.map((m) => (m.id === memberId ? { ...m, [field]: !next } : m))
+          prev.map((m) =>
+            m.id === memberId ? { ...m, financials_enabled: !next } : m
+          )
         );
         setError(body.error ?? "Failed to update permission");
       }
     } catch (e) {
       setMembers((prev) =>
-        prev.map((m) => (m.id === memberId ? { ...m, [field]: !next } : m))
+        prev.map((m) =>
+          m.id === memberId ? { ...m, financials_enabled: !next } : m
+        )
       );
       setError(e instanceof Error ? e.message : "Network error");
     } finally {
       setPermissionSaving((prev) => {
         const s = new Set(prev);
-        s.delete(key);
+        s.delete(memberId);
         return s;
       });
     }
@@ -1029,7 +1024,7 @@ function ManagerInviteCard({ profile }: { profile: Profile | null }) {
     const res = await fetch("/api/team/invite", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email: email.trim(), can_view_revenue: canViewRevenue, can_view_forecasts: canViewForecasts }),
+      body: JSON.stringify({ email: email.trim(), financials_enabled: financialsEnabled }),
     });
     const data = await res.json();
     if (!res.ok) {
@@ -1037,8 +1032,7 @@ function ManagerInviteCard({ profile }: { profile: Profile | null }) {
     } else {
       setSuccess(`Invite sent to ${email.trim()}.`);
       setEmail("");
-      setCanViewRevenue(false);
-      setCanViewForecasts(false);
+      setFinancialsEnabled(false);
       await loadMembers();
     }
     setInviting(false);
@@ -1086,67 +1080,54 @@ function ManagerInviteCard({ profile }: { profile: Profile | null }) {
                 <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
                   Current managers ({members.length}/{limit})
                 </p>
-                {members.map((m) => {
-                  const revenueKey = `${m.id}:can_view_revenue`;
-                  const forecastsKey = `${m.id}:can_view_forecasts`;
-                  return (
-                    <div key={m.id} className="rounded-md border px-3 py-3 text-sm space-y-3">
-                      <div className="flex items-start justify-between gap-3">
-                        <div className="space-y-0.5">
-                          <p className="font-medium">{m.member_email}</p>
-                          <p className="text-xs text-muted-foreground">
-                            {m.status === "pending" ? "⏳ Invite pending" : "✓ Active"}
-                          </p>
-                        </div>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="text-destructive hover:text-destructive shrink-0"
-                          onClick={() => handleRevoke(m.id)}
-                          disabled={revoking === m.id}
-                        >
-                          {revoking === m.id ? "Removing…" : "Remove"}
-                        </Button>
+                {members.map((m) => (
+                  <div key={m.id} className="rounded-md border px-3 py-3 text-sm space-y-3">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="space-y-0.5">
+                        <p className="font-medium">{m.member_email}</p>
+                        <p className="text-xs text-muted-foreground">
+                          {m.status === "pending" ? "⏳ Invite pending" : "✓ Active"}
+                        </p>
                       </div>
-                      {/* Permission toggles. Optimistic flip on click;
-                          the server PATCH is idempotent and reverts the
-                          local state on failure. The brainstorm's
-                          broader permissions matrix lands in a follow-
-                          up — these two are what team_members has
-                          today. */}
-                      <div className="flex flex-wrap gap-x-5 gap-y-2 pt-2 border-t">
-                        <Label
-                          htmlFor={`rev-${m.id}`}
-                          className="flex items-center gap-2 text-xs font-normal cursor-pointer"
-                        >
-                          <Checkbox
-                            id={`rev-${m.id}`}
-                            checked={!!m.can_view_revenue}
-                            disabled={permissionSaving.has(revenueKey)}
-                            onCheckedChange={(checked) =>
-                              togglePermission(m.id, "can_view_revenue", checked === true)
-                            }
-                          />
-                          Can see revenue
-                        </Label>
-                        <Label
-                          htmlFor={`fc-${m.id}`}
-                          className="flex items-center gap-2 text-xs font-normal cursor-pointer"
-                        >
-                          <Checkbox
-                            id={`fc-${m.id}`}
-                            checked={!!m.can_view_forecasts}
-                            disabled={permissionSaving.has(forecastsKey)}
-                            onCheckedChange={(checked) =>
-                              togglePermission(m.id, "can_view_forecasts", checked === true)
-                            }
-                          />
-                          Can see forecasts
-                        </Label>
-                      </div>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="text-destructive hover:text-destructive shrink-0"
+                        onClick={() => handleRevoke(m.id)}
+                        disabled={revoking === m.id}
+                      >
+                        {revoking === m.id ? "Removing…" : "Remove"}
+                      </Button>
                     </div>
-                  );
-                })}
+                    {/* Single Financials toggle. Operations access
+                        (events, inquiries, calendar, contacts, notes)
+                        is always on for any active manager and not
+                        shown here. Optimistic flip on click; server
+                        PATCH reverts local state on failure. */}
+                    <div className="pt-2 border-t">
+                      <Label
+                        htmlFor={`fin-${m.id}`}
+                        className="flex items-start gap-2 text-xs font-normal cursor-pointer"
+                      >
+                        <Checkbox
+                          id={`fin-${m.id}`}
+                          checked={!!m.financials_enabled}
+                          disabled={permissionSaving.has(m.id)}
+                          onCheckedChange={(checked) =>
+                            toggleFinancials(m.id, checked === true)
+                          }
+                          className="mt-0.5"
+                        />
+                        <span className="space-y-0.5">
+                          <span className="block">Financials access</span>
+                          <span className="block text-muted-foreground">
+                            Revenue, forecasts, and post-event sales entry. Off by default.
+                          </span>
+                        </span>
+                      </Label>
+                    </div>
+                  </div>
+                ))}
               </div>
             ) : (
               <p className="text-sm text-muted-foreground">No managers yet.</p>
@@ -1169,23 +1150,19 @@ function ManagerInviteCard({ profile }: { profile: Profile | null }) {
                 </div>
                 <div className="space-y-2">
                   <p className="text-xs text-muted-foreground font-medium">Permissions</p>
-                  <label className="flex items-center gap-2 text-sm cursor-pointer">
+                  <label className="flex items-start gap-2 text-sm cursor-pointer">
                     <input
                       type="checkbox"
-                      checked={canViewForecasts}
-                      onChange={(e) => setCanViewForecasts(e.target.checked)}
-                      className="rounded"
+                      checked={financialsEnabled}
+                      onChange={(e) => setFinancialsEnabled(e.target.checked)}
+                      className="mt-0.5 rounded"
                     />
-                    Can view revenue forecasts
-                  </label>
-                  <label className="flex items-center gap-2 text-sm cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={canViewRevenue}
-                      onChange={(e) => setCanViewRevenue(e.target.checked)}
-                      className="rounded"
-                    />
-                    Can view actual revenue &amp; profit
+                    <span className="space-y-0.5">
+                      <span className="block">Financials access</span>
+                      <span className="block text-xs text-muted-foreground">
+                        Revenue, forecasts, and post-event sales entry. Off by default — operations access (events, inquiries, calendar, notes) is always on.
+                      </span>
+                    </span>
                   </label>
                 </div>
                 {error && <p className="text-sm text-destructive">{error}</p>}

@@ -200,8 +200,11 @@ export interface TeamMember {
   member_user_id: string | null;
   member_email: string;
   status: "pending" | "active";
-  can_view_revenue: boolean;
-  can_view_forecasts: boolean;
+  // Single Financials toggle — when true, manager sees revenue,
+  // forecasts, and post-event sales entry. Operations access (events,
+  // inquiries, calendar, contacts, notes) is always on for any active
+  // manager and not gated by this flag.
+  financials_enabled: boolean;
   created_at: string;
 }
 
