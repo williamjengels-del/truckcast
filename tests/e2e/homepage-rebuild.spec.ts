@@ -130,42 +130,21 @@ test.describe("Homepage rebuild", () => {
     }
   });
 
-  test("feature grid renders exactly 5 cards with editorial copy + brand-teal icon squares", async ({
+  test("Phase 2.5 section: 'See what operators see' renders 3 surfaces with captions", async ({
     page,
   }) => {
-    const cards = page.locator('[data-testid^="feature-card-"]');
-    await expect(cards).toHaveCount(5);
-
-    await expect(page.getByTestId("feature-card-inquiry-booking")).toContainText(
-      "Inquiry & Booking Inbox"
-    );
-    await expect(page.getByTestId("feature-card-event-scheduling")).toContainText(
-      "Event Scheduling & Tracking"
-    );
-
-    const posCard = page.getByTestId("feature-card-pos-sync");
-    await expect(posCard).toContainText("POS & CSV Sync");
-    await expect(posCard).toContainText("and more");
-    // Phase 2.5 tightened POS body from 3 sentences to 2.
-    await expect(posCard).toContainText("Sales log themselves, or import a CSV");
-
-    await expect(page.getByTestId("feature-card-forecasting")).toContainText(
-      "Event Forecasting"
-    );
-    await expect(page.getByTestId("feature-card-fee-calculator")).toContainText(
-      "Fee Calculator"
-    );
-
-    // Phase 2.5: every feature card anchors its lucide icon in a
-    // brand-teal filled square (white icon). Smoke-check that each
-    // card contains an element whose className references brand-teal.
-    for (let i = 0; i < 5; i++) {
-      const iconHolder = cards.nth(i).locator("div.bg-brand-teal");
-      await expect(
-        iconHolder,
-        "Each feature card should anchor its icon in a brand-teal square"
-      ).toHaveCount(1);
-    }
+    // The prior 5-card generic feature grid was replaced by 3 product
+    // screenshots per the v33 brief direction (Julian, 2026-05-02).
+    // Until the capture script runs, each frame renders a placeholder
+    // with the surface label + filename — this test asserts on the
+    // structural copy that's stable across placeholder + populated
+    // states.
+    await expect(
+      page.getByRole("heading", { name: "See what operators see" })
+    ).toBeVisible();
+    await expect(page.getByText("Open it in the morning. Run the day from this screen.")).toBeVisible();
+    await expect(page.getByText("Inquiries land here. Triage in seconds, not days.")).toBeVisible();
+    await expect(page.getByText("Every event, with weather already accounted for.")).toBeVisible();
   });
 
   test("stats row uses operator-readable wins, not accuracy jargon", async ({ page }) => {

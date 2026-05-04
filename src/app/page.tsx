@@ -10,14 +10,7 @@ import {
   WEATHER_LOSS_PER_EVENT,
   WEATHER_LOSS_LAST_REVIEWED,
 } from "@/lib/homepage-stats";
-import {
-  BarChart3,
-  CalendarDays,
-  DollarSign,
-  ArrowRight,
-  Inbox,
-  Plug,
-} from "lucide-react";
+import { ArrowRight } from "lucide-react";
 
 export const revalidate = 0;
 export const dynamic = "force-dynamic";
@@ -65,41 +58,39 @@ function formatLastReviewed(iso: string): string {
   });
 }
 
-const FEATURE_CARDS = [
+// "See what operators see" — Phase 2.5 lower-feature-section per the
+// v33 brief direction. Replaces the prior 5-card generic feature grid
+// with three tightly-cropped product screenshots that each carry a
+// one-line caption explaining what the surface does.
+//
+// Image files land at /public/marketing/screenshots/<file>.png, captured
+// via scripts/capture-screenshots.mjs against the demo operator account
+// (vendcast.co/<demo-slug>) so prospects see a credible-but-clean
+// version of the product without any real operator's branding.
+//
+// Placeholder treatment: until the capture script runs, each card
+// renders a brand-teal-tinted dashed-border block with the surface
+// label. The card structure (caption, framing, hover) is identical
+// to the live treatment — when real PNGs land, the only diff is
+// swapping the placeholder body for <Image src=...>.
+const PRODUCT_SCREENS = [
   {
-    testId: "feature-card-inquiry-booking",
-    icon: Inbox,
-    title: "Inquiry & Booking Inbox",
-    description:
-      "New bookings land here — push, email, and in-app, the moment they arrive. Don't miss a lead because you were behind the wheel.",
+    src: "/marketing/screenshots/todays-event.png",
+    alt: "Today's event card on the dashboard with weather, contact, and sales pace.",
+    title: "Today's Event",
+    caption: "Open it in the morning. Run the day from this screen.",
   },
   {
-    testId: "feature-card-event-scheduling",
-    icon: CalendarDays,
-    title: "Event Scheduling & Tracking",
-    description:
-      "Every event in one calendar — setup, address, organizer, weather, all a tap away. Catering and vending stay in their own lanes.",
+    src: "/marketing/screenshots/inquiry-inbox.png",
+    alt: "Inquiry inbox showing several event requests with engagement signals.",
+    title: "Inquiry Inbox",
+    caption: "Inquiries land here. Triage in seconds, not days.",
   },
   {
-    testId: "feature-card-pos-sync",
-    icon: Plug,
-    title: "POS & CSV Sync",
-    description:
-      "Toast, Square, Clover, SumUp — and more. Sales log themselves, or import a CSV.",
-  },
-  {
-    testId: "feature-card-forecasting",
-    icon: BarChart3,
-    title: "Event Forecasting",
-    description:
-      "Sales predictions that know about weather, with confidence ranges and plain-English notes. No black box.",
-  },
-  {
-    testId: "feature-card-fee-calculator",
-    icon: DollarSign,
-    title: "Fee Calculator",
-    description:
-      "Know your take-home before you say yes. Minimums, percentages, and pro fees — all handled.",
+    src: "/marketing/screenshots/forecast-card.png",
+    alt: "Forecast card showing weather adjustment on a future event.",
+    title: "Forecast Card",
+    caption: "Every event, with weather already accounted for.",
   },
 ];
 
@@ -308,36 +299,49 @@ export default async function LandingPage() {
           </div>
         </div>
 
-        {/* Feature grid — Phase 2.5 brand integration. Each card now
-            anchors the lucide icon in a brand-teal filled square (white
-            icon inside) so the section carries brand presence after the
-            strong insight row + orange positioning band above. Card
-            border + bg-card unchanged so cards still read as the
-            "capability list" rather than competing with the insight row's
-            visual weight. */}
+        {/* "See what operators see" — Phase 2.5 lower-feature-section.
+            v33 brief direction (locked 2026-05-02 by Julian): replace
+            the prior generic feature grid with actual product
+            screenshots that carry their own caption. Three surfaces:
+            Today's Event (run-the-day card), Inquiry Inbox (Phase 7
+            marketplace's value), Forecast Card (the differentiator).
+
+            Until scripts/capture-screenshots.mjs runs, each frame
+            renders a placeholder block. The frame chrome (caption,
+            shadow, border-radius) is identical to the live treatment
+            so the layout reads the same with or without the PNGs. */}
         <div className="border-t">
           <div className="container mx-auto px-4 py-20">
             <h2 className="text-center text-3xl font-bold mb-4">
-              Built for mobile vendor operators
+              See what operators see
             </h2>
-            <p className="text-center text-sm text-muted-foreground mb-12">
-              Purpose-built software for mobile vendor businesses.
+            <p className="text-center text-sm text-muted-foreground mb-12 max-w-xl mx-auto">
+              Three surfaces operators open every day. Built for the people running the trucks.
             </p>
-            <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-              {FEATURE_CARDS.map((feature) => (
-                <div
-                  key={feature.title}
-                  data-testid={feature.testId}
-                  className="rounded-lg border bg-card p-6"
-                >
-                  <div className="mb-4 inline-flex h-12 w-12 items-center justify-center rounded-lg bg-brand-teal text-white shadow-sm">
-                    <feature.icon className="h-6 w-6" />
+            <div className="grid gap-8 md:grid-cols-2 lg:grid-cols-3">
+              {PRODUCT_SCREENS.map((s) => (
+                <div key={s.src} className="space-y-4">
+                  <div className="aspect-[4/3] rounded-xl border-2 border-dashed border-brand-teal/30 bg-brand-teal/[0.04] overflow-hidden shadow-sm flex items-center justify-center">
+                    {/* Placeholder treatment — swap for
+                        `<Image src={s.src} alt={s.alt} width={1440}
+                        height={1080} className="h-full w-full
+                        object-cover" />` once the capture script has
+                        produced real PNGs in /public/marketing/
+                        screenshots/. */}
+                    <div className="text-center px-6">
+                      <p className="text-xs font-semibold uppercase tracking-widest text-brand-teal mb-2">
+                        Screenshot
+                      </p>
+                      <p className="text-sm font-medium text-foreground">
+                        {s.title}
+                      </p>
+                      <p className="text-[11px] text-muted-foreground mt-1.5 font-mono">
+                        {s.src.split("/").pop()}
+                      </p>
+                    </div>
                   </div>
-                  <h3 className="font-semibold text-lg mb-2">
-                    {feature.title}
-                  </h3>
-                  <p className="text-sm text-muted-foreground">
-                    {feature.description}
+                  <p className="text-sm text-foreground text-center">
+                    {s.caption}
                   </p>
                 </div>
               ))}
