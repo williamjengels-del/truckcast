@@ -636,11 +636,13 @@ export async function DayOfEventBlock({
             </ul>
           </div>
         )}
-        {/* TODO: events table has no organizer_name / organizer_phone /
-            organizer_email columns — contact surface is joined from the
-            contacts table via linked_event_names. If an event's
-            organizer isn't also a logged contact, the contact row is
-            omitted. */}
+        {/* Note: events table doesn't carry organizer_name / phone /
+            email columns directly. The contact surface above is joined
+            from the contacts table via linked_event_names. If an
+            event's organizer isn't also a logged contact, the contact
+            row is omitted by design. Marketplace inquiries that
+            auto-create events stitch the organizer details into
+            event.notes instead — see api/event-inquiries/action. */}
       </CardContent>
     </Card>
   );
