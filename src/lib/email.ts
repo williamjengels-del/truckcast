@@ -101,6 +101,72 @@ export async function sendWelcomeEmail(to: string, businessName: string) {
   });
 }
 
+// ─── Manager Invite (existing-user fallback) ──────────────────────────────
+//
+// Sent when an owner re-invites a manager whose auth user already
+// exists (Supabase's inviteUserByEmail rejects existing emails). The
+// new-user path keeps using inviteUserByEmail's built-in template;
+// this function is the explicit-magic-link variant.
+
+export async function sendManagerInviteEmail(
+  to: string,
+  ownerBusinessName: string,
+  inviteUrl: string
+) {
+  if (!process.env.RESEND_API_KEY) return;
+  const resend = getResend();
+  const ownerLabel = ownerBusinessName?.trim() || "your operator";
+
+  await resend.emails.send({
+    from: FROM,
+    to,
+    subject: `You've been invited to manage ${ownerLabel} on VendCast`,
+    html: `
+<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
+<body style="margin:0;padding:0;background:#f9fafb;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;">
+  <div style="max-width:560px;margin:40px auto;background:#fff;border-radius:12px;overflow:hidden;border:1px solid #e5e7eb;">
+
+    <!-- Header -->
+    <div style="background:#0d9488;padding:32px 40px;">
+      <div style="color:white;font-size:28px;font-weight:800;letter-spacing:-1px;">VendCast</div>
+      <div style="color:rgba(255,255,255,0.85);font-size:13px;margin-top:6px;">Event ops for mobile vendors</div>
+    </div>
+
+    <!-- Body -->
+    <div style="padding:40px;">
+      <h1 style="margin:0 0 16px;font-size:22px;font-weight:700;color:#111827;">You've been invited to help manage ${ownerLabel}</h1>
+      <p style="margin:0 0 20px;font-size:15px;line-height:1.6;color:#374151;">
+        ${ownerLabel} added you as a manager on VendCast — the event-ops platform they use to track bookings, log events, and respond to inquiries from organizers. As a manager, you can do all of that on their behalf without needing their password.
+      </p>
+
+      <p style="margin:0 0 24px;font-size:15px;line-height:1.6;color:#374151;">
+        Click below to accept the invite and sign in. The link is good once and routes you straight to the dashboard.
+      </p>
+
+      <a href="${inviteUrl}" style="display:inline-block;background:#f97316;color:white;font-weight:600;font-size:15px;padding:12px 28px;border-radius:8px;text-decoration:none;">
+        Accept invite + sign in →
+      </a>
+
+      <p style="margin:32px 0 0;font-size:13px;color:#9ca3af;line-height:1.5;">
+        If you weren't expecting this, you can safely ignore this email — no account changes were made. If something looks off, reply and we'll sort it out.
+      </p>
+    </div>
+
+    <!-- Footer -->
+    <div style="padding:20px 40px;border-top:1px solid #f3f4f6;">
+      <p style="margin:0;font-size:12px;color:#9ca3af;">
+        VendCast · <a href="${APP_URL}" style="color:#9ca3af;">vendcast.co</a>
+      </p>
+    </div>
+  </div>
+</body>
+</html>
+    `.trim(),
+  });
+}
+
 // ─── Post-Event Sales Reminder ─────────────────────────────────────────────
 
 export interface UnloggedEvent {
