@@ -120,6 +120,135 @@ function generateRows(userId: string): SeedRow[] {
   return rows;
 }
 
+// Sample inquiries — match the operator's city ("St. Louis") so the
+// canonicalized routing query lands them in the inbox. Mix of event
+// types and statuses so the inbox visually demonstrates triage
+// (open / interested / contacted). The third + fourth inquiries
+// share the "summer festival" archetype so the engagement signal
+// can fire on the third (≥3 engaged operators in the same lead set
+// triggers the "Picking up steam" copy).
+interface SampleInquiry {
+  organizer_name: string;
+  organizer_email: string;
+  organizer_phone: string;
+  event_name: string;
+  daysFromNow: number;
+  event_type: string;
+  expected_attendance: number;
+  location_details: string;
+  notes: string;
+  // Action this operator (the demo account) has taken on the inquiry,
+  // if any. Lets a screenshot show a mix of unread / interested /
+  // contacted cards. null = open + unactioned.
+  myAction: "claimed" | "contacted" | null;
+  // Number of OTHER (synthetic) operators who marked Interested or
+  // Contacted on this inquiry. Drives the engagement signal copy
+  // (≥2 → "On a few operators' radars", ≥3 → "Picking up steam",
+  // ≥5 → "Drawing real interest").
+  peerEngaged: number;
+}
+
+const SAMPLE_INQUIRIES: SampleInquiry[] = [
+  {
+    organizer_name: "Maya Henderson",
+    organizer_email: "events@samplecorp.demo",
+    organizer_phone: "(314) 555-0142",
+    event_name: "Quarterly all-hands lunch",
+    daysFromNow: 9,
+    event_type: "Corporate",
+    expected_attendance: 220,
+    location_details: "Centene Plaza, downtown",
+    notes: "Need 1 truck, 11:30–1:30. Vegetarian options required for ~30% of crowd.",
+    myAction: null,
+    peerEngaged: 1,
+  },
+  {
+    organizer_name: "Daniel Park",
+    organizer_email: "daniel@samplehoa.demo",
+    organizer_phone: "(314) 555-0188",
+    event_name: "Lafayette Square Block Party",
+    daysFromNow: 21,
+    event_type: "Community/Neighborhood",
+    expected_attendance: 600,
+    location_details: "Park Ave between Mississippi and 18th",
+    notes: "Looking for 2–3 trucks. Beer garden across the street so dessert/savory mix preferred.",
+    myAction: "contacted",
+    peerEngaged: 2,
+  },
+  {
+    organizer_name: "Priya Subramanian",
+    organizer_email: "priya@samplefest.demo",
+    organizer_phone: "(636) 555-0199",
+    event_name: "Riverfront Summer Festival",
+    daysFromNow: 38,
+    event_type: "Festival",
+    expected_attendance: 4500,
+    location_details: "Kiener Plaza main stage area",
+    // Engagement signal target — 4 peers + this operator's action.
+    notes: "Three-day festival. Looking for vendors with demonstrated festival experience and a generator-included setup.",
+    myAction: null,
+    peerEngaged: 4,
+  },
+  {
+    organizer_name: "Jordan Walsh",
+    organizer_email: "jordan@samplewedding.demo",
+    organizer_phone: "(314) 555-0167",
+    event_name: "Walsh + Patel wedding",
+    daysFromNow: 54,
+    event_type: "Private Party",
+    expected_attendance: 130,
+    location_details: "Backyard reception, U-City",
+    notes: "Late-night bites, 9pm–11pm. Tacos preferred — can scale to ~200 if guest count creeps.",
+    myAction: "claimed",
+    peerEngaged: 0,
+  },
+];
+
+// Generate `peerEngaged` synthetic operator UUIDs for the
+// operator_actions slot. Stable per-inquiry so the same UUIDs roll
+// forward across renders (no flicker if anything pre-hydrates from
+// the DB). Uses a deterministic prefix tied to the inquiry archetype.
+function syntheticPeerActions(inquiry: SampleInquiry): Record<string, { action: "claimed" | "contacted"; at: string }> {
+  const slot: Record<string, { action: "claimed" | "contacted"; at: string }> = {};
+  for (let i = 0; i < inquiry.peerEngaged; i++) {
+    // Synthetic uuid namespace — matches the v4 shape so any UUID
+    // validator on read paths doesn't trip. Last segment varies by
+    // (inquiry archetype, peer index).
+    const uuid = `00000000-0000-4000-8000-${String(i).padStart(8, "0")}${inquiry.event_name.replace(/[^a-z0-9]/gi, "").slice(0, 4).padEnd(4, "0")}`;
+    slot[uuid] = {
+      action: i % 2 === 0 ? "claimed" : "contacted",
+      at: new Date(Date.now() - (i + 1) * 4 * 60 * 60 * 1000).toISOString(),
+    };
+  }
+  return slot;
+}
+
+interface SampleContact {
+  user_id: string;
+  name: string;
+  email: string;
+  phone: string;
+  organization: string;
+  notes: string;
+  is_sample: true;
+}
+
+// One demo contact wired to the most recent past event ("Today's
+// Event" surfaces will show this contact in the day-of card if the
+// operator's event_date matches today). Kept minimal — most demo
+// value is in the inquiries + events; contacts are a supporting
+// surface for the day-of-event card screenshot.
+const SAMPLE_CONTACTS: Omit<SampleContact, "user_id">[] = [
+  {
+    name: "Casey Rivera",
+    email: "casey@samplevenue.demo",
+    phone: "(314) 555-0124",
+    organization: "Sample Venue Group",
+    notes: "Day-of contact — keys to the loading bay are at the front desk.",
+    is_sample: true,
+  },
+];
+
 export async function POST() {
   const supabase = await createClient();
   const {
@@ -130,6 +259,9 @@ export async function POST() {
   }
 
   // Idempotency: refuse to seed if sample rows already present.
+  // Checks events first (still the bulk of the seed); inquiries +
+  // contacts share the same gate so partial runs don't create
+  // mixed state.
   const { count: existing } = await supabase
     .from("events")
     .select("id", { count: "exact", head: true })
@@ -147,10 +279,65 @@ export async function POST() {
   }
 
   const rows = generateRows(user.id);
-  const { error } = await supabase.from("events").insert(rows);
-  if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+  const { error: eventsError } = await supabase.from("events").insert(rows);
+  if (eventsError) {
+    return NextResponse.json({ error: eventsError.message }, { status: 500 });
   }
 
-  return NextResponse.json({ ok: true, inserted: rows.length });
+  // Inquiries — populate matched_operator_ids with the demo user's id
+  // so the inbox query (`contains("matched_operator_ids", [userId])`)
+  // sees them. operator_actions includes synthetic peers so the
+  // engagement signal copy renders.
+  const today = new Date();
+  const inquiryRows = SAMPLE_INQUIRIES.map((inq) => {
+    const eventDate = new Date(today);
+    eventDate.setDate(eventDate.getDate() + inq.daysFromNow);
+    const peerSlot = syntheticPeerActions(inq);
+    const ownSlot = inq.myAction
+      ? { [user.id]: { action: inq.myAction, at: new Date().toISOString() } }
+      : {};
+    return {
+      organizer_name: inq.organizer_name,
+      organizer_email: inq.organizer_email,
+      organizer_phone: inq.organizer_phone,
+      organizer_org: null,
+      event_name: inq.event_name,
+      event_date: eventDate.toISOString().slice(0, 10),
+      event_type: inq.event_type,
+      expected_attendance: inq.expected_attendance,
+      city: "St. Louis",
+      state: "MO",
+      location_details: inq.location_details,
+      budget_estimate: null,
+      notes: inq.notes,
+      status: "open" as const,
+      matched_operator_ids: [user.id],
+      operator_actions: { ...peerSlot, ...ownSlot },
+      is_sample: true,
+    };
+  });
+  const { error: inquiriesError } = await supabase
+    .from("event_inquiries")
+    .insert(inquiryRows);
+  if (inquiriesError) {
+    // Don't fail the whole seed — events already inserted are still
+    // useful. Log and continue.
+    console.error("[sample-data/seed] inquiries insert failed:", inquiriesError.message);
+  }
+
+  // Contacts — single demo contact for the day-of card screenshot.
+  const contactRows = SAMPLE_CONTACTS.map((c) => ({ ...c, user_id: user.id }));
+  const { error: contactsError } = await supabase
+    .from("contacts")
+    .insert(contactRows);
+  if (contactsError) {
+    console.error("[sample-data/seed] contacts insert failed:", contactsError.message);
+  }
+
+  return NextResponse.json({
+    ok: true,
+    inserted: rows.length,
+    inquiries: inquiriesError ? 0 : inquiryRows.length,
+    contacts: contactsError ? 0 : contactRows.length,
+  });
 }
