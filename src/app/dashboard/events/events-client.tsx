@@ -339,14 +339,43 @@ const ForecastVsActual = React.memo(function ForecastVsActual({
   const pct = forecast > 0 ? Math.round((diff / forecast) * 100) : 0;
   const isPositive = diff >= 0;
 
+  // Range hit/miss classification — operator request 2026-05-06.
+  // Dropped the redundant "Forecast: $X" prefix (Range column already
+  // carries the prediction; double-display undermined the
+  // de-precisification the range was designed to do). Replaced with
+  // a within/below/above-range qualifier alongside the variance:
+  //   - Within range  → green, "+$120 (+7%) · within range"
+  //   - Below range   → red,   "-$694 (-40%) · below range"
+  //   - Above range   → teal,  "+$340 (+19%) · above range"
+  // Falls back to plain variance display when range bounds are
+  // missing on the row (older events imported before forecast_low/
+  // _high were populated).
+  let rangeLabel: string | null = null;
+  let rangeColor: string;
+  const hasRange = event.forecast_low !== null && event.forecast_high !== null;
+  if (hasRange) {
+    if (actual < event.forecast_low!) {
+      rangeLabel = "below range";
+      rangeColor = "text-red-600";
+    } else if (actual > event.forecast_high!) {
+      rangeLabel = "above range";
+      rangeColor = "text-brand-teal";
+    } else {
+      rangeLabel = "within range";
+      rangeColor = "text-green-600";
+    }
+  } else {
+    rangeColor = isPositive ? "text-green-600" : "text-red-600";
+  }
+
   return (
-    <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs">
-      <span className="text-muted-foreground">
-        Forecast: <span className="font-medium text-foreground">{formatCurrency(forecast)}</span>
-      </span>
-      <span className={`font-medium ${isPositive ? "text-green-600" : "text-red-600"}`}>
+    <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs">
+      <span className={`font-medium ${rangeColor}`}>
         {isPositive ? "+" : ""}{formatCurrency(diff)} ({isPositive ? "+" : ""}{pct}%)
       </span>
+      {rangeLabel && (
+        <span className={`text-xs ${rangeColor}`}>· {rangeLabel}</span>
+      )}
     </div>
   );
 });
