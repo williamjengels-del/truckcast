@@ -60,11 +60,16 @@ type Step = "upload" | "map" | "preview" | "duplicates";
 
 type DuplicateAction = "skip" | "replace" | "keep_both";
 
+type DuplicateMatchType = "exact" | "fuzzy";
+
 interface DuplicateMatch {
   event_name: string;
   event_date: string;
   existing_event_id: string;
+  existing_event_name: string;
   existing_net_sales: number | null;
+  match_type: DuplicateMatchType;
+  similarity_score: number | null;
   action: DuplicateAction;
 }
 
@@ -953,8 +958,11 @@ export function CsvImportTab() {
                   Duplicate Detection
                 </CardTitle>
                 <p className="text-sm text-muted-foreground mt-1">
-                  We found {duplicates.length} potential duplicate{duplicates.length !== 1 ? "s" : ""} (same event name + date already in your account).
-                  Choose how to handle each one, then click Import.
+                  We found {duplicates.length} potential duplicate{duplicates.length !== 1 ? "s" : ""} on dates already in your account
+                  {duplicates.some((d) => d.match_type === "fuzzy")
+                    ? " — including near-misses where the name differs slightly (apostrophes, comma prefixes)."
+                    : "."}
+                  {" "}Choose how to handle each one, then click Import.
                 </p>
               </div>
               {!imported && (
@@ -993,7 +1001,8 @@ export function CsvImportTab() {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Event Name</TableHead>
+                    <TableHead>Incoming row</TableHead>
+                    <TableHead>Matches existing</TableHead>
                     <TableHead>Date</TableHead>
                     <TableHead>Existing Sales</TableHead>
                     <TableHead>Action</TableHead>
@@ -1003,6 +1012,18 @@ export function CsvImportTab() {
                   {duplicates.map((dup, i) => (
                     <TableRow key={i}>
                       <TableCell className="font-medium">{dup.event_name}</TableCell>
+                      <TableCell>
+                        <div className="flex flex-col gap-0.5">
+                          <span className={dup.match_type === "fuzzy" ? "text-foreground" : "text-muted-foreground"}>
+                            {dup.match_type === "fuzzy" ? dup.existing_event_name : "Same name"}
+                          </span>
+                          <span className="text-[10px] text-muted-foreground">
+                            {dup.match_type === "exact"
+                              ? "Exact match"
+                              : `Near match · ${Math.round((dup.similarity_score ?? 0) * 100)}% similar`}
+                          </span>
+                        </div>
+                      </TableCell>
                       <TableCell>{dup.event_date}</TableCell>
                       <TableCell>
                         {dup.existing_net_sales !== null
