@@ -33,7 +33,10 @@ export default async function EmbedSchedulePage({ params, searchParams }: PagePr
   const limit = Math.min(Math.max(parseInt(String(query.limit ?? "20"), 10) || 20, 1), 50);
   const showHeader = query.header !== "false";
   const accentRaw = typeof query.accent === "string" ? query.accent.replace(/[^a-fA-F0-9]/g, "") : "";
-  const accent = accentRaw.length >= 3 ? `#${accentRaw}` : "#4f46e5";
+  // Default accent is VendCast brand teal — was generic indigo
+  // (#4f46e5), which made every operator's embed look off-brand.
+  // Operators can still override via ?accent= URL param.
+  const accent = accentRaw.length >= 3 ? `#${accentRaw}` : "#0d4f5c";
 
   const supabase = await createClient();
 
@@ -45,7 +48,7 @@ export default async function EmbedSchedulePage({ params, searchParams }: PagePr
 
   if (!profile) {
     return (
-      <div style={{ padding: "2rem", textAlign: "center", fontFamily: "system-ui, sans-serif" }}>
+      <div style={{ padding: "2rem", textAlign: "center", fontFamily: "var(--font-geist-sans), system-ui, sans-serif" }}>
         <p style={{ color: "#6b7280" }}>Schedule not found.</p>
       </div>
     );
@@ -53,7 +56,7 @@ export default async function EmbedSchedulePage({ params, searchParams }: PagePr
 
   if (profile.subscription_tier === "starter") {
     return (
-      <div style={{ padding: "2rem", textAlign: "center", fontFamily: "system-ui, sans-serif" }}>
+      <div style={{ padding: "2rem", textAlign: "center", fontFamily: "var(--font-geist-sans), system-ui, sans-serif" }}>
         <p style={{ color: "#6b7280", fontSize: "0.875rem" }}>
           Upgrade to Pro to embed your schedule.
         </p>
@@ -89,7 +92,7 @@ export default async function EmbedSchedulePage({ params, searchParams }: PagePr
   return (
     <div
       style={{
-        fontFamily: "system-ui, -apple-system, sans-serif",
+        fontFamily: "var(--font-geist-sans), system-ui, -apple-system, sans-serif",
         backgroundColor: bg,
         color: textPrimary,
         padding: "1rem",
@@ -120,7 +123,7 @@ export default async function EmbedSchedulePage({ params, searchParams }: PagePr
 
       {!events || events.length === 0 ? (
         <p style={{ fontSize: "0.875rem", color: textSecondary, textAlign: "center", padding: "2rem 0" }}>
-          No upcoming events scheduled.
+          Nothing on the books right now — check back soon.
         </p>
       ) : (
         <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
