@@ -514,13 +514,37 @@ export function calculateForecast(
   // Level 1: Direct Event History
   result = tryLevel1(target, validEvents, historicalEvents);
 
-  if (result && platformMedian > 0 && platformOpCount >= 2) {
+  if (result && platformMedian > 0 && platformOpCount >= 3) {
     // Blend personal history with platform aggregate.
-    // More personal data = more weight on personal history.
+    //
+    // Calibration retune 2026-05-06 after Sunset Hills Maker's Market
+    // surfaced as a real over-forecast: operator had 1 personal data
+    // point ($1,058 actual) and the engine produced $1,752 — the old
+    // 55%-personal / 45%-platform blend at n=1 was pulling forecasts
+    // too aggressively toward platform median when the operator's own
+    // data was thin AND the platform sample was itself thin (n_op=2).
+    //
+    // Two changes here:
+    //   1. Raise the gate: platform_operator_count must be >= 3 (was
+    //      >= 2). Two-operator samples are too noisy to reliably
+    //      adjust against; require a third signal before blending.
+    //   2. Cap platform weight at 25% — personal_weight never drops
+    //      below 0.75 regardless of how thin the operator's data is.
+    //      Mature personal data (5+ points) still keeps the existing
+    //      0.85 weight (15% platform) — those operators have proven
+    //      consistency and shouldn't be pulled around by community
+    //      median.
+    //
+    // Glide path for future operator-count milestones (not yet
+    // implemented — when we hit them we revisit):
+    //   platform_operator_count >= 5  → cap rises to 35% platform
+    //   platform_operator_count >= 10 → cap rises to 50% platform
+    //   platform_operator_count >= 25 → cap rises to 60% platform
     const personalWeight =
       result.dataPoints >= 5 ? 0.85 :
-      result.dataPoints >= 3 ? 0.75 :
-      result.dataPoints >= 2 ? 0.65 : 0.55;
+      result.dataPoints >= 3 ? 0.80 :
+      result.dataPoints >= 2 ? 0.78 :
+      0.75;
     const blended = result.forecast * personalWeight + platformMedian * (1 - personalWeight);
     // Set platform fields BEFORE applyAdjustments so calculateConfidenceScore
     // can credit the community component. Setting them after was a silent
