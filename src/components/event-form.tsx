@@ -709,8 +709,12 @@ export function EventForm({
                   </p>
                 </div>
               )}
-              <div className="col-span-2 grid grid-cols-3 gap-3">
-                <div className="col-span-2 space-y-2">
+              {/* City + State row. Was `grid-cols-3` with no responsive
+                  prefix, which crammed the State dropdown into ~100px
+                  on phones — "MO — Missouri" content was clipping.
+                  Now stacks single-column on mobile, 3-col at sm+. */}
+              <div className="sm:col-span-2 grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div className="sm:col-span-2 space-y-2">
                   <Label htmlFor="city">City</Label>
                   <Input
                     id="city"
