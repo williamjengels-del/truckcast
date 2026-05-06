@@ -15,6 +15,11 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import {
   Plus,
   Search,
   DollarSign,
@@ -162,6 +167,40 @@ function formatDate(dateStr: string) {
     day: "numeric",
     year: "numeric",
   });
+}
+
+// Compact 12-hour time renderer for calendar cells + tooltip previews.
+// Mirrors formatTimeHHMM in src/components/day-of-event-block.tsx —
+// kept inline rather than DRY-extracted because the broader event-time
+// formatter cleanup is its own pass. Both call sites format the same
+// "HH:MM" event_time strings the same way.
+function formatTimeHHMM(t: string | null | undefined): string | null {
+  if (!t) return null;
+  const [hh, mm] = t.split(":");
+  const h = parseInt(hh, 10);
+  const m = parseInt(mm, 10);
+  if (isNaN(h) || isNaN(m)) return null;
+  const period = h >= 12 ? "PM" : "AM";
+  const hour12 = h % 12 === 0 ? 12 : h % 12;
+  const minStr = m.toString().padStart(2, "0");
+  return `${hour12}:${minStr} ${period}`;
+}
+
+// Status-color classes for calendar event chips. Rohini flagged 2026-05-06
+// that booked/cancelled status wasn't visible at-a-glance on the calendar
+// view. Three discrete states; catering border-stripe (separate concern)
+// composes on top.
+function calendarEventClasses(event: Event): string {
+  if (event.cancellation_reason) {
+    // Cancelled — destructive tint, line-through, dimmed.
+    return "bg-destructive/5 text-destructive/70 border-destructive/30 line-through";
+  }
+  if (!event.booked) {
+    // Unbooked / prospecting — neutral, dashed border to read as "not yet committed".
+    return "bg-muted/40 text-muted-foreground border-dashed border-border";
+  }
+  // Booked (default) — current treatment, brand-primary tint.
+  return "bg-primary/10 text-primary border-primary/20";
 }
 
 // SortIcon — small per-column helper. Hoisted + memoized. Takes
@@ -2123,16 +2162,26 @@ export function EventsClient({ initialEvents, userId = "", businessName = "", us
                 <div className="space-y-1.5">
                   {expandedDayEvents.map((event) => {
                     const isCatering = (event.event_mode ?? "food_truck") === "catering";
+                    const startDisplay = formatTimeHHMM(event.start_time);
+                    const endDisplay = formatTimeHHMM(event.end_time);
+                    const timeRange = startDisplay && endDisplay
+                      ? `${startDisplay} – ${endDisplay}`
+                      : startDisplay ?? endDisplay ?? null;
                     return (
                       <button
                         key={event.id}
                         onClick={() => setEditingEvent(event)}
                         className={`flex items-start gap-2 w-full text-left rounded-md border bg-background px-3 py-2 hover:bg-muted transition-colors ${
                           isCatering ? "border-l-[3px] border-l-brand-teal" : ""
-                        }`}
+                        } ${event.cancellation_reason ? "opacity-70" : ""}`}
                       >
                         <div className="flex-1 min-w-0">
-                          <div className="text-sm font-medium truncate">{event.event_name}</div>
+                          <div className={`text-sm font-medium truncate ${event.cancellation_reason ? "line-through" : ""}`}>
+                            {event.event_name}
+                          </div>
+                          {timeRange && (
+                            <div className="text-xs text-muted-foreground">{timeRange}</div>
+                          )}
                           {(event.event_type || event.location || event.city) && (
                             <div className="text-xs text-muted-foreground truncate">
                               {[event.event_type, event.location ?? event.city].filter(Boolean).join(" · ")}
@@ -2204,15 +2253,48 @@ export function EventsClient({ initialEvents, userId = "", businessName = "", us
                     const cateringBorderClass = (event.event_mode ?? "food_truck") === "catering"
                       ? "border-l-2 border-l-brand-teal"
                       : "border-l-2 border-l-transparent";
+                    const statusClasses = calendarEventClasses(event);
+                    const startDisplay = formatTimeHHMM(event.start_time);
+                    const endDisplay = formatTimeHHMM(event.end_time);
+                    const timeRange = startDisplay && endDisplay
+                      ? `${startDisplay} – ${endDisplay}`
+                      : startDisplay ?? endDisplay ?? null;
+                    const locationStr = [event.location, event.city].filter(Boolean).join(" · ");
+                    const statusLabel = event.cancellation_reason
+                      ? "Cancelled"
+                      : !event.booked
+                        ? "Unbooked"
+                        : "Booked";
                     return (
-                      <button
-                        key={event.id}
-                        onClick={() => setEditingEvent(event)}
-                        className={`text-left text-[10px] font-medium px-1 py-0.5 rounded border truncate w-full leading-tight bg-primary/10 text-primary border-primary/20 ${cateringBorderClass} hover:opacity-80 transition-opacity`}
-                        title={event.event_name}
-                      >
-                        {event.event_name}
-                      </button>
+                      <Tooltip key={event.id}>
+                        <TooltipTrigger
+                          render={
+                            <button
+                              onClick={() => setEditingEvent(event)}
+                              className={`text-left text-[10px] font-medium px-1 py-0.5 rounded border w-full leading-tight ${statusClasses} ${cateringBorderClass} hover:opacity-80 transition-opacity`}
+                            />
+                          }
+                        >
+                          <div className="truncate">{event.event_name}</div>
+                          {startDisplay && (
+                            <div className="text-[9px] opacity-75 truncate font-normal">
+                              {startDisplay}
+                            </div>
+                          )}
+                        </TooltipTrigger>
+                        <TooltipContent>
+                          <div className="max-w-[260px] space-y-0.5">
+                            <div className="font-semibold">{event.event_name}</div>
+                            <div className="text-xs opacity-90">{statusLabel}</div>
+                            {timeRange && (
+                              <div className="text-xs opacity-90">{timeRange}</div>
+                            )}
+                            {locationStr && (
+                              <div className="text-xs opacity-90">{locationStr}</div>
+                            )}
+                          </div>
+                        </TooltipContent>
+                      </Tooltip>
                     );
                   })}
                   {dayEvents.length > 3 && (
