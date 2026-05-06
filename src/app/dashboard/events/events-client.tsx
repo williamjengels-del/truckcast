@@ -285,6 +285,14 @@ const ForecastVsActual = React.memo(function ForecastVsActual({
   ) {
     return null;
   }
+  // Fixed-revenue events (pre_settled, catering with invoice,
+  // commission_with_minimum) carry a contracted amount that's the
+  // ground truth for what was earned. The forecast engine still
+  // produces a number against historical walk-up patterns, but
+  // surfacing "Forecast: $510 / -100% variance" against a $750
+  // contract is misleading — the contract amount already shows in
+  // the actual + range columns. Suppress the variance line here.
+  if (isFixedRevenueEvent(event)) return null;
 
   const actual = event.net_sales;
   const forecast = event.forecast_sales;
@@ -2278,7 +2286,7 @@ export function EventsClient({ initialEvents, userId = "", businessName = "", us
                       </Button>
                     </div>
                   </div>
-                  {event.forecast_sales && (
+                  {event.forecast_sales && !isFixedRevenueEvent(event) && (
                     <div className="mt-1 flex items-center flex-wrap gap-x-2 text-xs text-muted-foreground">
                       <span>Forecast:</span>
                       <ForecastInline event={event} />

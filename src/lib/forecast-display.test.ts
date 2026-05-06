@@ -96,6 +96,24 @@ describe("isFixedRevenueEvent", () => {
     expect(isFixedRevenueEvent(eventOf({ fee_type: "flat_fee", fee_rate: 200 }))).toBe(false);
     expect(isFixedRevenueEvent(eventOf({ fee_type: "percentage", fee_rate: 10 }))).toBe(false);
   });
+
+  // Regression anchor for the 2026-05-05 "wrong forecast on event"
+  // screenshot: a Veteran's Fundraiser catering event with a $750
+  // contracted payout was rendering "Forecast: $510.53 / -100%"
+  // under the event name. The variance line is gated on this
+  // predicate in events-client.tsx — so this row shape MUST flag
+  // as fixed-revenue or the screenshot bug returns.
+  it("flags the Veteran's Fundraiser (catering + pre_settled $750) as fixed", () => {
+    const veteransFundraiser = eventOf({
+      event_name: "Veteran's Fundraiser",
+      event_mode: "catering",
+      fee_type: "pre_settled",
+      fee_rate: 750,
+      net_sales: null,
+      forecast_sales: 510.53,
+    });
+    expect(isFixedRevenueEvent(veteransFundraiser)).toBe(true);
+  });
 });
 
 describe("fixedRevenueAmount", () => {
