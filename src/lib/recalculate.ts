@@ -12,7 +12,9 @@ import type { Event, WeatherType } from "@/lib/database.types";
  * Server-side recalculation of event performance and forecasts.
  * Called after any event mutation (create, update, delete).
  */
-export async function recalculateForUser(userId: string) {
+export async function recalculateForUser(
+  userId: string
+): Promise<{ forecastsUpdated: number; performanceUpdated: number; weatherClassified: number }> {
   const supabase = await createClient();
 
   const { data: events } = await supabase
@@ -90,6 +92,7 @@ export async function recalculateForUser(userId: string) {
 
   // Recalculate forecasts for ALL future events — booked AND unbooked
   const futureEvents = allEvents.filter((e) => e.event_date >= today);
+  let forecastsUpdated = 0;
   for (const event of futureEvents) {
     const platformEvent = event.booked
       ? (platformMap.get(event.event_name.toLowerCase().trim()) ?? null)
@@ -109,19 +112,24 @@ export async function recalculateForUser(userId: string) {
           forecast_confidence: result.confidence,
         })
         .eq("id", event.id);
+      forecastsUpdated++;
     }
   }
 
-  // Backfill forecast_sales for past events that have sales but no forecast.
-  // This covers events that were added/booked after their date passed, or events
-  // where the forecast engine ran before enough historical data existed.
+  // Backfill past events that either lack a forecast entirely OR have a
+  // forecast_sales value but null range bounds. The range-null branch
+  // catches rows forecasted before forecast_low/_high writes existed —
+  // without this, ForecastVsActual silently falls back to plain variance
+  // (no within/below/above-range qualifier) on those older rows.
   const pastEventsNeedingForecast = allEvents.filter(
     (e) =>
       e.event_date < today &&
       e.booked &&
       ((e.net_sales !== null && e.net_sales > 0) ||
         (e.event_mode === "catering" && e.invoice_revenue > 0)) &&
-      e.forecast_sales === null &&
+      (e.forecast_sales === null ||
+        e.forecast_low === null ||
+        e.forecast_high === null) &&
       e.anomaly_flag !== "disrupted"
   );
 
@@ -142,8 +150,15 @@ export async function recalculateForUser(userId: string) {
           forecast_confidence: result.confidence,
         })
         .eq("id", event.id);
+      forecastsUpdated++;
     }
   }
+
+  return {
+    forecastsUpdated,
+    performanceUpdated: eventNames.length,
+    weatherClassified: weatherUpdates.size,
+  };
 }
 
 /**
