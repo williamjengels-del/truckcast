@@ -470,6 +470,10 @@ interface ListViewProps {
   // Derived / memoized collections
   initialEvents: Event[];
   tabCounts: TabCounts;
+  /** Post-chip count for the active tab. When this is less than
+   *  `tabCounts[activeTab]`, the chip filter is hiding rows — the
+   *  active tab pill renders "(N of M)" so the operator notices. */
+  activeTabFilteredCount: number;
   filtered: Event[];
   sorted: Event[];
   weatherMap: Map<string, WeatherForecast>;
@@ -518,6 +522,7 @@ function ListView({
   setDuplicatingEvent,
   initialEvents,
   tabCounts,
+  activeTabFilteredCount,
   filtered,
   sorted,
   weatherMap,
@@ -556,8 +561,13 @@ function ListView({
           All / Upcoming / Past / Needs attention. Status filtering
           (booked/unbooked/cancelled) and field filtering moved to
           chips. Tab counts include all events in tab scope BEFORE
-          chip refinement, so operators can see "how many total" vs
-          "how many after my filters." */}
+          chip refinement.
+          Filter-visibility badge: when the active tab's chip-filtered
+          count is less than its scope total, the active pill renders
+          "(N of M)" instead of "(M)". Surfaces the case where chips
+          are hiding rows the operator would otherwise expect to see —
+          inactive tabs always show their scope total since their
+          chip set isn't currently in play. */}
       <div className="flex gap-1 border-b overflow-x-auto">
         <button
           className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${
@@ -567,7 +577,9 @@ function ListView({
           }`}
           onClick={() => handleTabChange("all")}
         >
-          All ({tabCounts.all})
+          All ({activeTab === "all" && activeTabFilteredCount < tabCounts.all
+            ? `${activeTabFilteredCount} of ${tabCounts.all}`
+            : tabCounts.all})
         </button>
         <button
           className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${
@@ -577,7 +589,9 @@ function ListView({
           }`}
           onClick={() => handleTabChange("upcoming")}
         >
-          Upcoming ({tabCounts.upcoming})
+          Upcoming ({activeTab === "upcoming" && activeTabFilteredCount < tabCounts.upcoming
+            ? `${activeTabFilteredCount} of ${tabCounts.upcoming}`
+            : tabCounts.upcoming})
         </button>
         <button
           className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${
@@ -587,7 +601,9 @@ function ListView({
           }`}
           onClick={() => handleTabChange("past")}
         >
-          Past ({tabCounts.past})
+          Past ({activeTab === "past" && activeTabFilteredCount < tabCounts.past
+            ? `${activeTabFilteredCount} of ${tabCounts.past}`
+            : tabCounts.past})
         </button>
         {tabCounts.needs_attention > 0 && (
           <button
@@ -600,7 +616,10 @@ function ListView({
           >
             Needs attention
             <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-brand-orange px-1.5 text-[10px] font-bold text-white">
-              {tabCounts.needs_attention}
+              {activeTab === "needs_attention" &&
+              activeTabFilteredCount < tabCounts.needs_attention
+                ? `${activeTabFilteredCount} of ${tabCounts.needs_attention}`
+                : tabCounts.needs_attention}
             </span>
           </button>
         )}
@@ -2638,6 +2657,7 @@ export function EventsClient({ initialEvents, userId = "", businessName = "", us
             setDuplicatingEvent={setDuplicatingEvent}
             initialEvents={initialEvents}
             tabCounts={tabCounts}
+            activeTabFilteredCount={activeEvents.length}
             filtered={filtered}
             sorted={sorted}
             weatherMap={weatherMap}
