@@ -564,8 +564,6 @@ function TopEventsSection({ top10 }: { top10: Top10Row[] }) {
                 <TableHead className="text-right">Times Booked</TableHead>
                 <TableHead className="text-right">Avg Revenue</TableHead>
                 <TableHead className="text-right">Total Revenue</TableHead>
-                <TableHead>Trend</TableHead>
-                <TableHead>Confidence</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -583,33 +581,6 @@ function TopEventsSection({ top10 }: { top10: Top10Row[] }) {
                   </TableCell>
                   <TableCell className="text-right">
                     {formatCurrency(perf.total_sales)}
-                  </TableCell>
-                  <TableCell>
-                    <Badge
-                      variant={
-                        perf.trend === "Growing"
-                          ? "default"
-                          : perf.trend === "Declining"
-                            ? "destructive"
-                            : "secondary"
-                      }
-                    >
-                      {perf.trend ?? "Stable"}
-                    </Badge>
-                  </TableCell>
-                  <TableCell>
-                    <Badge
-                      variant="secondary"
-                      className={
-                        perf.confidence === "HIGH"
-                          ? "bg-green-100 text-green-800"
-                          : perf.confidence === "LOW"
-                            ? "bg-red-100 text-red-800"
-                            : "bg-yellow-100 text-yellow-800"
-                      }
-                    >
-                      {perf.confidence ?? "—"}
-                    </Badge>
                   </TableCell>
                 </TableRow>
               ))}
@@ -887,35 +858,6 @@ function CompareCard({
           <p className="font-medium text-red-600">
             {formatCurrency(row.min_sales)}
           </p>
-        </div>
-        <div>
-          <p className="text-xs text-muted-foreground">Confidence</p>
-          <Badge
-            variant="secondary"
-            className={
-              row.confidence === "HIGH"
-                ? "bg-green-100 text-green-800"
-                : row.confidence === "LOW"
-                  ? "bg-red-100 text-red-800"
-                  : "bg-yellow-100 text-yellow-800"
-            }
-          >
-            {row.confidence ?? "—"}
-          </Badge>
-        </div>
-        <div>
-          <p className="text-xs text-muted-foreground">Trend</p>
-          <Badge
-            variant={
-              row.trend === "Growing"
-                ? "default"
-                : row.trend === "Declining"
-                  ? "destructive"
-                  : "secondary"
-            }
-          >
-            {row.trend ?? "Stable"}
-          </Badge>
         </div>
         {row.consistency_score !== null && (
           <div>

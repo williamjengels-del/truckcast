@@ -14,15 +14,12 @@ import {
 } from "@/components/ui/table";
 import {
   ArrowLeft,
-  TrendingUp,
-  TrendingDown,
-  Minus,
   CalendarCheck,
   BarChart3,
   MapPin,
   CloudSun,
 } from "lucide-react";
-import { CONFIDENCE_COLORS, TREND_COLORS, TIER_COLORS } from "@/lib/constants";
+import { TIER_COLORS } from "@/lib/constants";
 import type { Event, EventPerformance } from "@/lib/database.types";
 import { getDerivedTierDetails } from "@/lib/forecast-engine";
 
@@ -195,31 +192,6 @@ export default async function EventDrilldownPage({ params }: PageProps) {
               <p className={`text-2xl font-bold mt-1 ${perf.consistency_score >= 0.7 ? "text-green-600" : perf.consistency_score >= 0.5 ? "text-yellow-600" : "text-red-600"}`}>
                 {(perf.consistency_score * 100).toFixed(0)}%
               </p>
-              <Badge variant="secondary" className={`mt-1 text-xs ${CONFIDENCE_COLORS[perf.confidence] ?? ""}`}>
-                {perf.confidence}
-              </Badge>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardContent className="pt-4">
-              <p className="text-xs text-muted-foreground uppercase tracking-wide font-medium">Trend</p>
-              <div className="flex items-center gap-1.5 mt-1">
-                {perf.trend === "Growing" ? (
-                  <TrendingUp className="h-5 w-5 text-green-600" />
-                ) : perf.trend === "Declining" ? (
-                  <TrendingDown className="h-5 w-5 text-red-500" />
-                ) : (
-                  <Minus className="h-5 w-5 text-muted-foreground" />
-                )}
-                <span className={`text-base font-semibold ${TREND_COLORS[perf.trend] ?? ""}`}>
-                  {perf.trend}
-                </span>
-              </div>
-              {perf.yoy_growth !== null && (
-                <p className="text-xs text-muted-foreground mt-0.5">
-                  {perf.yoy_growth > 0 ? "+" : ""}{(perf.yoy_growth * 100).toFixed(0)}% YoY
-                </p>
-              )}
             </CardContent>
           </Card>
           <Card>

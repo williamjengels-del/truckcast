@@ -2,7 +2,6 @@
 
 import { useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   Table,
@@ -12,15 +11,9 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
-import { BarChart3, ChevronUp, ChevronDown, ChevronsUpDown, Info, RefreshCw, ExternalLink, Search, X } from "lucide-react";
+import { BarChart3, ChevronUp, ChevronDown, ChevronsUpDown, RefreshCw, ExternalLink, Search, X } from "lucide-react";
 import Link from "next/link";
 import { Input } from "@/components/ui/input";
-import { CONFIDENCE_COLORS, TREND_COLORS } from "@/lib/constants";
 import type { EventPerformance } from "@/lib/database.types";
 
 function formatCurrency(val: number | null): string {
@@ -31,39 +24,24 @@ function formatCurrency(val: number | null): string {
   })}`;
 }
 
+// Confidence (LOW/MEDIUM/HIGH) + trend (Growing/Stable/Declining/
+// New/Insufficient Data) columns dropped from the user-facing table
+// 2026-05-06 per operator feedback. The labels read as low confidence
+// in the product itself, and the YoY-derived trend is structurally
+// wrong for food trucks (events come and go, weather/staffing dominate
+// over yearly comparisons). Underlying values still live in
+// event_performance for the forecast engine; just not surfaced here.
 type SortField =
   | "event_name"
   | "times_booked"
   | "avg_sales"
   | "median_sales"
-  | "consistency_score"
-  | "confidence"
-  | "trend"
-  | "yoy_growth";
+  | "consistency_score";
 
 type SortDirection = "asc" | "desc";
 
 interface PerformanceClientProps {
   performances: EventPerformance[];
-}
-
-const CONFIDENCE_ORDER: Record<string, number> = { HIGH: 1, MEDIUM: 2, LOW: 3 };
-const TREND_ORDER: Record<string, number> = { Growing: 1, Stable: 2, "New/Insufficient Data": 3, Declining: 4 };
-
-/** Returns the appropriate tooltip text for a confidence badge. */
-function confidenceTooltip(perf: EventPerformance): string {
-  const { confidence, times_booked } = perf;
-  if (confidence === "HIGH") {
-    return "Strong prediction — consistent data from multiple events.";
-  }
-  if (confidence === "MEDIUM") {
-    return "Reasonable prediction — some variance in past results.";
-  }
-  // LOW
-  if (times_booked !== null && times_booked >= 8) {
-    return "High variance — results vary significantly between visits. Check for disrupted events or unusual outliers.";
-  }
-  return "Limited prediction — high variance or few comparable events.";
 }
 
 export function PerformanceClient({ performances }: PerformanceClientProps) {
@@ -132,18 +110,6 @@ export function PerformanceClient({ performances }: PerformanceClientProps) {
         return ((a.median_sales ?? 0) - (b.median_sales ?? 0)) * dir;
       case "consistency_score":
         return ((a.consistency_score ?? 0) - (b.consistency_score ?? 0)) * dir;
-      case "confidence": {
-        const oa = CONFIDENCE_ORDER[a.confidence] ?? 99;
-        const ob = CONFIDENCE_ORDER[b.confidence] ?? 99;
-        return (oa - ob) * dir;
-      }
-      case "trend": {
-        const oa = TREND_ORDER[a.trend] ?? 99;
-        const ob = TREND_ORDER[b.trend] ?? 99;
-        return (oa - ob) * dir;
-      }
-      case "yoy_growth":
-        return ((a.yoy_growth ?? 0) - (b.yoy_growth ?? 0)) * dir;
       default:
         return 0;
     }
@@ -237,7 +203,7 @@ export function PerformanceClient({ performances }: PerformanceClientProps) {
               <div>
                 <p className="font-medium text-sm">No performance data yet</p>
                 <p className="text-muted-foreground text-xs mt-1 max-w-xs mx-auto">
-                  Once you have recurring events with sales logged, VendCast shows avg revenue, consistency scores, and trends per event.
+                  Once you have recurring events with sales logged, VendCast shows avg revenue and consistency per event.
                 </p>
               </div>
               <div className="flex gap-2 justify-center">
@@ -265,23 +231,6 @@ export function PerformanceClient({ performances }: PerformanceClientProps) {
                     <SortableHead field="median_sales" className="text-right">Median</SortableHead>
                     <TableHead className="text-right">Min / Max</TableHead>
                     <SortableHead field="consistency_score" className="text-center">Consistency</SortableHead>
-                    <TableHead className="text-center whitespace-nowrap">
-                      <span className="inline-flex items-center gap-1">
-                        <SortableHead field="confidence" className="p-0 border-0">
-                          Confidence
-                        </SortableHead>
-                        <Tooltip>
-                          <TooltipTrigger render={<span className="inline-flex cursor-help" />}>
-                            <Info className="h-3.5 w-3.5 text-muted-foreground" />
-                          </TooltipTrigger>
-                          <TooltipContent>
-                            Confidence reflects how predictable this event is based on your history.
-                            More consistent past results = higher confidence.
-                          </TooltipContent>
-                        </Tooltip>
-                      </span>
-                    </TableHead>
-                    <SortableHead field="trend" className="text-center">Trend</SortableHead>
                     <TableHead className="text-right">Forecast</TableHead>
                     <TableHead>Years</TableHead>
                   </TableRow>
@@ -323,36 +272,6 @@ export function PerformanceClient({ performances }: PerformanceClientProps) {
                         >
                           {(perf.consistency_score * 100).toFixed(0)}%
                         </span>
-                      </TableCell>
-                      <TableCell className="text-center">
-                        <Tooltip>
-                          <TooltipTrigger render={<span className="inline-flex" />}>
-                            <Badge
-                              variant="secondary"
-                              className={`cursor-help ${CONFIDENCE_COLORS[perf.confidence] ?? ""}`}
-                            >
-                              {perf.confidence}
-                            </Badge>
-                          </TooltipTrigger>
-                          <TooltipContent>
-                            {confidenceTooltip(perf)}
-                          </TooltipContent>
-                        </Tooltip>
-                      </TableCell>
-                      <TableCell className="text-center">
-                        <span
-                          className={`text-sm font-medium ${
-                            TREND_COLORS[perf.trend] ?? ""
-                          }`}
-                        >
-                          {perf.trend}
-                        </span>
-                        {perf.yoy_growth !== null && (
-                          <span className="text-xs text-muted-foreground ml-1">
-                            ({perf.yoy_growth > 0 ? "+" : ""}
-                            {(perf.yoy_growth * 100).toFixed(0)}%)
-                          </span>
-                        )}
                       </TableCell>
                       <TableCell className="text-right font-medium">
                         {formatCurrency(perf.forecast_next)}
