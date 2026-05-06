@@ -4,7 +4,7 @@
  */
 
 import { describe, it, expect } from "vitest";
-import { calculateForecast, calibrateCoefficients } from "./forecast-engine";
+import { calculateForecast, calibrateCoefficients, type ForecastOptions } from "./forecast-engine";
 import type { Event } from "./database.types";
 
 // Test helper: uses Record<string, unknown> so tests can pass arbitrary event_type strings
@@ -172,6 +172,86 @@ describe("calculateForecast", () => {
     const result = calculateForecast({ event_name: "Rare Event" }, singleHistory);
     // Single data point = low confidence
     expect(result!.confidence).not.toBe("HIGH");
+  });
+
+  // 2026-05-06 retune — Sunset Hills Maker's Market over-forecast
+  // ($1,752 produced against a single $1,058 actual when platform
+  // median was high). Retune raised the platform-blend gate from
+  // 2 to 3 operators and capped n=1 platform weight at 25%.
+  describe("platform blend (retuned 2026-05-06)", () => {
+    it("does NOT blend when platform_operator_count < 3", () => {
+      const singleHistory = [
+        makeEvent({ event_name: "Sunset Market", net_sales: 1000, event_date: "2024-06-15" }),
+      ];
+      const result = calculateForecast(
+        { event_name: "Sunset Market", event_date: "2026-06-15", event_weather: "Clear" },
+        singleHistory,
+        {
+          platformEvent: {
+            event_name_normalized: "sunset market",
+            median_sales: 2500,
+            operator_count: 2,
+            total_instances: 4,
+          } as NonNullable<ForecastOptions["platformEvent"]>,
+        }
+      );
+      expect(result!.platformBlendApplied).toBe(false);
+    });
+
+    it("caps platform weight at 25% for n=1 personal data when platform_count >= 3", () => {
+      const singleHistory = [
+        makeEvent({
+          event_name: "Sunset Market",
+          net_sales: 1000,
+          event_date: "2024-06-15",
+          event_weather: "Clear",
+        }),
+      ];
+      const result = calculateForecast(
+        { event_name: "Sunset Market", event_date: "2026-06-15", event_weather: "Clear" },
+        singleHistory,
+        {
+          platformEvent: {
+            event_name_normalized: "sunset market",
+            median_sales: 2500,
+            operator_count: 5,
+            total_instances: 12,
+          } as NonNullable<ForecastOptions["platformEvent"]>,
+        }
+      );
+      expect(result!.platformBlendApplied).toBe(true);
+      // 75% personal × 1000 + 25% platform × 2500 = 750 + 625 = 1375
+      // Weather/DoW adjustments may shift slightly — assert range.
+      expect(result!.forecast).toBeGreaterThan(1300);
+      expect(result!.forecast).toBeLessThan(1500);
+    });
+
+    it("mature operator (5+ data points) keeps 85% personal weight", () => {
+      const matureHistory = Array.from({ length: 5 }, (_, i) =>
+        makeEvent({
+          event_name: "Mature Market",
+          net_sales: 1000,
+          event_date: `2024-0${(i % 9) + 1}-15`,
+          event_weather: "Clear",
+        })
+      );
+      const result = calculateForecast(
+        { event_name: "Mature Market", event_date: "2026-06-15", event_weather: "Clear" },
+        matureHistory,
+        {
+          platformEvent: {
+            event_name_normalized: "mature market",
+            median_sales: 2500,
+            operator_count: 5,
+            total_instances: 20,
+          } as NonNullable<ForecastOptions["platformEvent"]>,
+        }
+      );
+      // 85% personal × 1000 + 15% platform × 2500 = 850 + 375 = 1225
+      expect(result!.platformBlendApplied).toBe(true);
+      expect(result!.forecast).toBeGreaterThan(1150);
+      expect(result!.forecast).toBeLessThan(1350);
+    });
   });
 });
 
