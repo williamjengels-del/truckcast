@@ -148,7 +148,12 @@ export function eventInTabScope(
     case "all":
       return true;
     case "upcoming":
-      return event.event_date >= today;
+      // Cancelled-but-future-dated rows aren't actually upcoming —
+      // they're history of a booking that fell through. Including
+      // them inflated the Upcoming count and the dashboard tile
+      // (operator request 2026-05-06). Cancelled events still
+      // appear on the All tab and via the Cancelled status chip.
+      return event.event_date >= today && !event.cancellation_reason;
     case "past":
       return event.event_date < today;
     case "needs_attention":
