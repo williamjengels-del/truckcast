@@ -211,6 +211,28 @@ describe("eventInTabScope", () => {
     expect(eventInTabScope(past, "upcoming", TODAY)).toBe(false);
   });
 
+  // 2026-05-06 operator report: Upcoming count was inflated to ~90
+  // because cancelled-but-future-dated bookings still counted. The
+  // tab now excludes them — they remain visible on the All tab and
+  // via the Cancelled status chip.
+  it("upcoming excludes cancelled-but-future-dated rows", () => {
+    const cancelledFuture = makeEvent({
+      id: "cf",
+      event_date: "2026-06-15",
+      cancellation_reason: "organizer_cancelled",
+    });
+    expect(eventInTabScope(cancelledFuture, "upcoming", TODAY)).toBe(false);
+  });
+
+  it("upcoming excludes sold-out-cancelled future rows", () => {
+    const soldOutFuture = makeEvent({
+      id: "sof",
+      event_date: "2026-07-01",
+      cancellation_reason: "sold_out",
+    });
+    expect(eventInTabScope(soldOutFuture, "upcoming", TODAY)).toBe(false);
+  });
+
   it("past excludes today (today is upcoming until end-of-day)", () => {
     expect(eventInTabScope(past, "past", TODAY)).toBe(true);
     expect(eventInTabScope(todayEvt, "past", TODAY)).toBe(false);

@@ -177,7 +177,13 @@ export default async function DashboardPage() {
     )
     .sort((a, b) => b.event_date.localeCompare(a.event_date)); // most recent first
 
-  const upcomingEvents = bookedEvents.filter((e) => e.event_date > today);
+  // Cancelled-but-future-dated bookings drop out of "upcoming" — the
+  // tile and forecast-sum should reflect what the operator can still
+  // act on, not bookings that fell through. Mirrors the events-tab
+  // Upcoming filter in src/lib/events-chips.ts.
+  const upcomingEvents = bookedEvents.filter(
+    (e) => e.event_date > today && !e.cancellation_reason
+  );
   const upcomingCount = upcomingEvents.length;
   const upcomingForecastSum = upcomingEvents.reduce(
     (sum, e) => sum + (e.forecast_sales ?? 0),
