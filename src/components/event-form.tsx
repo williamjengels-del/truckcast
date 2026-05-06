@@ -524,7 +524,7 @@ export function EventForm({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl w-[95vw] max-h-[90vh] overflow-y-auto">
+      <DialogContent className="max-w-2xl w-[95vw] max-h-[90vh] overflow-y-auto overflow-x-hidden">
         <DialogHeader>
           <DialogTitle>{title}</DialogTitle>
         </DialogHeader>
@@ -636,7 +636,7 @@ export function EventForm({
                     }
                   }}
                 >
-                  <SelectTrigger>
+                  <SelectTrigger className="w-full">
                     <SelectValue>
                       {cancellationReason ? "Cancelled" : bookedValue === "true" ? "Booked" : "Not Booked"}
                     </SelectValue>
@@ -662,8 +662,10 @@ export function EventForm({
                       if (next !== "sold_out") setCausedByEventId("");
                     }}
                   >
-                    <SelectTrigger>
-                      <SelectValue />
+                    <SelectTrigger className="w-full">
+                      <SelectValue>
+                        {CANCELLATION_REASONS[cancellationReason as keyof typeof CANCELLATION_REASONS] ?? "Select reason"}
+                      </SelectValue>
                     </SelectTrigger>
                     <SelectContent>
                       {Object.entries(CANCELLATION_REASONS).map(([value, label]) => (
@@ -687,7 +689,7 @@ export function EventForm({
                       setCausedByEventId(v === "__none__" ? "" : (v ?? ""))
                     }
                   >
-                    <SelectTrigger id="caused_by_event">
+                    <SelectTrigger id="caused_by_event" className="w-full">
                       <SelectValue placeholder="Skip — wasn't carry-over from another event" />
                     </SelectTrigger>
                     <SelectContent>
@@ -739,7 +741,7 @@ export function EventForm({
                       setWeatherBadge(null);
                     }}
                   >
-                    <SelectTrigger id="state">
+                    <SelectTrigger id="state" className="w-full">
                       <SelectValue placeholder="Select state…" />
                     </SelectTrigger>
                     <SelectContent>
@@ -902,7 +904,7 @@ export function EventForm({
                       name="event_type"
                       defaultValue={initialData?.event_type ?? ""}
                     >
-                      <SelectTrigger>
+                      <SelectTrigger className="w-full">
                         <SelectValue placeholder="Select type" />
                       </SelectTrigger>
                       <SelectContent>
@@ -1007,8 +1009,10 @@ export function EventForm({
                       value={feeType}
                       onValueChange={(value) => setFeeType(value ?? "none")}
                     >
-                      <SelectTrigger>
-                        <SelectValue />
+                      <SelectTrigger className="w-full">
+                        <SelectValue>
+                          {FEE_TYPES[feeType as keyof typeof FEE_TYPES] ?? "Select fee type"}
+                        </SelectValue>
                       </SelectTrigger>
                       <SelectContent>
                         {Object.entries(FEE_TYPES).map(([value, label]) => (
@@ -1185,7 +1189,7 @@ export function EventForm({
                         }
                       }}
                     >
-                      <SelectTrigger>
+                      <SelectTrigger className="w-full">
                         <SelectValue placeholder="Select weather" />
                       </SelectTrigger>
                       <SelectContent>
@@ -1229,7 +1233,7 @@ export function EventForm({
                       name="anomaly_flag"
                       defaultValue={initialData?.anomaly_flag ?? "normal"}
                     >
-                      <SelectTrigger>
+                      <SelectTrigger className="w-full">
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
@@ -1280,7 +1284,7 @@ export function EventForm({
                     name="menu_type"
                     defaultValue={initialData?.menu_type ?? "regular"}
                   >
-                    <SelectTrigger id="menu_type">
+                    <SelectTrigger id="menu_type" className="w-full">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
