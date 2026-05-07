@@ -334,7 +334,12 @@ const ForecastVsActual = React.memo(function ForecastVsActual({
   if (isFixedRevenueEvent(event)) return null;
 
   const actual = event.net_sales;
-  const forecast = event.forecast_sales;
+  // Prefer v2 point when stored — keeps the variance calculation
+  // consistent with the forecast_card display upstream.
+  const forecast =
+    event.forecast_bayesian_point != null
+      ? event.forecast_bayesian_point
+      : event.forecast_sales;
   const diff = actual - forecast;
   const pct = forecast > 0 ? Math.round((diff / forecast) * 100) : 0;
   const isPositive = diff >= 0;
@@ -347,17 +352,25 @@ const ForecastVsActual = React.memo(function ForecastVsActual({
   //   - Within range  → green, "+$120 (+7%) · within range"
   //   - Below range   → red,   "-$694 (-40%) · below range"
   //   - Above range   → teal,  "+$340 (+19%) · above range"
-  // Falls back to plain variance display when range bounds are
-  // missing on the row (older events imported before forecast_low/
-  // _high were populated).
+  // Prefers v2's 80% credible interval when stored (more honestly
+  // calibrated than v1's heuristic band). Falls back to v1 range
+  // when v2 isn't populated, then to plain variance when neither is.
+  const rangeLow =
+    event.forecast_bayesian_low_80 != null
+      ? event.forecast_bayesian_low_80
+      : event.forecast_low;
+  const rangeHigh =
+    event.forecast_bayesian_high_80 != null
+      ? event.forecast_bayesian_high_80
+      : event.forecast_high;
   let rangeLabel: string | null = null;
   let rangeColor: string;
-  const hasRange = event.forecast_low !== null && event.forecast_high !== null;
+  const hasRange = rangeLow !== null && rangeHigh !== null;
   if (hasRange) {
-    if (actual < event.forecast_low!) {
+    if (actual < rangeLow!) {
       rangeLabel = "below range";
       rangeColor = "text-red-600";
-    } else if (actual > event.forecast_high!) {
+    } else if (actual > rangeHigh!) {
       rangeLabel = "above range";
       rangeColor = "text-brand-teal";
     } else {

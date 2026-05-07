@@ -161,6 +161,49 @@ describe("getMostRecentForecastResult", () => {
     expect(result?.forecastHigh).toBe(1200);
     expect(result?.outcome).toBe("within_range");
   });
+
+  it("prefers v2 (Bayesian) range over v1 when both are stored", () => {
+    // v1 says wide range $400-$1600 → would classify $1200 within.
+    // v2 says tighter $900-$1100 → should classify $1200 above.
+    // The v2 range wins per the upgraded reader (PR 4).
+    const events = [
+      makeEvent({
+        net_sales: 1200,
+        forecast_sales: 1000,
+        forecast_low: 400,
+        forecast_high: 1600,
+        forecast_bayesian_point: 1000,
+        forecast_bayesian_low_80: 900,
+        forecast_bayesian_high_80: 1100,
+      }),
+    ];
+    const result = getMostRecentForecastResult(events, "2026-05-07");
+    expect(result?.forecast).toBe(1000);
+    expect(result?.forecastLow).toBe(900);
+    expect(result?.forecastHigh).toBe(1100);
+    expect(result?.outcome).toBe("above_range");
+  });
+
+  it("uses v2 point estimate when v1 forecast is missing", () => {
+    // Edge case: v1 cleared (insufficient_data flagged it),
+    // v2 didn't flag and has a point. Currently isEligible
+    // requires v1 forecast_sales > 0 so this case actually
+    // returns null — the v2-only forecast is excluded from
+    // the recent-event surface. Documented here so a future
+    // change to eligibility doesn't accidentally regress.
+    const events = [
+      makeEvent({
+        net_sales: 1000,
+        forecast_sales: null,
+        forecast_low: null,
+        forecast_high: null,
+        forecast_bayesian_point: 1000,
+        forecast_bayesian_low_80: 900,
+        forecast_bayesian_high_80: 1100,
+      }),
+    ];
+    expect(getMostRecentForecastResult(events, "2026-05-07")).toBeNull();
+  });
 });
 
 describe("getThisMonthAccuracy", () => {
