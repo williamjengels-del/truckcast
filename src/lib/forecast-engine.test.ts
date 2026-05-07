@@ -335,6 +335,110 @@ describe("forecast edge cases", () => {
   });
 });
 
+describe("series-day filter threshold", () => {
+  // Engine layer 2 fix (2026-05-07): the multi-day-series filter used
+  // to activate at sameDayMatches.length >= 1, which was producing
+  // single-sample sub-forecasts on high-frequency venues that ran
+  // multi-day clusters every week. Threshold raised to 3.
+
+  // Helper: build a 3-day cluster (Day 1=$300, Day 2=$800, Day 3=$200,
+  // plus a per-cluster offset to make individual events distinguishable
+  // by net_sales). Clusters are spaced > SERIES_MAX_GAP_DAYS (5) apart
+  // so they're recognised as distinct multi-day series instead of
+  // collapsing into one big run.
+  function buildCluster(startIso: string, idx: number): Event[] {
+    const base = new Date(startIso + "T00:00:00").getTime();
+    return [0, 1, 2].map((day) =>
+      makeEvent({
+        id: `wc-${idx}-${day}`,
+        event_name: "Weekly Cluster",
+        event_date: new Date(base + day * 24 * 60 * 60 * 1000)
+          .toISOString()
+          .slice(0, 10),
+        net_sales: [300, 800, 200][day] + idx * 50,
+      })
+    );
+  }
+
+  // Engine series-day filter only activates when the TARGET date itself
+  // is part of a multi-day cluster (i.e. another event for this name
+  // exists within SERIES_MAX_GAP_DAYS=5 of the target date). Tests that
+  // need the filter active must put the target alongside other history
+  // dates within that 5-day window.
+
+  it("does NOT activate the series-day filter when fewer than 3 same-day matches exist", () => {
+    // Two clusters in history, plus Day-1 + Day-3 of a third cluster
+    // bracketing the target. Target = Day-2 of that third cluster.
+    // Prior Day-2 matches: cluster 1 Day-2 (Jan 4), cluster 2 Day-2
+    // (Jan 18) — only 2. Below the threshold of 3 — filter should
+    // NOT activate; engine should fall through to the full name-match
+    // set.
+    const history: Event[] = [
+      ...buildCluster("2024-01-03", 0), // Jan 3, 4, 5
+      ...buildCluster("2024-01-17", 1), // Jan 17, 18, 19
+      // Day-1 + Day-3 of the third cluster (no Day-2 — that's the target)
+      makeEvent({
+        id: "wc-2-0",
+        event_name: "Weekly Cluster",
+        event_date: "2024-01-31",
+        net_sales: 400,
+      }),
+      makeEvent({
+        id: "wc-2-2",
+        event_name: "Weekly Cluster",
+        event_date: "2024-02-02",
+        net_sales: 300,
+      }),
+    ];
+    const target = {
+      event_name: "Weekly Cluster",
+      event_date: "2024-02-01", // Day-2 of cluster starting Jan 31
+    };
+    const result = calculateForecast(target, history);
+    expect(result).not.toBeNull();
+    // Filter doesn't activate (only 2 Day-2 matches, threshold is 3).
+    // Falls through to the full 8-event name-match set.
+    expect(result!.dataPoints).toBe(8);
+  });
+
+  it("DOES activate the series-day filter once 3+ same-day matches exist", () => {
+    // Three full clusters in history, plus Day-1 + Day-3 of a fourth
+    // cluster bracketing the target Day-2. Prior Day-2 matches: clusters
+    // 1, 2, 3 each contribute one Day-2 = 3 total. Meets threshold.
+    const history: Event[] = [
+      ...buildCluster("2024-01-03", 0),
+      ...buildCluster("2024-01-17", 1),
+      ...buildCluster("2024-01-31", 2),
+      makeEvent({
+        id: "wc-3-0",
+        event_name: "Weekly Cluster",
+        event_date: "2024-02-14",
+        net_sales: 400,
+      }),
+      makeEvent({
+        id: "wc-3-2",
+        event_name: "Weekly Cluster",
+        event_date: "2024-02-16",
+        net_sales: 300,
+      }),
+    ];
+    const target = {
+      event_name: "Weekly Cluster",
+      event_date: "2024-02-15", // Day-2 of the fourth cluster
+    };
+    const result = calculateForecast(target, history);
+    expect(result).not.toBeNull();
+    // Filter activates: dataPoints is the 3 Day-2 matches only, not
+    // the full 11-event name-match set.
+    expect(result!.dataPoints).toBe(3);
+    // Forecast should land near the Day-2 average (~$800 + offsets),
+    // not the full-set mean which would be pulled down by Day-1 and
+    // Day-3 events.
+    expect(result!.forecast).toBeGreaterThan(700);
+    expect(result!.forecast).toBeLessThan(950);
+  });
+});
+
 describe("insufficient-data floor", () => {
   // Operator history dominated by ~$1,200 events. Median ~ $1,200.
   // Floor at 10% = $120 — anything below is flagged insufficientData.

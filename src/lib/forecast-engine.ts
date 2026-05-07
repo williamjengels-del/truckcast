@@ -721,9 +721,23 @@ function tryLevel1(
       const day = getSeriesDay(e.event_date, allDatesForName);
       return day === targetSeriesDay;
     });
-    // Only narrow the set if we have at least 1 same-day data point;
-    // otherwise fall through to the full set (graceful degradation).
-    if (sameDayMatches.length >= 1) {
+    // Threshold raised from 1 to 3 (2026-05-07 engine audit, Layer 2):
+    // for high-frequency venues that run multi-day clusters every week
+    // (Charter St Ann, Scott AFB), the n=1 threshold was producing
+    // single-sample sub-forecasts off 30+ events of total history. The
+    // filter's intent is to separate Day 1 from Day 3 of a multi-day
+    // festival like Shutterfest — which only matters once we actually
+    // have ≥3 data points at that day-of-series position. Below that
+    // threshold the filter is just narrowing the sample arbitrarily,
+    // not learning a position effect; falling through to the full
+    // recency-weighted name-match set is strictly better.
+    //
+    // Trace evidence: Charter St Ann (31 events, 43% avg miss) had
+    // 19 of 31 forecasts running off n=1 or n=2 sub-samples; Scott
+    // AFB (33 events, 53% avg miss) had 14 of 33 in the same state.
+    // Shutterfest's intended behavior is preserved once 3 cycles of
+    // the festival have been logged.
+    if (sameDayMatches.length >= 3) {
       matching = sameDayMatches;
     }
   }
@@ -1011,7 +1025,10 @@ function getMatchingEventsForLevel(
       const byName = events.filter(
         (e) => e.event_name.toLowerCase().trim() === nameNormalized
       );
-      // Apply series-day filtering if applicable (mirrors tryLevel1 logic)
+      // Apply series-day filtering if applicable (mirrors tryLevel1 logic).
+      // Threshold raised from 1 to 3 in the 2026-05-07 engine audit fix —
+      // see comment in tryLevel1 for context. Keep these two threshold
+      // values in sync.
       if (target.event_date && byName.length >= 2) {
         const allDatesForName = [
           ...new Set([
@@ -1025,7 +1042,7 @@ function getMatchingEventsForLevel(
             const day = getSeriesDay(e.event_date, allDatesForName);
             return day === targetSeriesDay;
           });
-          if (sameDayMatches.length >= 1) return sameDayMatches;
+          if (sameDayMatches.length >= 3) return sameDayMatches;
         }
       }
       return byName;
