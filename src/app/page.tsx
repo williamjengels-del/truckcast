@@ -232,12 +232,14 @@ export default async function LandingPage() {
             </div>
 
             {/* Block 2 — Forecast accuracy (planning decision).
-                Reframed 2026-04-30 from "repeats decline by year three"
-                to "accuracy from booking #1." Reasoning: "by year three"
-                made urgency too distant; "from booking #1" reframes
-                urgency as useful from day one + "tighter as you go"
-                promises improvement without overclaiming a specific
-                repeat-cohort accuracy number. */}
+                Reframed 2026-05-07 from "16% accuracy from booking #1"
+                to "4 out of 5 forecasts land in range." A careful reader
+                parses "16% accuracy" as "wrong 84% of the time" — the
+                exact wrong inference. The "4 out of 5" framing carries
+                the same underlying stat (forecasts within 16% of actual
+                count as in-range) but reads correctly on first parse.
+                Pair with the existing stats-row treatment at the bottom
+                of the page so the homepage uses one framing, not two. */}
             <div
               data-testid="insight-block-accuracy"
               className={`${cardBase} ${tintB}`}
@@ -250,7 +252,7 @@ export default async function LandingPage() {
                   data-testid="insight-finding-accuracy"
                   className={EMPHASIS_RESOLVED}
                 >
-                  16% accuracy from booking #1.
+                  4 out of 5 forecasts land in range.
                 </span>{" "}
                 Tighter as you go.
               </p>

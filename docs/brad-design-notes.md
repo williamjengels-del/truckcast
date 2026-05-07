@@ -19,7 +19,7 @@ Revenue timing — matching prep and staffing to real revenue curves
 Add one positioning block on event-to-operator direct (no middleman, no commission, first to respond first to book)
 Keep the hero area open — empty space reserved for your design contribution
 Tighten feature grid copy — 1-2 sentences per card max
-Keep stats row as-is (1,985+ events, within 16% accuracy, 5 years of operator history)
+Keep stats row as-is (1,985+ events, 4 out of 5 forecasts land in range, 5 years of operator history)
 Simplify bottom CTA to single "Start free trial" button with "14 days free, no credit card required"
 Orange color system is your call — currently doing three jobs (brand accent in logo, chart color, CTA background); want you to decide what orange means as a system and where teal takes over
 Check the VendCast logo rendering — in the mockup there's a small second logo glyph appearing in the hero area below the nav logo; remove if unintentional
@@ -45,7 +45,7 @@ Revenue timing block (money-focused operational positive): Balances the negative
 Event-to-operator direct positioning block: Category-level differentiator. Every other mobile-vendor platform either takes commission, mediates between organizer and operator, or positions itself as a marketplace where operators compete on price. VendCast explicitly doesn't. "No middleman, no commission" is a pain point every operator recognizes from prior platform experiences. Acts as live because the capability ships before public launch.
 Keep hero area open: Phase 6 commit deliberately left the hero empty as reserved space for Brad's future design contribution. Respecting that reservation keeps his creative authority intact rather than filling his canvas with Claude-generated content.
 Tighten feature grid copy: Current live copy has editorial em-dash style ("Connect Square, Clover, Toast, or SumUp — sales log themselves. Or import a spreadsheet.") that's cleverer than it is immediately clear. Tightening to 1-2 sentences max respects reader time and improves scannability.
-Keep stats row as-is: 1,985+ events / within 16% accuracy / 5 years of operator history is strong existing credibility signal. Specific modest numbers read as honest — most SaaS overclaims accuracy. The "16% accuracy" number particularly is defensible and distinctive.
+Keep stats row as-is: 1,985+ events / 4 out of 5 forecasts land in range / 5 years of operator history is strong existing credibility signal. Specific modest numbers read as honest — most SaaS overclaims accuracy. The "4 out of 5 in range" framing replaced "within 16% accuracy" 2026-05-07 because the percent-accuracy framing parses on first read as "wrong (100-X)% of the time" — exactly the wrong inference.
 Simplify bottom CTA: Current dual-CTA ("Start free trial / Try the calculator") weakens both options. Single dominant path is clearer. "14 days free, no credit card required" does the objection-handling without needing to list pricing.
 Orange color system as Brad's call: Orange is currently doing three incompatible jobs (brand accent in logo, chart data color, CTA background). Design systems should have one role per color. Brad owns brand decisions and has 30+ years of luxury design experience — this is exactly his territory, not Julian's to decide unilaterally.
 Check second logo glyph in hero: Mockup showed what appeared to be a second VendCast logo rendering below the nav. Could be unintentional artifact or could be intentional — worth flagging either way.
