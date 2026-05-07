@@ -26,6 +26,24 @@ interface ChangelogEntry {
 
 const entries: ChangelogEntry[] = [
   {
+    date: "May 7, 2026",
+    title: "Forecast bands recalibrated — honest confidence ranges over marketing math",
+    items: [
+      {
+        kind: "fix",
+        text: "Audited 396 forecast/actual pairs across 5 years of operator data. Original bands (±15%/±25%/±40% for HIGH/MED/LOW confidence) caught only ~30% of forecasts in their stated range — engine claimed confidence it didn't have.",
+      },
+      {
+        kind: "fix",
+        text: "Recalibrated to ±30%/±50%/±80%. Wider ranges read as less precise but they're an honest reflection of what VendCast can predict on real operator events. Hit Insights → Refresh Forecasts to update existing bounds.",
+      },
+      {
+        kind: "fix",
+        text: "Underlying issue is deeper than band widths — engine confidence labels don't actually correlate with accuracy. Real fix is rebuilding the confidence score; queued as engine work for an upcoming phase.",
+      },
+    ],
+  },
+  {
     date: "May 3, 2026",
     title: "Inquiry inbox v2 — notifications, claim flow, and a polished organizer surface",
     items: [

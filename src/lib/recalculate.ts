@@ -181,14 +181,32 @@ export async function recalculateForUser(
 
 /**
  * Derive a forecast range (low / high) from the point forecast and confidence score.
- * Thresholds mirror confidenceScoreToLabel in forecast-engine.ts so the pill
- * and the range width stay aligned — a HIGH-pill forecast always gets ±15%.
- *   HIGH   (score ≥ 0.65): ±15%
- *   MEDIUM (score ≥ 0.40): ±25%
- *   LOW    (score < 0.40): ±40%
+ *
+ * Recalibrated 2026-05-07 from ±15/±25/±40 to ±30/±50/±80 based on
+ * audit of 396 forecast/actual pairs across 5 years of operator data
+ * (scripts/audit-forecast-accuracy.mjs).
+ *
+ * The original bands produced ranges that caught only ~30% of forecasts
+ * in their stated range — engine was overconfident across the board.
+ * Recalibrated bands aim to honestly reflect observed variance:
+ *
+ *   HIGH   (score ≥ 0.65): ±30%  — was ±15%; catches ~30% at p30 of |miss|
+ *   MEDIUM (score ≥ 0.40): ±50%  — was ±25%; catches ~50% at p50 of |miss|
+ *   LOW    (score < 0.40): ±80%  — was ±40%; catches ~70% at p70 of |miss|
+ *
+ * Wider ranges read as less precise, but they're an honest reflection
+ * of how well VendCast can predict real operator events. Tighter bands
+ * that lie often are worse than wider bands that include reality.
+ *
+ * Underlying issue (queued for future engine work, not this PR): HIGH
+ * confidence events are not actually more accurate than MEDIUM/LOW.
+ * The confidence-score → range-pct mapping treats the buckets as
+ * monotonically tighter, but observed accuracy is approximately flat
+ * across buckets. Real fix is rebuilding the confidence score; widening
+ * bands is the honest interim.
  */
 function forecastRange(forecast: number, confidenceScore: number): { low: number; high: number } {
-  const pct = confidenceScore >= 0.65 ? 0.15 : confidenceScore >= 0.4 ? 0.25 : 0.40;
+  const pct = confidenceScore >= 0.65 ? 0.30 : confidenceScore >= 0.4 ? 0.50 : 0.80;
   return {
     low:  Math.round(forecast * (1 - pct) * 100) / 100,
     high: Math.round(forecast * (1 + pct) * 100) / 100,
