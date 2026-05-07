@@ -231,15 +231,17 @@ export default async function LandingPage() {
               </p>
             </div>
 
-            {/* Block 2 — Forecast accuracy (planning decision).
-                Reframed 2026-05-07 from "16% accuracy from booking #1"
-                to "4 out of 5 forecasts land in range." A careful reader
-                parses "16% accuracy" as "wrong 84% of the time" — the
-                exact wrong inference. The "4 out of 5" framing carries
-                the same underlying stat (forecasts within 16% of actual
-                count as in-range) but reads correctly on first parse.
-                Pair with the existing stats-row treatment at the bottom
-                of the page so the homepage uses one framing, not two. */}
+            {/* Block 2 — Forecast philosophy (planning decision).
+                Reframed 2026-05-07 (later same day) from "4 out of 5
+                forecasts land in range" to a calibration claim. The
+                accuracy stat didn't survive an audit of 396 forecast/
+                actual pairs (real rate ~30%, not 80%) — see the
+                changelog entry. Replaced with a process claim that's
+                actually defensible: forecasts come with confidence
+                ranges that reflect this operator's data, calibrated
+                to honest variance, not generic averages. The "tighter
+                as you go" promise stays — operator history genuinely
+                does narrow the bands once enough events accumulate. */}
             <div
               data-testid="insight-block-accuracy"
               className={`${cardBase} ${tintB}`}
@@ -252,12 +254,13 @@ export default async function LandingPage() {
                   data-testid="insight-finding-accuracy"
                   className={EMPHASIS_RESOLVED}
                 >
-                  4 out of 5 forecasts land in range.
+                  Calibrated to your data,
                 </span>{" "}
-                Tighter as you go.
+                not generic averages.
               </p>
               <p className="text-sm text-muted-foreground">
-                VendCast learns your patterns from day one — and keeps refining as you log.
+                Each forecast comes with a confidence range based on your
+                history — and tightens as you log more events.
               </p>
             </div>
 
@@ -379,10 +382,20 @@ export default async function LandingPage() {
                   events analyzed
                 </p>
               </div>
+              {/* Middle stat reframed 2026-05-07 from "4 out of 5
+                  forecasts land in range" — that claim didn't survive
+                  the audit (real rate ~30% across 396 pairs). Pivoted
+                  to the differentiator that DOES hold: zero commission,
+                  no middleman. Reinforces the orange band's positioning
+                  without overpromising on forecast precision.
+                  data-testid stays as "stats-accuracy" so existing
+                  selectors don't break, even though the cell isn't
+                  about accuracy anymore — rename in a follow-up if
+                  the test surface gets touched. */}
               <div data-testid="stats-accuracy" className="space-y-1">
-                <p className="text-4xl font-bold text-primary">4 out of 5</p>
+                <p className="text-4xl font-bold text-primary">0%</p>
                 <p className="text-sm text-muted-foreground">
-                  forecasts land in range
+                  commission, ever
                 </p>
               </div>
               <div data-testid="stats-years" className="space-y-1">
