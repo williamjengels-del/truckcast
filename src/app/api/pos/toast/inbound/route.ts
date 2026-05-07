@@ -289,13 +289,26 @@ export async function POST(request: Request) {
         });
 
       if (insertError) {
-        // Fall back to pre-inbox behavior — log it and move on. Don't
-        // fail the webhook over an inbox insert problem.
+        // Inbox insert failed (RLS, transient DB hiccup, etc). Don't lie
+        // to the operator with a "queued_for_review" status when there
+        // is no row to review. Surface the failure as internal_error so
+        // they see something is broken instead of opening an empty
+        // inbox. Still return 200 to avoid Cloudflare worker retries on
+        // a write-side issue.
         console.error(`[toast/inbound] Inbox insert failed for user ${userId}:`, insertError);
-      } else {
-        console.log(`[toast/inbound] Queued for review: user ${userId}, ${parsed.date}, $${parsed.netSales}`);
+        await recordSyncAttempt(
+          supabase,
+          userId,
+          "internal_error",
+          `Toast reported $${parsed.netSales.toFixed(2)} on ${parsed.date} but the inbox write failed: ${insertError.message ?? "unknown"}. Contact support.`
+        );
+        return NextResponse.json(
+          { ok: false, reason: "inbox_insert_failed", date: parsed.date },
+          { status: 200 }
+        );
       }
 
+      console.log(`[toast/inbound] Queued for review: user ${userId}, ${parsed.date}, $${parsed.netSales}`);
       await recordSyncAttempt(
         supabase,
         userId,
@@ -324,11 +337,22 @@ export async function POST(request: Request) {
         });
 
       if (insertError) {
+        // Same rationale as the no-match branch above: don't lie about
+        // queueing when the queue write actually failed.
         console.error(`[toast/inbound] Inbox insert failed (ambiguous) for user ${userId}:`, insertError);
-      } else {
-        console.log(`[toast/inbound] Queued ambiguous-match for review: user ${userId}, ${parsed.date}, $${parsed.netSales}, ${matchedEvents.length} candidates`);
+        await recordSyncAttempt(
+          supabase,
+          userId,
+          "internal_error",
+          `Toast reported $${parsed.netSales.toFixed(2)} on ${parsed.date} (${matchedEvents.length} booked events) but the inbox write failed: ${insertError.message ?? "unknown"}. Contact support.`
+        );
+        return NextResponse.json(
+          { ok: false, reason: "inbox_insert_failed", candidates: matchedEvents.length },
+          { status: 200 }
+        );
       }
 
+      console.log(`[toast/inbound] Queued ambiguous-match for review: user ${userId}, ${parsed.date}, $${parsed.netSales}, ${matchedEvents.length} candidates`);
       await recordSyncAttempt(
         supabase,
         userId,

@@ -4,6 +4,7 @@ import {
   sendTrialExpiryEmail,
   sendTrialExpiredEmail,
 } from "@/lib/email";
+import { assertCronSecret } from "@/lib/cron-auth";
 
 // Vercel cron — runs daily at 10:00 AM UTC
 // Secured by CRON_SECRET header set in vercel.json
@@ -21,14 +22,8 @@ function daysBetween(a: Date, b: Date) {
 }
 
 export async function GET(req: NextRequest) {
-  // Verify this is a legitimate Vercel cron request
-  const authHeader = req.headers.get("authorization");
-  if (
-    process.env.CRON_SECRET &&
-    authHeader !== `Bearer ${process.env.CRON_SECRET}`
-  ) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+  const unauthorized = assertCronSecret(req);
+  if (unauthorized) return unauthorized;
 
   if (!process.env.RESEND_API_KEY) {
     return NextResponse.json({ skipped: "No RESEND_API_KEY" });

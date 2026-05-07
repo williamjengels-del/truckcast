@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient as createServiceClient } from "@supabase/supabase-js";
 import { sendWeeklyDigestEmail, type WeeklyDigestPayload } from "@/lib/email";
+import { assertCronSecret } from "@/lib/cron-auth";
 
 /**
  * GET /api/cron/weekly-digest
@@ -77,13 +78,8 @@ function dateLabel(d: Date): string {
 }
 
 export async function GET(req: NextRequest) {
-  const authHeader = req.headers.get("authorization");
-  if (
-    process.env.CRON_SECRET &&
-    authHeader !== `Bearer ${process.env.CRON_SECRET}`
-  ) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+  const unauthorized = assertCronSecret(req);
+  if (unauthorized) return unauthorized;
 
   const service = createServiceClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,

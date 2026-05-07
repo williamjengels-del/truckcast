@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient as createServiceClient } from "@supabase/supabase-js";
+import { assertCronSecret } from "@/lib/cron-auth";
 
 /**
  * GET /api/cron/auto-ended-at-sweep
@@ -42,13 +43,8 @@ import { createClient as createServiceClient } from "@supabase/supabase-js";
  */
 
 export async function GET(req: NextRequest) {
-  const authHeader = req.headers.get("authorization");
-  if (
-    process.env.CRON_SECRET &&
-    authHeader !== `Bearer ${process.env.CRON_SECRET}`
-  ) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+  const unauthorized = assertCronSecret(req);
+  if (unauthorized) return unauthorized;
 
   const service = createServiceClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,

@@ -59,8 +59,14 @@ export async function recalculateForUser(
     );
   }
 
-  // Update platform registry with cross-user aggregates — fire and forget (non-blocking)
-  updatePlatformRegistry(eventNames).catch(() => {});
+  // Update platform registry with cross-user aggregates — fire and
+  // forget (non-blocking, intentional). Log on failure so persistent
+  // registry write breakage shows up in Cloudflare logs instead of
+  // disappearing silently. Don't surface to the user — recalc is
+  // user-facing, registry is best-effort cross-operator data.
+  updatePlatformRegistry(eventNames).catch((e) => {
+    console.warn("[recalculate] platform registry update failed:", e);
+  });
 
   // Calibrate per-user coefficients from historical data
   const calibrated = calibrateCoefficients(allEvents);
