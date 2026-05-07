@@ -9,7 +9,12 @@
  */
 
 import { describe, it, expect } from "vitest";
-import { canonicalizeCity } from "./city-normalize";
+import {
+  canonicalizeCity,
+  canonicalizeCityAndState,
+  extractStateFromCity,
+  normalizeStateCode,
+} from "./city-normalize";
 
 describe("canonicalizeCity — Saint / Mount / Fort / Point", () => {
   it('"St. Louis" → "Saint Louis"', () => {
@@ -133,5 +138,181 @@ describe("canonicalizeCity — edges", () => {
   });
   it("does not invent characters for nonsense input", () => {
     expect(canonicalizeCity("xyz")).toBe("Xyz");
+  });
+});
+
+describe("canonicalizeCity — apostrophe capitalization (regression for O'fallon bug)", () => {
+  // Pre-2026-05-07 the title-case helper split only on whitespace +
+  // dash, so "O'Fallon" stayed as one segment and got mapped to
+  // "O'fallon" (the F got lower-cased). 53 of Wok-O Taco's 689 events
+  // had this corrupted form. Apostrophe split fixes it.
+  it('"O\'Fallon" stays "O\'Fallon"', () => {
+    expect(canonicalizeCity("O'Fallon")).toBe("O'Fallon");
+  });
+  it('"o\'fallon" → "O\'Fallon"', () => {
+    expect(canonicalizeCity("o'fallon")).toBe("O'Fallon");
+  });
+  it('"O\'FALLON" → "O\'Fallon"', () => {
+    expect(canonicalizeCity("O'FALLON")).toBe("O'Fallon");
+  });
+  it('"D\'Iberville" stays correctly capitalized', () => {
+    expect(canonicalizeCity("d'iberville")).toBe("D'Iberville");
+  });
+  it("apostrophe stays at the right position", () => {
+    expect(canonicalizeCity("st. o'fallon")).toBe("Saint O'Fallon");
+  });
+});
+
+describe("normalizeStateCode", () => {
+  it("2-letter code (any case) → uppercase code", () => {
+    expect(normalizeStateCode("MO")).toBe("MO");
+    expect(normalizeStateCode("mo")).toBe("MO");
+    expect(normalizeStateCode("Mo")).toBe("MO");
+    expect(normalizeStateCode("mO")).toBe("MO");
+    expect(normalizeStateCode("IL")).toBe("IL");
+    expect(normalizeStateCode("il")).toBe("IL");
+    expect(normalizeStateCode("Il")).toBe("IL");
+  });
+  it("full state name (any case) → 2-letter code", () => {
+    expect(normalizeStateCode("Missouri")).toBe("MO");
+    expect(normalizeStateCode("missouri")).toBe("MO");
+    expect(normalizeStateCode("MISSOURI")).toBe("MO");
+    expect(normalizeStateCode("Illinois")).toBe("IL");
+    expect(normalizeStateCode("illinois")).toBe("IL");
+  });
+  it("OTHER sentinel passes through", () => {
+    expect(normalizeStateCode("OTHER")).toBe("OTHER");
+    expect(normalizeStateCode("other")).toBe("OTHER");
+  });
+  it("returns null for unrecognized input", () => {
+    expect(normalizeStateCode("XX")).toBeNull();
+    expect(normalizeStateCode("Wakanda")).toBeNull();
+    expect(normalizeStateCode("")).toBeNull();
+    expect(normalizeStateCode(null)).toBeNull();
+    expect(normalizeStateCode(undefined)).toBeNull();
+  });
+});
+
+describe("extractStateFromCity", () => {
+  it("strips trailing 2-letter code with comma", () => {
+    expect(extractStateFromCity("Saint Louis, MO")).toEqual({
+      city: "Saint Louis",
+      state: "MO",
+    });
+  });
+  it("strips trailing 2-letter code without comma", () => {
+    expect(extractStateFromCity("Saint Louis Mo")).toEqual({
+      city: "Saint Louis",
+      state: "MO",
+    });
+  });
+  it("strips trailing full state name", () => {
+    expect(extractStateFromCity("Saint Louis Missouri")).toEqual({
+      city: "Saint Louis",
+      state: "MO",
+    });
+  });
+  it("strips trailing zip after state code", () => {
+    expect(extractStateFromCity("Saint Louis Mo 63101")).toEqual({
+      city: "Saint Louis",
+      state: "MO",
+    });
+  });
+  it("strips trailing zip+4 after state code", () => {
+    expect(extractStateFromCity("Saint Louis MO 63101-1234")).toEqual({
+      city: "Saint Louis",
+      state: "MO",
+    });
+  });
+  it("Illinois case", () => {
+    expect(extractStateFromCity("Belleville Il")).toEqual({
+      city: "Belleville",
+      state: "IL",
+    });
+    expect(extractStateFromCity("Belleville, IL")).toEqual({
+      city: "Belleville",
+      state: "IL",
+    });
+    expect(extractStateFromCity("Belleville Illinois")).toEqual({
+      city: "Belleville",
+      state: "IL",
+    });
+  });
+  it("returns null state when none is found", () => {
+    expect(extractStateFromCity("Saint Louis")).toEqual({
+      city: "Saint Louis",
+      state: null,
+    });
+    expect(extractStateFromCity("Chicago")).toEqual({
+      city: "Chicago",
+      state: null,
+    });
+  });
+  it("does not falsely strip a city ending in a 2-letter sequence that isn't a state", () => {
+    // "Reno NV" works (real state); "Mojo XX" should not strip XX.
+    expect(extractStateFromCity("Mojo Xx")).toEqual({
+      city: "Mojo Xx",
+      state: null,
+    });
+  });
+  it("handles two-word state names like 'New York'", () => {
+    expect(extractStateFromCity("Buffalo New York")).toEqual({
+      city: "Buffalo",
+      state: "NY",
+    });
+  });
+  it("empty input returns empty city + null state", () => {
+    expect(extractStateFromCity("")).toEqual({ city: "", state: null });
+  });
+});
+
+describe("canonicalizeCityAndState — combined helper", () => {
+  it("normalizes city AND extracts state from suffix", () => {
+    expect(canonicalizeCityAndState("st. louis mo")).toEqual({
+      city: "Saint Louis",
+      state: "MO",
+    });
+  });
+  it("operator-supplied state takes precedence over city suffix", () => {
+    // Operator typed "Saint Louis IL" by mistake but selected MO in
+    // the dropdown → MO wins.
+    expect(canonicalizeCityAndState("Saint Louis IL", "MO")).toEqual({
+      city: "Saint Louis",
+      state: "MO",
+    });
+  });
+  it("operator state with no suffix in city", () => {
+    expect(canonicalizeCityAndState("Chicago", "IL")).toEqual({
+      city: "Chicago",
+      state: "IL",
+    });
+  });
+  it("apostrophe + state suffix together", () => {
+    expect(canonicalizeCityAndState("o'fallon mo")).toEqual({
+      city: "O'Fallon",
+      state: "MO",
+    });
+  });
+  it("normalizes operator-supplied state in any case form", () => {
+    expect(canonicalizeCityAndState("Chicago", "illinois")).toEqual({
+      city: "Chicago",
+      state: "IL",
+    });
+    expect(canonicalizeCityAndState("Chicago", "Il")).toEqual({
+      city: "Chicago",
+      state: "IL",
+    });
+  });
+  it("empty city, valid state", () => {
+    expect(canonicalizeCityAndState("", "MO")).toEqual({
+      city: "",
+      state: "MO",
+    });
+  });
+  it("empty city, no state", () => {
+    expect(canonicalizeCityAndState(null, null)).toEqual({
+      city: "",
+      state: null,
+    });
   });
 });

@@ -109,7 +109,19 @@ export async function recalculateForUser(
     const cityStr = (event.city || event.location || "").trim();
     if (!cityStr) continue;
     try {
-      const result = await autoClassifyWeather(cityStr, event.event_date, supabase);
+      // Pass state to disambiguate the geocoder when the operator's
+      // event has a state set. Without this, ambiguous city names
+      // (Bellville, Madison, etc.) silently picked the highest-
+      // population result regardless of state — bug surfaced 2026-05-07
+      // weather audit. Falls through to country-wide pick when state
+      // is null (legacy events created before the form-level state
+      // default).
+      const result = await autoClassifyWeather(
+        cityStr,
+        event.event_date,
+        supabase,
+        event.state ?? null
+      );
       if (result) {
         await supabase.from("events").update({ event_weather: result.classification }).eq("id", event.id);
         weatherUpdates.set(event.id, result.classification);

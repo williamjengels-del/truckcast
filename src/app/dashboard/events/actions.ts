@@ -4,7 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { revalidatePath } from "next/cache";
 import { recalculateForUser } from "@/lib/recalculate";
 import { autoClassifyWeather } from "@/lib/weather";
-import { canonicalizeCity } from "@/lib/city-normalize";
+import { canonicalizeCityAndState } from "@/lib/city-normalize";
 import type { Event } from "@/lib/database.types";
 
 export type EventFormData = {
@@ -69,16 +69,21 @@ export async function createEvent(formData: EventFormData) {
   };
 
   // Only include optional fields if they have values.
-  // City is canonicalized at write time so downstream aggregation
-  // compares against a stable form regardless of whether the operator
-  // typed "St. Louis" or "Saint Louis". See src/lib/city-normalize.ts.
-  const canonicalCity = canonicalizeCity(formData.city);
+  // City + state are normalized together: trailing state suffixes ("Saint
+  // Louis Mo") are extracted into the state column; abbreviations and
+  // casing canonicalize ("St. Louis" → "Saint Louis", "O'fallon" →
+  // "O'Fallon"). Operator-provided state takes precedence over any
+  // suffix found in the city string. See src/lib/city-normalize.ts.
+  const { city: canonicalCity, state: canonicalState } = canonicalizeCityAndState(
+    formData.city,
+    formData.state
+  );
   if (formData.start_time) insertData.start_time = formData.start_time;
   if (formData.end_time) insertData.end_time = formData.end_time;
   if (formData.setup_time) insertData.setup_time = formData.setup_time;
   if (formData.location) insertData.location = formData.location;
   if (canonicalCity) insertData.city = canonicalCity;
-  if (formData.state) insertData.state = formData.state;
+  if (canonicalState) insertData.state = canonicalState;
   if (formData.city_area) insertData.city_area = formData.city_area;
   if (formData.latitude) insertData.latitude = formData.latitude;
   if (formData.longitude) insertData.longitude = formData.longitude;
@@ -91,7 +96,7 @@ export async function createEvent(formData: EventFormData) {
         canonicalCity,
         formData.event_date,
         supabase,
-        formData.state ?? null
+        canonicalState ?? null
       );
       if (wx) {
         insertData.event_weather = wx.classification;
@@ -175,9 +180,23 @@ export async function updateEvent(id: string, formData: Partial<EventFormData>) 
   }
 
   // Canonicalize city at write time if it's in the update payload.
+  // Use the combined helper so a paste of "Saint Louis Mo" lands as
+  // city="Saint Louis", state="MO" (when state isn't otherwise being
+  // updated explicitly). Operator-supplied state in the form takes
+  // precedence over any extracted suffix.
   if ("city" in formData && formData.city !== undefined) {
-    const canonical = canonicalizeCity(formData.city);
+    const { city: canonical, state: extractedState } = canonicalizeCityAndState(
+      formData.city,
+      formData.state
+    );
     updateData.city = canonical || null;
+    if (!("state" in formData) && extractedState) {
+      // Operator didn't touch state; populate from the suffix we just
+      // peeled off the city string. (When formData.state IS provided,
+      // the existing loop at line 176 has already copied it to
+      // updateData and the explicit value wins.)
+      updateData.state = extractedState;
+    }
   }
 
   // Auto-geocode + classify weather when city / state / date change and
