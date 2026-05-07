@@ -14,7 +14,10 @@
 
 import { describe, it, expect } from "vitest";
 import {
+  aggregateHourlyForEventWindow,
   calculateBayesianForecast,
+  continuousWeatherCoefficient,
+  holidayCoefficient,
   operatorOverallMedian,
 } from "./forecast-engine-v2";
 import { calibrateCoefficients } from "./forecast-engine";
@@ -451,6 +454,229 @@ describe("interval calibration on synthetic data", () => {
     expect(rate80).toBeLessThan(0.92);
     expect(rate50).toBeGreaterThan(0.4);
     expect(rate50).toBeLessThan(0.62);
+  });
+});
+
+describe("continuousWeatherCoefficient", () => {
+  it("comfortable mid-range temps with no precip return ~1.0", () => {
+    expect(continuousWeatherCoefficient({ maxTempF: 72, precipitationIn: 0 })).toBe(1.0);
+    expect(continuousWeatherCoefficient({ maxTempF: 80, precipitationIn: 0 })).toBe(1.0);
+  });
+
+  it("really hot (100°F+) is materially worse than just hot (90°F)", () => {
+    const hot = continuousWeatherCoefficient({ maxTempF: 90, precipitationIn: 0 });
+    const reallyHot = continuousWeatherCoefficient({ maxTempF: 100, precipitationIn: 0 });
+    const brutalHeat = continuousWeatherCoefficient({ maxTempF: 110, precipitationIn: 0 });
+    expect(hot).toBeLessThan(1.0);
+    expect(reallyHot).toBeLessThan(hot);
+    expect(brutalHeat).toBeLessThan(reallyHot);
+    expect(reallyHot).toBeCloseTo(0.55, 1);
+  });
+
+  it("really cold (30°F) is materially worse than cold (45°F)", () => {
+    const cold = continuousWeatherCoefficient({ maxTempF: 45, precipitationIn: 0 });
+    const reallyCold = continuousWeatherCoefficient({ maxTempF: 30, precipitationIn: 0 });
+    const brutalCold = continuousWeatherCoefficient({ maxTempF: 20, precipitationIn: 0 });
+    expect(cold).toBeLessThan(1.0);
+    expect(reallyCold).toBeLessThan(cold);
+    expect(brutalCold).toBeLessThan(reallyCold);
+    expect(cold).toBeCloseTo(0.70, 1);
+    expect(reallyCold).toBeCloseTo(0.45, 1);
+  });
+
+  it("rain is a stronger detractor than mild temperature changes", () => {
+    // Slightly warm + light rain should beat hot + dry as a forecast.
+    const warmDry = continuousWeatherCoefficient({ maxTempF: 88, precipitationIn: 0 });
+    const cleanLightRain = continuousWeatherCoefficient({ maxTempF: 75, precipitationIn: 0.2 });
+    expect(warmDry).toBeGreaterThan(cleanLightRain);
+  });
+
+  it("storms (1.0\"+ precip) approach the floor", () => {
+    const storm = continuousWeatherCoefficient({ maxTempF: 70, precipitationIn: 1.5 });
+    expect(storm).toBeLessThan(0.30);
+  });
+
+  it("compounds temperature and precipitation multiplicatively", () => {
+    const cold = continuousWeatherCoefficient({ maxTempF: 30, precipitationIn: 0 });
+    const rain = continuousWeatherCoefficient({ maxTempF: 70, precipitationIn: 0.3 });
+    const both = continuousWeatherCoefficient({ maxTempF: 30, precipitationIn: 0.3 });
+    // both should be approximately cold * rain (within rounding).
+    expect(both).toBeCloseTo(cold * rain, 2);
+  });
+
+  it("never falls below the 0.15 floor", () => {
+    const apocalypse = continuousWeatherCoefficient({ maxTempF: 10, precipitationIn: 5.0 });
+    expect(apocalypse).toBeGreaterThanOrEqual(0.15);
+  });
+
+  it("returns 1.0 for null/missing snapshot (silent no-op)", () => {
+    expect(continuousWeatherCoefficient(null)).toBe(1.0);
+    expect(continuousWeatherCoefficient(undefined)).toBe(1.0);
+  });
+
+  it("previous-day rain applies a mild residual penalty", () => {
+    const drySnapshot = continuousWeatherCoefficient({ maxTempF: 75, precipitationIn: 0 });
+    const wetYesterday = continuousWeatherCoefficient({
+      maxTempF: 75,
+      precipitationIn: 0,
+      prevDayPrecipIn: 1.0,
+    });
+    expect(wetYesterday).toBeLessThan(drySnapshot);
+    expect(wetYesterday).toBeGreaterThan(0.85); // mild penalty, not punitive
+  });
+});
+
+describe("holidayCoefficient", () => {
+  it("July 4 boosts forecast", () => {
+    expect(holidayCoefficient("2026-07-04")).toBe(1.30);
+  });
+  it("July 3 (day before) gets a smaller boost", () => {
+    expect(holidayCoefficient("2026-07-03")).toBe(1.15);
+  });
+  it("Christmas Day suppresses forecast", () => {
+    expect(holidayCoefficient("2026-12-25")).toBe(0.40);
+  });
+  it("Christmas Eve also suppresses", () => {
+    expect(holidayCoefficient("2026-12-24")).toBe(0.70);
+  });
+  it("Thanksgiving (4th Thursday in November) suppresses", () => {
+    // 2026-11-26 is the 4th Thursday of November 2026.
+    expect(holidayCoefficient("2026-11-26")).toBe(0.60);
+  });
+  it("Memorial Day 2026 (May 25, last Monday)", () => {
+    expect(holidayCoefficient("2026-05-25")).toBe(1.15);
+  });
+  it("Labor Day 2026 (Sep 7, first Monday)", () => {
+    expect(holidayCoefficient("2026-09-07")).toBe(1.10);
+  });
+  it("Random Tuesday returns 1.0", () => {
+    expect(holidayCoefficient("2026-03-17")).toBe(1.0);
+  });
+  it("null/missing date returns 1.0", () => {
+    expect(holidayCoefficient(null)).toBe(1.0);
+    expect(holidayCoefficient(undefined)).toBe(1.0);
+    expect(holidayCoefficient("")).toBe(1.0);
+  });
+});
+
+describe("aggregateHourlyForEventWindow", () => {
+  const sampleHourly = [
+    { hour: 10, tempF: 60, precipIn: 0.0 },
+    { hour: 11, tempF: 65, precipIn: 0.0 },
+    { hour: 14, tempF: 80, precipIn: 0.5 }, // afternoon storm
+    { hour: 17, tempF: 75, precipIn: 0.0 },
+    { hour: 18, tempF: 73, precipIn: 0.0 },
+    { hour: 19, tempF: 70, precipIn: 0.0 },
+    { hour: 20, tempF: 68, precipIn: 0.0 },
+  ];
+
+  it("aggregates only hours inside the window", () => {
+    // Evening event 17:00-21:00 — should miss the 14:00 afternoon storm
+    const window = aggregateHourlyForEventWindow(sampleHourly, 17, 21);
+    expect(window).not.toBeNull();
+    expect(window!.maxTempF).toBe(75); // max of 75/73/70/68
+    expect(window!.precipitationIn).toBe(0); // no rain in evening
+    expect(window!.source).toBe("hourly_window");
+  });
+
+  it("captures afternoon-storm hours when in window", () => {
+    const window = aggregateHourlyForEventWindow(sampleHourly, 12, 16);
+    expect(window).not.toBeNull();
+    expect(window!.precipitationIn).toBe(0.5); // captures the 14:00 storm
+  });
+
+  it("end hour is exclusive", () => {
+    const window = aggregateHourlyForEventWindow(sampleHourly, 17, 20);
+    // Should include 17, 18, 19 but NOT 20
+    expect(window!.maxTempF).toBe(75); // 75/73/70 — does not see 68
+  });
+
+  it("returns null when no hourly entries fall in the window", () => {
+    expect(aggregateHourlyForEventWindow(sampleHourly, 0, 5)).toBeNull();
+  });
+
+  it("returns null on empty input", () => {
+    expect(aggregateHourlyForEventWindow([], 17, 21)).toBeNull();
+  });
+
+  it("defaults to full day when start/end are null", () => {
+    const window = aggregateHourlyForEventWindow(sampleHourly, null, null);
+    expect(window).not.toBeNull();
+    expect(window!.maxTempF).toBe(80); // full-day max includes the 14:00 storm
+  });
+});
+
+describe("calculateBayesianForecast — continuous weather integration", () => {
+  it("uses continuous coefficient when weatherSnapshot is provided", () => {
+    const history = Array.from({ length: 10 }, (_, i) =>
+      makeEvent({
+        id: `h-${i}`,
+        event_name: "Recurring",
+        net_sales: 1000,
+        event_date: `2024-${String((i % 12) + 1).padStart(2, "0")}-15`,
+      })
+    );
+    const result = calculateBayesianForecast(
+      { event_name: "Recurring", event_date: "2026-06-07" },
+      history,
+      {
+        weatherSnapshot: {
+          maxTempF: 105,
+          precipitationIn: 0,
+        },
+      }
+    );
+    expect(result).not.toBeNull();
+    expect(result!.weatherSource).toBe("continuous");
+    expect(result!.weatherCoefficient).toBeLessThan(0.7);
+    // 105°F is "really hot territory" — point estimate should be
+    // pulled materially below the unadjusted value.
+  });
+
+  it("falls back to bucket coefficient when no snapshot", () => {
+    const history = Array.from({ length: 10 }, (_, i) =>
+      makeEvent({
+        id: `h-${i}`,
+        event_name: "Recurring",
+        net_sales: 1000,
+        event_date: `2024-${String((i % 12) + 1).padStart(2, "0")}-15`,
+      })
+    );
+    const result = calculateBayesianForecast(
+      {
+        event_name: "Recurring",
+        event_date: "2026-06-07",
+        event_weather: "Hot",
+      },
+      history
+    );
+    expect(result).not.toBeNull();
+    expect(result!.weatherSource).toBe("bucket");
+  });
+
+  it("applies holiday coefficient on top of weather and dow", () => {
+    const history = Array.from({ length: 10 }, (_, i) =>
+      makeEvent({
+        id: `h-${i}`,
+        event_name: "Recurring",
+        net_sales: 1000,
+        event_date: `2024-${String((i % 12) + 1).padStart(2, "0")}-15`,
+      })
+    );
+    const normalDay = calculateBayesianForecast(
+      { event_name: "Recurring", event_date: "2026-07-07" }, // random Tuesday
+      history
+    );
+    const julyFourth = calculateBayesianForecast(
+      { event_name: "Recurring", event_date: "2026-07-04" }, // Independence Day
+      history
+    );
+    expect(normalDay!.holidayCoefficient).toBe(1.0);
+    expect(julyFourth!.holidayCoefficient).toBe(1.30);
+    // Same posterior, different holiday adjustment + different DOW.
+    // July 4 is Saturday in 2026 (DOW=1.15), July 7 is Tuesday (0.85).
+    // Ratio of points = (1.30 * 1.15) / (1.0 * 0.85) ≈ 1.76
+    expect(julyFourth!.point / normalDay!.point).toBeCloseTo((1.30 * 1.15) / 0.85, 1);
   });
 });
 

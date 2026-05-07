@@ -24,8 +24,11 @@ import {
 } from "../src/lib/forecast-engine.ts";
 import {
   calculateBayesianForecast,
+  aggregateHourlyForEventWindow,
   type BayesianForecastResult,
+  type WeatherSnapshot,
 } from "../src/lib/forecast-engine-v2.ts";
+import type { HourlyWeatherEntry } from "../src/lib/weather.ts";
 import { getPlatformEventsExcludingUser } from "../src/lib/platform-registry.ts";
 import type { Event } from "../src/lib/database.types.ts";
 
@@ -103,7 +106,63 @@ async function main() {
     v2Insufficient: boolean;
     v2N: number;
     v2PriorSource: BayesianForecastResult["priorSource"] | null;
+    v2WeatherSource: BayesianForecastResult["weatherSource"] | null;
+    v2HolidayCoeff: number | null;
   };
+
+  // Helper: parse "HH:MM:SS" to hour 0-23. Mirrors recalculate.ts:parseHour.
+  function parseHour(t: string | null | undefined): number | null {
+    if (!t) return null;
+    const m = String(t).match(/^(\d{1,2}):/);
+    if (!m) return null;
+    const h = parseInt(m[1], 10);
+    if (isNaN(h) || h < 0 || h > 23) return null;
+    return h;
+  }
+
+  // Helper: fetch weather snapshot from cache for an event. Returns null
+  // when no cache row matches lat/lng/date — we don't fetch fresh during
+  // a comparison run (read-only, no API hit cost).
+  async function fetchSnapshot(event: Event): Promise<WeatherSnapshot | null> {
+    if (event.latitude == null || event.longitude == null) return null;
+    const { data: cached } = await supabase
+      .from("weather_cache")
+      .select("max_temp_f, precipitation_in, prev_day_precip_in, hourly_data")
+      .eq("date", event.event_date)
+      .gte("latitude", event.latitude - 0.1)
+      .lte("latitude", event.latitude + 0.1)
+      .gte("longitude", event.longitude - 0.1)
+      .lte("longitude", event.longitude + 0.1)
+      .maybeSingle();
+    if (!cached) return null;
+    const startHour = parseHour(event.start_time);
+    const endHour = parseHour(event.end_time);
+    if (
+      cached.hourly_data &&
+      Array.isArray(cached.hourly_data) &&
+      cached.hourly_data.length > 0 &&
+      startHour != null &&
+      endHour != null &&
+      endHour > startHour
+    ) {
+      const window = aggregateHourlyForEventWindow(
+        cached.hourly_data as HourlyWeatherEntry[],
+        startHour,
+        endHour,
+        cached.prev_day_precip_in
+      );
+      if (window) return window;
+    }
+    if (cached.max_temp_f != null || cached.precipitation_in != null) {
+      return {
+        maxTempF: cached.max_temp_f,
+        precipitationIn: cached.precipitation_in,
+        prevDayPrecipIn: cached.prev_day_precip_in,
+        source: "daily",
+      };
+    }
+    return null;
+  }
 
   const rows: Row[] = [];
 
@@ -126,9 +185,11 @@ async function main() {
     const v1High = v1Forecast !== null ? v1Forecast * (1 + v1Pct) : null;
 
     // v2
+    const weatherSnapshot = await fetchSnapshot(event);
     const v2 = calculateBayesianForecast(event, historicalWithout, {
       calibratedCoefficients: calibrated,
       platformEvent,
+      weatherSnapshot,
     });
     const v2Point = v2?.insufficientData ? null : v2?.point ?? null;
 
@@ -149,6 +210,8 @@ async function main() {
       v2Insufficient: v2?.insufficientData ?? false,
       v2N: v2?.personalObservations ?? 0,
       v2PriorSource: v2?.priorSource ?? null,
+      v2WeatherSource: v2?.weatherSource ?? null,
+      v2HolidayCoeff: v2?.holidayCoefficient ?? null,
     });
   }
 
@@ -276,6 +339,42 @@ async function main() {
   console.log(`\nv2 prior-source distribution:`);
   for (const [src, count] of Object.entries(priorCounts)) {
     console.log(`  ${src.padEnd(12)}${count}`);
+  }
+
+  // v2 weather-source distribution
+  const weatherCounts: Record<string, number> = {};
+  for (const r of rows) {
+    if (r.v2WeatherSource) {
+      weatherCounts[r.v2WeatherSource] = (weatherCounts[r.v2WeatherSource] ?? 0) + 1;
+    }
+  }
+  console.log(`\nv2 weather-source distribution (continuous = uses raw temp/precip):`);
+  for (const [src, count] of Object.entries(weatherCounts)) {
+    console.log(`  ${src.padEnd(12)}${count}`);
+  }
+
+  // v2 holiday coefficient distribution
+  const holidayHits = rows.filter((r) => r.v2HolidayCoeff != null && r.v2HolidayCoeff !== 1.0);
+  console.log(`\nv2 holiday adjacency hits: ${holidayHits.length}`);
+  if (holidayHits.length > 0) {
+    const grouped: Record<string, number> = {};
+    for (const r of holidayHits) {
+      const k = r.v2HolidayCoeff!.toFixed(2);
+      grouped[k] = (grouped[k] ?? 0) + 1;
+    }
+    for (const [coeff, count] of Object.entries(grouped)) {
+      console.log(`  coeff=${coeff}  ${count} events`);
+    }
+  }
+
+  // Per-row miss% on the continuous-weather subset only
+  const continuousRows = rows.filter((r) => r.v2WeatherSource === "continuous" && r.v2Point !== null && r.v1Forecast !== null);
+  if (continuousRows.length > 0) {
+    const v1MissCont = continuousRows.map((r) => Math.abs((r.actual - r.v1Forecast!) / r.v1Forecast!) * 100).reduce((a, b) => a + b, 0) / continuousRows.length;
+    const v2MissCont = continuousRows.map((r) => Math.abs((r.actual - r.v2Point!) / r.v2Point!) * 100).reduce((a, b) => a + b, 0) / continuousRows.length;
+    console.log(`\nContinuous-weather subset (v2 used raw weather): n=${continuousRows.length}`);
+    console.log(`  v1 mean |miss|: ${v1MissCont.toFixed(1)}%`);
+    console.log(`  v2 mean |miss|: ${v2MissCont.toFixed(1)}%`);
   }
 
   // Insufficient-data flagging

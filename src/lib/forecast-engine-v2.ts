@@ -96,20 +96,57 @@ export interface BayesianForecastResult {
     betaN: number;     // posterior rate
   };
   /** Multiplicative adjustments applied AFTER the posterior was
-   *  computed: weather coefficient and day-of-week coefficient.
-   *  Both default to 1.0 if not applicable. */
+   *  computed: weather coefficient, day-of-week coefficient,
+   *  holiday adjacency. All default to 1.0 if not applicable. */
   weatherCoefficient: number;
   dayOfWeekCoefficient: number;
+  holidayCoefficient: number;
+  /** True when the weather coefficient was derived from continuous
+   *  raw data (max_temp_f, precip_in, prev_day_precip_in, hourly window)
+   *  rather than from the categorical event_weather bucket. Diagnostic
+   *  for the calibration report — lets us measure whether the
+   *  continuous path materially improves accuracy vs the bucket. */
+  weatherSource: "continuous" | "bucket" | "none";
   /** Same insufficientData semantics as v1: posterior point below
    *  10% of operator overall median. Surfaces "not enough history
    *  yet" UI treatment in shadow-mode comparisons. */
   insufficientData: boolean;
 }
 
+/**
+ * Continuous weather snapshot — raw values pulled from the weather
+ * cache (or a live Open-Meteo response). When present, the v2 engine
+ * uses these to compute a continuous weather coefficient that
+ * captures the gradient between bucket boundaries (a 92°F day and a
+ * 105°F day both map to "Hot" → 0.63x coefficient under the bucket
+ * approach; under continuous, they get distinct multipliers).
+ *
+ * For events with start_time / end_time set, the recalc pipeline can
+ * aggregate hourly data over the event window and pass the
+ * window-specific snapshot — captures evening conditions for an
+ * evening event instead of the daily summary.
+ */
+export interface WeatherSnapshot {
+  /** Daily max temperature in Fahrenheit (or window-max for hourly
+   *  aggregation). */
+  maxTempF: number | null;
+  /** Total precipitation during the day or event window, in inches. */
+  precipitationIn: number | null;
+  /** Total precipitation on the previous day (residual ground
+   *  wetness). Optional. */
+  prevDayPrecipIn?: number | null;
+  /** Whether this snapshot was aggregated over an event-specific
+   *  hourly window vs the full day. Diagnostic. */
+  source?: "daily" | "hourly_window";
+}
+
 export interface BayesianForecastOptions {
   /** Pre-computed calibrated coefficients for this user. Same shape
    *  as the v1 engine. Optional. */
   calibratedCoefficients?: CalibratedCoefficients | null;
+  /** Continuous weather snapshot for this event. When present,
+   *  preferred over the categorical event_weather bucket. */
+  weatherSnapshot?: WeatherSnapshot | null;
   /** Cross-user platform aggregate for this event, if available.
    *  Same shape as v1 engine. */
   platformEvent?: {
@@ -285,6 +322,262 @@ function studentTQuantileApprox(p: number, df: number): number {
   // ~3% for df ≥ 3 across the 80%/95% range we use.
   const factor = 1 + 1 / (4 * df);
   return z * factor;
+}
+
+// --- Continuous weather coefficient ---
+//
+// Replaces the categorical bucket lookup (8 buckets, 1 coefficient
+// each) with a piecewise-linear function over raw temperature and
+// precipitation. Thresholds anchored on operator intuition (Wok-O
+// Taco, 2026-05-07): 100°F+ "really hot", 45°F "cold", 30°F "really
+// cold", rain is the dominant detractor with storms even more so.
+//
+// Coefficient values match the existing bucket coefficients at their
+// boundary thresholds so the continuous function is a smooth
+// generalization of what we had — no wholesale recalibration of
+// magnitudes, just a richer input space.
+
+/**
+ * Piecewise-linear interpolation between control points.
+ *
+ * `points` is a sorted list of [x, y] anchors. Given an input x:
+ *   - if x ≤ points[0].x, return points[0].y
+ *   - if x ≥ points[last].x, return points[last].y
+ *   - else linearly interpolate between the bracketing pair.
+ */
+function piecewise(points: ReadonlyArray<readonly [number, number]>, x: number): number {
+  if (x <= points[0][0]) return points[0][1];
+  if (x >= points[points.length - 1][0]) return points[points.length - 1][1];
+  for (let i = 1; i < points.length; i++) {
+    const [x1, y1] = points[i];
+    if (x <= x1) {
+      const [x0, y0] = points[i - 1];
+      const t = (x - x0) / (x1 - x0);
+      return y0 + t * (y1 - y0);
+    }
+  }
+  return points[points.length - 1][1];
+}
+
+/** Temperature-only coefficient. Independent of precipitation. */
+const TEMP_CONTROL_POINTS: ReadonlyArray<readonly [number, number]> = [
+  [20, 0.30],   // brutal cold
+  [30, 0.45],   // really cold (operator threshold)
+  [45, 0.70],   // cold (operator threshold)
+  [55, 0.92],   // chilly but workable
+  [65, 1.00],   // comfortable lower bound
+  [85, 1.00],   // comfortable upper bound
+  [90, 0.85],   // start of hot
+  [100, 0.55],  // really hot (operator threshold)
+  [110, 0.40],  // brutal heat
+];
+
+/** Precipitation-during-event coefficient. Rain is the biggest single
+ *  detractor; storms even more so (operator). */
+const PRECIP_CONTROL_POINTS: ReadonlyArray<readonly [number, number]> = [
+  [0.0, 1.00],
+  [0.05, 1.00],   // drizzle below this is noise
+  [0.15, 0.85],   // light rain
+  [0.30, 0.65],   // medium rain
+  [0.75, 0.40],   // heavy rain
+  [1.5, 0.25],    // storms
+];
+
+/** Previous-day rain coefficient. Residual ground wetness only —
+ *  ~5-10% penalty at most, since the rain isn't actually falling on
+ *  the event. */
+const PREV_PRECIP_CONTROL_POINTS: ReadonlyArray<readonly [number, number]> = [
+  [0.0, 1.00],
+  [0.25, 0.97],
+  [0.5, 0.93],
+  [1.0, 0.90],
+];
+
+/**
+ * Aggregate hourly weather entries into a snapshot covering only the
+ * event's active window. For an evening event (start 17:00, end 21:00)
+ * this captures evening conditions specifically — much more accurate
+ * than the daily summary, which would average a stormy afternoon
+ * with a clear evening.
+ *
+ * Returns null if no hourly entries fall within the window or the
+ * inputs are missing.
+ *
+ * Window edges are inclusive on the start hour and exclusive on the
+ * end hour (event ends at start of `endHour`).
+ */
+export function aggregateHourlyForEventWindow(
+  hourly: ReadonlyArray<{ hour: number; tempF: number; precipIn: number }>,
+  startHour: number | null,
+  endHour: number | null,
+  prevDayPrecipIn?: number | null
+): WeatherSnapshot | null {
+  if (!hourly || hourly.length === 0) return null;
+  // Default window: full day if start/end aren't set.
+  const sh = startHour ?? 0;
+  const eh = endHour ?? 24;
+  const inWindow = hourly.filter((h) => h.hour >= sh && h.hour < eh);
+  if (inWindow.length === 0) return null;
+  const maxTempF = Math.max(...inWindow.map((h) => h.tempF));
+  const precipitationIn = inWindow.reduce((sum, h) => sum + h.precipIn, 0);
+  return {
+    maxTempF,
+    precipitationIn,
+    prevDayPrecipIn: prevDayPrecipIn ?? null,
+    source: "hourly_window",
+  };
+}
+
+/**
+ * Continuous weather coefficient for a forecast snapshot. Multiplies
+ * temperature, precipitation-during, and previous-day-precipitation
+ * components together, with a hard floor at 0.15 (no event night
+ * forecasts to less than 15% of the operator's typical revenue).
+ *
+ * Returns 1.0 when the snapshot has no usable data (silent no-op).
+ */
+export function continuousWeatherCoefficient(
+  snapshot: WeatherSnapshot | null | undefined
+): number {
+  if (!snapshot) return 1.0;
+  let coeff = 1.0;
+  if (snapshot.maxTempF != null) {
+    coeff *= piecewise(TEMP_CONTROL_POINTS, snapshot.maxTempF);
+  }
+  if (snapshot.precipitationIn != null) {
+    coeff *= piecewise(PRECIP_CONTROL_POINTS, snapshot.precipitationIn);
+  }
+  if (snapshot.prevDayPrecipIn != null) {
+    coeff *= piecewise(PREV_PRECIP_CONTROL_POINTS, snapshot.prevDayPrecipIn);
+  }
+  return Math.max(0.15, coeff);
+}
+
+// --- Holiday adjacency ---
+//
+// US federal holidays + a handful of food-truck-relevant culture
+// dates. The coefficient applies when the event date IS the holiday
+// or is on the adjacent day (Saturday before a Sunday holiday, e.g.,
+// Christmas Eve before Christmas, etc.). Magnitude is conservative
+// (~10-15% adjustment); operator data will calibrate further.
+
+interface HolidayRule {
+  /** Display name. */
+  name: string;
+  /** Returns true if the given date matches this holiday. */
+  matches: (date: Date) => boolean;
+  /** Multiplier when the event lands ON the holiday. */
+  on: number;
+  /** Multiplier when the event lands the day BEFORE the holiday. */
+  dayBefore: number;
+  /** Multiplier when the event lands the day AFTER the holiday. */
+  dayAfter: number;
+}
+
+function nthWeekdayOfMonth(date: Date, n: number, weekday: number): boolean {
+  if (date.getDay() !== weekday) return false;
+  return Math.ceil(date.getDate() / 7) === n;
+}
+
+function lastWeekdayOfMonth(date: Date, weekday: number): boolean {
+  if (date.getDay() !== weekday) return false;
+  const next = new Date(date);
+  next.setDate(date.getDate() + 7);
+  return next.getMonth() !== date.getMonth();
+}
+
+const HOLIDAY_RULES: ReadonlyArray<HolidayRule> = [
+  {
+    // New Year's Eve / Day — strong food-truck signal. Eve = parties = up.
+    name: "New Year",
+    matches: (d) => (d.getMonth() === 0 && d.getDate() === 1),
+    on: 0.85,         // many events cancelled/closed
+    dayBefore: 1.20,  // NYE parties
+    dayAfter: 1.0,
+  },
+  {
+    name: "Memorial Day",
+    matches: (d) => d.getMonth() === 4 && lastWeekdayOfMonth(d, 1), // last Monday in May
+    on: 1.15,
+    dayBefore: 1.10,
+    dayAfter: 1.05,
+  },
+  {
+    name: "Independence Day",
+    matches: (d) => d.getMonth() === 6 && d.getDate() === 4,
+    on: 1.30,         // huge food-truck day
+    dayBefore: 1.15,
+    dayAfter: 1.10,
+  },
+  {
+    name: "Labor Day",
+    matches: (d) => d.getMonth() === 8 && nthWeekdayOfMonth(d, 1, 1), // first Monday in September
+    on: 1.10,
+    dayBefore: 1.05,
+    dayAfter: 1.0,
+  },
+  {
+    name: "Halloween",
+    matches: (d) => d.getMonth() === 9 && d.getDate() === 31,
+    on: 1.05,         // costume crowds, slight bump
+    dayBefore: 1.0,
+    dayAfter: 0.95,
+  },
+  {
+    name: "Thanksgiving",
+    // Fourth Thursday of November
+    matches: (d) => d.getMonth() === 10 && nthWeekdayOfMonth(d, 4, 4),
+    on: 0.60,         // most events closed
+    dayBefore: 0.85,  // people traveling
+    dayAfter: 0.85,
+  },
+  {
+    name: "Christmas",
+    matches: (d) => d.getMonth() === 11 && d.getDate() === 25,
+    on: 0.40,
+    dayBefore: 0.70,
+    dayAfter: 0.85,
+  },
+];
+
+/**
+ * Compute the holiday-adjacency coefficient for an event date. Returns
+ * 1.0 when the date is not on or adjacent to any tracked holiday.
+ *
+ * Multiple holidays could in principle stack (rare); we take the most
+ * extreme (furthest from 1.0) to avoid double-counting bumps when
+ * holidays cluster.
+ */
+export function holidayCoefficient(eventDate: string | null | undefined): number {
+  if (!eventDate) return 1.0;
+  const d = new Date(eventDate + "T00:00:00");
+  if (Number.isNaN(d.getTime())) return 1.0;
+
+  let mostExtreme = 1.0;
+  function consider(coeff: number) {
+    if (Math.abs(coeff - 1.0) > Math.abs(mostExtreme - 1.0)) {
+      mostExtreme = coeff;
+    }
+  }
+
+  for (const rule of HOLIDAY_RULES) {
+    if (rule.matches(d)) {
+      consider(rule.on);
+      continue;
+    }
+    const next = new Date(d);
+    next.setDate(d.getDate() + 1);
+    if (rule.matches(next)) {
+      consider(rule.dayBefore);
+      continue;
+    }
+    const prev = new Date(d);
+    prev.setDate(d.getDate() - 1);
+    if (rule.matches(prev)) {
+      consider(rule.dayAfter);
+    }
+  }
+  return mostExtreme;
 }
 
 /** Operator's overall historical median revenue. Same definition as
@@ -532,9 +825,33 @@ export function calculateBayesianForecast(
   // day-of-week (Charter St Ann runs Tue/Wed/Thu — averaging encodes
   // day-of-cluster, not day-of-week).
   const dowCoeff = dayOfWeekCoefficient(target.event_date, options?.calibratedCoefficients);
-  const wCoeff = weatherCoefficient(target.event_weather, options?.calibratedCoefficients);
-  point *= dowCoeff * wCoeff;
-  pointMedian *= dowCoeff * wCoeff;
+
+  // Weather: prefer continuous when a weather snapshot is available,
+  // fall back to categorical bucket otherwise. The continuous path
+  // captures the gradient between bucket boundaries — a 92°F day and
+  // a 105°F day map to different multipliers under continuous, but
+  // both map to "Hot" → 0.63x under the bucket lookup. See
+  // continuousWeatherCoefficient for the curve.
+  let wCoeff: number;
+  let weatherSource: BayesianForecastResult["weatherSource"];
+  if (options?.weatherSnapshot) {
+    wCoeff = continuousWeatherCoefficient(options.weatherSnapshot);
+    weatherSource = "continuous";
+  } else if (target.event_weather) {
+    wCoeff = weatherCoefficient(target.event_weather, options?.calibratedCoefficients);
+    weatherSource = "bucket";
+  } else {
+    wCoeff = 1.0;
+    weatherSource = "none";
+  }
+
+  // Holiday adjacency — multiplicative coefficient based on whether
+  // the event date is on or near a US federal holiday or food-truck-
+  // relevant culture date. See HOLIDAY_RULES + holidayCoefficient.
+  const holCoeff = holidayCoefficient(target.event_date);
+
+  point *= dowCoeff * wCoeff * holCoeff;
+  pointMedian *= dowCoeff * wCoeff * holCoeff;
 
   // Credible intervals. Compute in log-space, transform back, apply
   // adjustments. The adjustments stretch the interval proportionally
@@ -544,7 +861,7 @@ export function calculateBayesianForecast(
   const log25 = predictiveLogQuantile(posterior, 0.25);
   const log75 = predictiveLogQuantile(posterior, 0.75);
 
-  const adjFactor = dowCoeff * wCoeff;
+  const adjFactor = dowCoeff * wCoeff * holCoeff;
   const credibleLow = Math.exp(log10) * adjFactor;
   const credibleHigh = Math.exp(log90) * adjFactor;
   const credible50Low = Math.exp(log25) * adjFactor;
@@ -572,6 +889,8 @@ export function calculateBayesianForecast(
     },
     weatherCoefficient: wCoeff,
     dayOfWeekCoefficient: dowCoeff,
+    holidayCoefficient: holCoeff,
+    weatherSource,
     insufficientData,
   };
 }

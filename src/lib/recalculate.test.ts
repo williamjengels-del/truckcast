@@ -27,6 +27,8 @@ function makeV2Result(overrides: Partial<BayesianForecastResult> = {}): Bayesian
     posterior: { muN: 7.1, kappaN: 7.5, alphaN: 5.5, betaN: 0.6 },
     weatherCoefficient: 1.0,
     dayOfWeekCoefficient: 1.0,
+    holidayCoefficient: 1.0,
+    weatherSource: "none",
     insufficientData: false,
     ...overrides,
   };
