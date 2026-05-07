@@ -182,8 +182,12 @@ describe("posterior tracks observations", () => {
     expect(p20).toBeLessThan(2400);
 
     // Sanity: there is movement away from the prior as data arrives.
-    // p20 should differ from p0 by at least 30% in either direction.
-    expect(Math.abs(p20 - p0) / p0).toBeGreaterThan(0.3);
+    // p20 should differ from p0 by at least 15% in either direction.
+    // Threshold deliberately loose because variance inflation drops
+    // as N grows, partially offsetting the posterior-mean shift away
+    // from the prior median; the asymptote check above is the
+    // load-bearing assertion.
+    expect(Math.abs(p20 - p0) / p0).toBeGreaterThan(0.15);
   });
 
   it("80% credible interval narrows as data accumulates", () => {

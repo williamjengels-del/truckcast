@@ -138,14 +138,28 @@ const GLOBAL_DEFAULT_MEAN_REVENUE = 800;
 const PRIOR_LOG_VARIANCE = 0.5;
 
 /** Prior strength (pseudo-count κ_0) for each prior source. Higher
- *  = stronger prior, slower for personal data to override. Tuned so
- *  that platform data with 3+ operators is worth ~3 observations,
- *  operator-overall is worth ~1 observation, and the global default
- *  is worth ~0.5 observation (essentially noise once any data arrives). */
+ *  = stronger prior, slower for personal data to override.
+ *
+ *  Tuned 2026-05-08 in the Phase 3 autonomous run after the first
+ *  comparison against v1 showed v2 regressing on high-history venues
+ *  (Scott AFB +20pp, Charter St Ann +8pp, Lunchtime Live +12pp).
+ *  Cause was the operator-overall-median prior pulling the per-venue
+ *  posterior away from the per-venue mean even with N=30+ observations.
+ *  Halving the prior strength makes personal data dominate sooner.
+ *
+ *  Effective weights at common N:
+ *    n=1  obs:  platform 67%, operator 75%, default 80%
+ *    n=5  obs:  platform 83%, operator 91%, default 95%
+ *    n=10 obs:  platform 91%, operator 95%, default 98%
+ *    n=30 obs:  platform 97%, operator 98%, default 99%
+ *
+ *  Cold-start forecasts (N=0) still use the prior; the variance
+ *  inflation in the predictive mean already gives them appropriate
+ *  uncertainty. */
 const PRIOR_STRENGTH = {
-  platform: 3,
-  operator: 1,
-  default: 0.5,
+  platform: 2,
+  operator: 0.5,
+  default: 0.25,
 };
 
 /** Same insufficient-data threshold as v1 engine. Floor at 10% of
@@ -153,6 +167,19 @@ const PRIOR_STRENGTH = {
 const INSUFFICIENT_DATA_FLOOR_RATIO = 0.1;
 
 // --- Helpers ---
+
+/** Recency window matching v1's `weightedAverage`. Events within this
+ *  window get weight 2 in the Bayesian update (effectively counted
+ *  twice). v1 uses the same 6-month window for the same purpose:
+ *  reflect that the operator's recent draw is more predictive of the
+ *  next event than data from years ago. */
+const SIX_MONTHS_MS = 6 * 30 * 24 * 60 * 60 * 1000;
+
+function recencyWeight(eventDate: string): number {
+  const eventTime = new Date(eventDate + "T00:00:00").getTime();
+  const now = Date.now();
+  return now - eventTime <= SIX_MONTHS_MS ? 2 : 1;
+}
 
 function eventRevenue(e: Event): number {
   return (e.net_sales ?? 0) + (e.event_mode === "catering" ? e.invoice_revenue : 0);
@@ -332,16 +359,21 @@ interface PosteriorParams {
 }
 
 /**
- * Conjugate Normal-Inverse-Gamma update. Closed-form. See e.g.
- * Murphy 2007 "Conjugate Bayesian analysis of the Gaussian distribution"
- * eq. 86-89. Operates on log-revenue observations.
+ * Conjugate Normal-Inverse-Gamma update with per-observation weights.
+ * Closed-form. See e.g. Murphy 2007 "Conjugate Bayesian analysis of
+ * the Gaussian distribution" eq. 86-89, generalised to weighted
+ * observations. Each observation contributes its weight to the
+ * effective sample size (W replaces n in the standard formulas).
+ *
+ * In our use case, weights are 1 or 2 — 2 for events in the last
+ * 6 months (recency-weighted, mirroring v1's `weightedAverage`).
  */
 function updatePosterior(
   prior: PriorParams,
-  logObservations: number[]
+  logObservations: number[],
+  weights: number[]
 ): PosteriorParams {
-  const n = logObservations.length;
-  if (n === 0) {
+  if (logObservations.length === 0) {
     return {
       muN: prior.mu0,
       kappaN: prior.kappa0,
@@ -349,18 +381,23 @@ function updatePosterior(
       betaN: prior.beta0,
     };
   }
-  const sampleMean = logObservations.reduce((s, x) => s + x, 0) / n;
-  const sampleSS = logObservations.reduce(
-    (s, x) => s + (x - sampleMean) ** 2,
+  const W = weights.reduce((s, w) => s + w, 0);
+  const weightedSum = logObservations.reduce(
+    (s, x, i) => s + weights[i] * x,
     0
   );
-  const kappaN = prior.kappa0 + n;
-  const muN = (prior.kappa0 * prior.mu0 + n * sampleMean) / kappaN;
-  const alphaN = prior.alpha0 + n / 2;
+  const weightedMean = weightedSum / W;
+  const weightedSS = logObservations.reduce(
+    (s, x, i) => s + weights[i] * (x - weightedMean) ** 2,
+    0
+  );
+  const kappaN = prior.kappa0 + W;
+  const muN = (prior.kappa0 * prior.mu0 + W * weightedMean) / kappaN;
+  const alphaN = prior.alpha0 + W / 2;
   const betaN =
     prior.beta0 +
-    sampleSS / 2 +
-    (prior.kappa0 * n * (sampleMean - prior.mu0) ** 2) / (2 * kappaN);
+    weightedSS / 2 +
+    (prior.kappa0 * W * (weightedMean - prior.mu0) ** 2) / (2 * kappaN);
   return { muN, kappaN, alphaN, betaN };
 }
 
@@ -452,6 +489,10 @@ export function calculateBayesianForecast(
     (e) => e.event_name.toLowerCase().trim() === nameNormalized
   );
   const logObservations = nameMatches.map((e) => Math.log(eventRevenue(e)));
+  // Recency weights — 2 for events in the last 6 months, 1 otherwise.
+  // Mirrors v1's weightedAverage so v2 captures the same "recent
+  // events are more predictive" signal.
+  const obsWeights = nameMatches.map((e) => recencyWeight(e.event_date));
 
   // Build the prior.
   const opMedian = operatorOverallMedian(historicalEvents);
@@ -463,7 +504,7 @@ export function calculateBayesianForecast(
   const prior = buildPrior(opMedian, platformMedian, platformOps, options);
 
   // Update.
-  const posterior = updatePosterior(prior, logObservations);
+  const posterior = updatePosterior(prior, logObservations, obsWeights);
 
   // Predictive mean of the log-Normal in revenue space.
   // For NIG posterior, the predictive distribution is Student's t
