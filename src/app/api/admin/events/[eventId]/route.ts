@@ -4,7 +4,7 @@ import { getAdminUser } from "@/lib/admin";
 import { logAdminAction } from "@/lib/admin-audit";
 import { recalculateForUserWithClient } from "@/lib/recalculate-service";
 import { autoClassifyWeather } from "@/lib/weather";
-import { canonicalizeCity } from "@/lib/city-normalize";
+import { canonicalizeCityAndState } from "@/lib/city-normalize";
 import type { EventFormData } from "@/app/dashboard/events/actions";
 
 // PATCH /api/admin/events/[eventId]
@@ -81,9 +81,24 @@ export async function PATCH(
     // Canonicalize city at write time — same treatment as the
     // user-facing action. "St. Louis" and "Saint Louis" must land on
     // the same stored form so aggregation/comparison agrees downstream.
+    // Also extract any embedded state suffix ("Saint Louis Mo" →
+    // city="Saint Louis", state="MO") unless the admin is explicitly
+    // editing state too — explicit value wins.
     if (key === "city" && typeof normalized === "string") {
-      const canonical = canonicalizeCity(normalized);
+      const explicitState =
+        typeof formData.state === "string" ? formData.state : null;
+      const { city: canonical, state: extractedState } =
+        canonicalizeCityAndState(normalized, explicitState);
       normalized = canonical || null;
+      if (extractedState && !("state" in formData)) {
+        // Admin didn't touch state; populate from suffix.
+        if (
+          (current as { state: string | null }).state !== extractedState
+        ) {
+          updateData.state = extractedState;
+          changedFields.push("state");
+        }
+      }
     }
     if ((current as Record<string, unknown>)[key] !== normalized) {
       updateData[key] = normalized;

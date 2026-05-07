@@ -142,10 +142,17 @@ export function EventForm({
 
   // Weather auto-suggest
   const [cityValue, setCityValue] = useState<string>(initialData?.city ?? "");
-  // state: edit mode preloads from the event; create mode starts empty
-  // and requires operator to pick explicitly (no profile-state default —
-  // border-state food trucks would be mis-saved by a silent default).
-  const [stateValue, setStateValue] = useState<string>(initialData?.state ?? "");
+  // state: edit mode preloads from the event; create mode defaults to
+  // the operator's profile state (e.g. "MO" for a St. Louis operator).
+  // Border-state operators (MO/IL cross-traffic, NJ/NY/CT, OR/WA, etc.)
+  // override the default per-event when they're working out-of-state.
+  // Operator confirmed 2026-05-07: 96% of pre-default events ended up
+  // with NULL state, breaking the geocoder's state-disambiguation
+  // filter and silently mis-routing weather lookups for ambiguous city
+  // names. Default-with-override is the right trade.
+  const [stateValue, setStateValue] = useState<string>(
+    initialData?.state ?? profileState ?? ""
+  );
   const [dateValue, setDateValue] = useState<string>(initialData?.event_date ?? "");
   const [weatherValue, setWeatherValue] = useState<string>(initialData?.event_weather ?? "");
   const [weatherSuggested, setWeatherSuggested] = useState<boolean>(false);
@@ -272,7 +279,7 @@ export function EventForm({
     setLaborCost(initialData?.labor_cost ?? "");
     setOtherCosts(initialData?.other_costs ?? "");
     setCityValue(initialData?.city ?? "");
-    setStateValue(initialData?.state ?? "");
+    setStateValue(initialData?.state ?? profileState ?? "");
     setDateValue(initialData?.event_date ?? "");
     setWeatherValue(initialData?.event_weather ?? "");
     setWeatherSuggested(false);
