@@ -384,18 +384,18 @@ function escapeHtml(s: string): string {
     .replace(/'/g, "&#39;");
 }
 
-// ─── Marketplace Inquiry Notification Email ───────────────────────────────
+// ─── Direct Inquiry Notification Email ────────────────────────────────────
 
 /**
- * Fired from /api/event-inquiries/submit when a Phase 7 marketplace
- * inquiry lands and routes to one or more operators. Sent to each
- * matched operator (fan-out from the submit handler).
+ * Fired from /api/event-inquiries/submit when a Phase 7 inquiry lands
+ * and routes to one or more operators. Sent to each matched operator
+ * (fan-out from the submit handler).
  *
  * Distinguishes itself from sendBookingInquiryEmail in two ways:
- *   - Multiple operators get the same inquiry (marketplace, not 1:1).
+ *   - Multiple operators get the same inquiry (fan-out, not 1:1).
  *     Copy frames it that way so operators understand they're competing.
  *   - Carries the city/state, budget estimate, and integer attendance
- *     that the marketplace form collects but the booking form doesn't.
+ *     that the inquiry form collects but the booking form doesn't.
  */
 export interface InquiryNotificationEmailPayload {
   businessName: string;
@@ -515,7 +515,7 @@ export async function sendInquiryNotificationEmail(
         <tbody>${detailsHtml}</tbody>
       </table>
       ${notesBlock}
-      <a href="${APP_URL}/dashboard/inbox/marketplace" style="display:inline-block;background:#f97316;color:white;font-weight:600;font-size:15px;padding:12px 28px;border-radius:8px;text-decoration:none;margin-top:16px;">
+      <a href="${APP_URL}/dashboard/inbox/inquiries" style="display:inline-block;background:#f97316;color:white;font-weight:600;font-size:15px;padding:12px 28px;border-radius:8px;text-decoration:none;margin-top:16px;">
         Open Inbox →
       </a>
       <p style="margin:24px 0 0;font-size:13px;color:#9ca3af;">

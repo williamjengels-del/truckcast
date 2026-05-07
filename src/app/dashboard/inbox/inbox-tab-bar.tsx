@@ -11,18 +11,18 @@ import { cn } from "@/lib/utils";
 // experience them the same way ("an organizer wants to book me"), so
 // they sit under one nav entry.
 //
-// Direct = 1:1 booking requests submitted via the operator's own
-// public booking link (vendcast.co/<slug>).
-// Marketplace = Phase 7 inquiries routed to multiple operators via
-// city + event_type matching.
-//
-// Badge logic: each tab shows its own pending count when non-zero so
-// the operator knows where the new things are. Reads through
-// /api/dashboard/sidebar-state which already aggregates both.
+// Direct bookings = 1:1 booking requests submitted via the operator's
+// own public booking link (vendcast.co/<slug>).
+// Inquiries = organizer-submitted requests routed to multiple
+// operators via city + event_type matching. Routed directly,
+// non-mediated, zero commission. Renamed from "Marketplace" 2026-05-07
+// because VendCast positions against marketplace platforms — using
+// the word internally even at a label level kept reinforcing the
+// frame we're trying to break out of.
 
 const TABS = [
   { href: "/dashboard/inbox/direct", label: "Direct bookings" },
-  { href: "/dashboard/inbox/marketplace", label: "Marketplace inquiries" },
+  { href: "/dashboard/inbox/inquiries", label: "Inquiries" },
 ] as const;
 
 export function InboxTabBar() {
@@ -60,7 +60,7 @@ export function InboxTabBar() {
         {TABS.map((t) => {
           const isActive = pathname.startsWith(t.href);
           const count =
-            t.href === "/dashboard/inbox/marketplace" ? openInquiryCount : 0;
+            t.href === "/dashboard/inbox/inquiries" ? openInquiryCount : 0;
           return (
             <Link
               key={t.href}

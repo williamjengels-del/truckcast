@@ -259,9 +259,10 @@ export default async function LandingPage() {
               </p>
             </div>
 
-            {/* Block 3 — Inquiry pipeline (Phase 7 marketplace
+            {/* Block 3 — Inquiry pipeline (Phase 7 direct-inquiry
                 positioning; replaces the prior revenue-timing block
-                now that the marketplace is the leading differentiator). */}
+                now that direct inquiries are the leading
+                differentiator). */}
             <div
               data-testid="insight-block-inquiry-pipeline"
               className={`${cardBase} ${tintA}`}
@@ -286,24 +287,33 @@ export default async function LandingPage() {
             this band lands "and you keep all of it — no commission."
             Per Verdict #25, orange is reserved for differentiator/closer
             moments + alternating accents; this is THE orange moment on
-            the homepage. */}
+            the homepage.
+            Reframed 2026-05-07 from "marketplace that takes 15%" to
+            "no middleman" framing. VendCast is positioning AGAINST
+            marketplace platforms — using "marketplace" in our own
+            differentiator copy quietly puts us in the same mental
+            category as the platforms we're beating. The "How direct
+            inquiries work" line below the headline answers the
+            "wait, where do these inquiries come from?" question that
+            the original copy left implicit. */}
         <div
           data-testid="insight-block-inquiries"
           className="border-t bg-brand-orange text-white"
         >
           <div className="container mx-auto px-4 py-16 max-w-4xl text-center">
             <h2 className="text-2xl font-bold tracking-tight sm:text-3xl lg:text-4xl">
-              Real inquiries, straight to operators. First to respond, first to book.
+              Direct inquiries from organizers. First to respond, first to book.
             </h2>
             <p className="mt-6 text-xl font-semibold sm:text-2xl">
               <span data-testid="insight-finding-inquiries" className="text-white">
                 0%
               </span>{" "}
-              commission fee.
+              commission. No middleman taking 15%.
             </p>
             <p className="mx-auto mt-4 max-w-2xl text-base text-white/90">
-              When an event needs a vendor, the inquiry goes directly to you — not a
-              marketplace that takes 15%.
+              Event organizers searching VendCast for vendors in your area
+              can request a quote directly. You see it in your inbox; you
+              respond; you book.
             </p>
           </div>
         </div>

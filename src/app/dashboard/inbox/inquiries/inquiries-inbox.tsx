@@ -150,7 +150,7 @@ export function InquiriesInbox({
     if (next) params.set("event_type", next);
     else params.delete("event_type");
     const qs = params.toString();
-    router.replace(qs ? `/dashboard/inbox/marketplace?${qs}` : `/dashboard/inbox/marketplace`);
+    router.replace(qs ? `/dashboard/inbox/inquiries?${qs}` : `/dashboard/inbox/inquiries`);
   }
   const [claimedEventByInquiry, setClaimedEventByInquiry] = useState(
     initialClaimedEventByInquiry
@@ -692,7 +692,7 @@ export function InquiriesInbox({
                   />
                 </div>
 
-                {/* Marketplace is non-mediated by design — clicking
+                {/* Inquiries are non-mediated by design — clicking
                     Interested only books the lead in this operator's
                     own pipeline. The operator must email or call the
                     organizer themselves to actually win the booking.
