@@ -103,7 +103,7 @@ const PHASES: Phase[] = [
     ],
   },
   {
-    label: "Phase 8 — The Marketplace",
+    label: "Phase 8 — Vendor Discovery",
     tagline: "Event organizers find the right vendors. Vendors find the right gigs.",
     status: "LATER",
     bullets: [
