@@ -24,6 +24,7 @@ import {
 import { DashboardCharts } from "./dashboard-charts";
 import { DashboardHeroChart } from "./hero-chart";
 import { SetupProgress } from "@/components/setup-progress";
+import { PosNudgeBanner } from "@/components/pos-nudge-banner";
 import { DayOfEventBlock } from "@/components/day-of-event-block";
 import { DunningBanner } from "@/components/dunning-banner";
 import { JourneyCallout } from "@/components/journey-callout";
@@ -422,6 +423,21 @@ export default async function DashboardPage() {
         hasPOS={posConnected}
         has10Events={has10Events}
         journeyContext={journeyContext}
+      />
+
+      {/* Contextual POS nudge — fires when the operator has logged
+          sales manually but hasn't connected a POS yet. Pro+ only
+          (Starter doesn't get POS integration). Replaces the
+          previous onboarding-wizard step 3 which was getting
+          skipped almost universally. The right moment to ask is
+          right after manual sales entry, not at signup. */}
+      <PosNudgeBanner
+        posEligible={
+          (profile?.subscription_tier ?? "starter") === "pro" ||
+          (profile?.subscription_tier ?? "starter") === "premium"
+        }
+        posConnected={posConnected}
+        hasSales={hasSales}
       />
 
       <JourneyCallout journeyContext={journeyContext} />
