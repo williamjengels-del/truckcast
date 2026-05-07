@@ -6,6 +6,10 @@ import {
   type ForecastResult,
 } from "@/lib/forecast-engine";
 import {
+  calculateBayesianForecast,
+  type BayesianForecastResult,
+} from "@/lib/forecast-engine-v2";
+import {
   updatePlatformRegistry,
   getPlatformEventsExcludingUser,
 } from "@/lib/platform-registry";
@@ -30,8 +34,24 @@ export async function recalculateForUser(
   userId: string,
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   suppliedClient?: any
-): Promise<{ forecastsUpdated: number; performanceUpdated: number; weatherClassified: number }> {
+): Promise<{
+  forecastsUpdated: number;
+  performanceUpdated: number;
+  weatherClassified: number;
+  /** Number of v2 (Bayesian) shadow writes that succeeded. Will be 0
+   *  when the shadow-columns migration hasn't been applied yet —
+   *  not an error, just a signal that v2 isn't running yet. */
+  bayesianShadowWritten: number;
+}> {
   const supabase = suppliedClient ?? (await createClient());
+
+  // Probe for the Bayesian shadow columns once per recalc — they're
+  // optional and gated on a paste-at-merge migration. Until the
+  // operator runs the migration, every v2 write would fail; rather
+  // than 396 failed UPDATEs, we detect the column's existence once
+  // and skip the v2 path entirely if it's missing. After the migration
+  // applies, the next recalc auto-detects and starts writing v2.
+  const v2Available = await probeBayesianShadowColumns(supabase);
 
   const { data: events } = await supabase
     .from("events")
@@ -115,6 +135,7 @@ export async function recalculateForUser(
   // Recalculate forecasts for ALL future events — booked AND unbooked
   const futureEvents = allEvents.filter((e) => e.event_date >= today);
   let forecastsUpdated = 0;
+  let bayesianShadowWritten = 0;
   for (const event of futureEvents) {
     const platformEvent = event.booked
       ? (platformMap.get(event.event_name.toLowerCase().trim()) ?? null)
@@ -124,10 +145,19 @@ export async function recalculateForUser(
       platformEvent,
     });
     if (result) {
-      await supabase
-        .from("events")
-        .update(forecastUpdate(result))
-        .eq("id", event.id);
+      const update = forecastUpdate(result);
+      let v2: BayesianForecastResult | null = null;
+      if (v2Available) {
+        v2 = calculateBayesianForecast(event, allEvents, {
+          calibratedCoefficients: calibrated,
+          platformEvent,
+        });
+        if (v2) {
+          Object.assign(update, bayesianShadowUpdate(v2));
+          bayesianShadowWritten++;
+        }
+      }
+      await supabase.from("events").update(update).eq("id", event.id);
       forecastsUpdated++;
     }
   }
@@ -156,11 +186,47 @@ export async function recalculateForUser(
       calibratedCoefficients: calibrated,
     });
     if (result) {
-      await supabase
-        .from("events")
-        .update(forecastUpdate(result))
-        .eq("id", event.id);
+      const update = forecastUpdate(result);
+      if (v2Available) {
+        const v2 = calculateBayesianForecast(event, historicalWithout, {
+          calibratedCoefficients: calibrated,
+        });
+        if (v2) {
+          Object.assign(update, bayesianShadowUpdate(v2));
+          bayesianShadowWritten++;
+        }
+      }
+      await supabase.from("events").update(update).eq("id", event.id);
       forecastsUpdated++;
+    }
+  }
+
+  // Past events that ALREADY have v1 forecasts but might be missing v2
+  // shadow values (e.g. first recalc after the migration applied).
+  // Backfills the v2-only state without re-touching v1 — operator's
+  // accuracy lines stay stable across the rollout.
+  if (v2Available) {
+    const pastEventsMissingV2 = allEvents.filter(
+      (e) =>
+        e.event_date < today &&
+        e.booked &&
+        ((e.net_sales !== null && e.net_sales > 0) ||
+          (e.event_mode === "catering" && e.invoice_revenue > 0)) &&
+        e.forecast_bayesian_point == null &&
+        e.anomaly_flag !== "disrupted"
+    );
+    for (const event of pastEventsMissingV2) {
+      const historicalWithout = allEvents.filter((e) => e.id !== event.id);
+      const v2 = calculateBayesianForecast(event, historicalWithout, {
+        calibratedCoefficients: calibrated,
+      });
+      if (v2) {
+        await supabase
+          .from("events")
+          .update(bayesianShadowUpdate(v2))
+          .eq("id", event.id);
+        bayesianShadowWritten++;
+      }
     }
   }
 
@@ -168,6 +234,7 @@ export async function recalculateForUser(
     forecastsUpdated,
     performanceUpdated: eventNames.length,
     weatherClassified: weatherUpdates.size,
+    bayesianShadowWritten,
   };
 }
 
@@ -259,4 +326,64 @@ function forecastUpdate(result: ForecastResult): {
     forecast_high: high,
     forecast_confidence: result.confidence,
   };
+}
+
+/**
+ * Build the Bayesian shadow-column update payload. Mirrors
+ * forecastUpdate but writes to the v2-shadow columns added by
+ * migration 20260508000001. The point estimate is left non-null
+ * even when insufficientData fires — UI consumers (when v2 eventually
+ * becomes the read path) will branch on forecast_bayesian_insufficient
+ * to decide whether to show the value or the "not enough history" copy.
+ * This is different from v1's behavior of nulling forecast_sales when
+ * insufficient; we keep more diagnostic data in shadow so the
+ * calibration report can audit the floor's behavior over time.
+ */
+export function bayesianShadowUpdate(v2: BayesianForecastResult): {
+  forecast_bayesian_point: number;
+  forecast_bayesian_low_80: number;
+  forecast_bayesian_high_80: number;
+  forecast_bayesian_low_50: number;
+  forecast_bayesian_high_50: number;
+  forecast_bayesian_n_obs: number;
+  forecast_bayesian_prior_src: "platform" | "operator" | "default";
+  forecast_bayesian_insufficient: boolean;
+  forecast_bayesian_computed_at: string;
+} {
+  return {
+    forecast_bayesian_point: v2.point,
+    forecast_bayesian_low_80: v2.credibleLow,
+    forecast_bayesian_high_80: v2.credibleHigh,
+    forecast_bayesian_low_50: v2.credible50Low,
+    forecast_bayesian_high_50: v2.credible50High,
+    forecast_bayesian_n_obs: v2.personalObservations,
+    forecast_bayesian_prior_src: v2.priorSource,
+    forecast_bayesian_insufficient: v2.insufficientData,
+    forecast_bayesian_computed_at: new Date().toISOString(),
+  };
+}
+
+/**
+ * Detect whether the Bayesian shadow-column migration has been
+ * applied. Probes the events table with a SELECT for one of the
+ * new columns; PostgreSQL returns an "undefined column" error
+ * when the column doesn't exist, which Supabase surfaces as a
+ * 42703 error. Any error → assume not available, skip v2 writes
+ * for this recalc cycle.
+ *
+ * Cached per recalculateForUser call (one probe per recalc, not
+ * per event). When the migration applies, the next recalc auto-
+ * detects and starts populating v2.
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function probeBayesianShadowColumns(supabase: any): Promise<boolean> {
+  try {
+    const { error } = await supabase
+      .from("events")
+      .select("forecast_bayesian_point")
+      .limit(1);
+    return !error;
+  } catch {
+    return false;
+  }
 }

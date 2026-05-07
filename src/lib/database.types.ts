@@ -119,6 +119,21 @@ export interface Event {
   forecast_low: number | null;
   forecast_high: number | null;
   forecast_confidence: "HIGH" | "MEDIUM" | "LOW" | null;
+  /** Bayesian v2 shadow columns (migration
+   *  20260508000001_add_forecast_bayesian_shadow_columns.sql).
+   *  All nullable; populated by recalculateForUser when the v2 engine
+   *  produces a result. UI surfaces don't read these in v1 of the
+   *  shadow rollout — they exist for the calibration-report script
+   *  and for eventual UI flip once validation completes. */
+  forecast_bayesian_point?: number | null;
+  forecast_bayesian_low_80?: number | null;
+  forecast_bayesian_high_80?: number | null;
+  forecast_bayesian_low_50?: number | null;
+  forecast_bayesian_high_50?: number | null;
+  forecast_bayesian_n_obs?: number | null;
+  forecast_bayesian_prior_src?: "platform" | "operator" | "default" | null;
+  forecast_bayesian_insufficient?: boolean | null;
+  forecast_bayesian_computed_at?: string | null;
   food_cost: number | null;
   labor_cost: number | null;
   other_costs: number | null;
