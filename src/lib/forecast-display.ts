@@ -45,15 +45,21 @@ export function dataDensityPill(density: DataDensity): DataDensityPill {
   }
 }
 
-// Matches recalculate-service.ts forecastRange() so the stored DB columns
+// Matches recalculate.ts forecastRange() so the stored DB columns
 // and live-computed ranges agree. Kept in one place on purpose. Thresholds
 // mirror confidenceScoreToLabel in forecast-engine so the pill (Calibrated /
-// Building / Learning) and the range width stay aligned — a HIGH-pill
-// forecast always gets the tight ±15% band.
+// Building / Learning) and the range width stay aligned.
+//
+// Recalibrated 2026-05-07 from ±15/±25/±40 to ±30/±50/±80 based on
+// audit of 396 forecast/actual pairs (scripts/audit-forecast-accuracy.mjs).
+// Original bands were systematically too tight — engine claimed
+// confidence it didn't have. New bands honestly reflect observed
+// variance at each tier. See recalculate.ts:forecastRange for the
+// full rationale.
 export function forecastRangePct(confidenceScore: number): number {
-  if (confidenceScore >= 0.65) return 0.15;
-  if (confidenceScore >= 0.4) return 0.25;
-  return 0.4;
+  if (confidenceScore >= 0.65) return 0.30;
+  if (confidenceScore >= 0.4) return 0.50;
+  return 0.80;
 }
 
 export function computeForecastRange(

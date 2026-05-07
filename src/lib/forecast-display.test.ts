@@ -4,9 +4,48 @@ import {
   fixedRevenueAmount,
   forecastContextSentence,
   lowConfidenceAnchorSentence,
+  forecastRangePct,
+  computeForecastRange,
 } from "./forecast-display";
 import type { Event } from "./database.types";
 import type { ForecastResult } from "./forecast-engine";
+
+describe("forecastRangePct (recalibrated 2026-05-07)", () => {
+  // Locked band values — see recalculate.ts:forecastRange for the
+  // calibration rationale + audit data. Changing these without a
+  // matching audit is a regression.
+  it("returns 0.30 for HIGH confidence (score >= 0.65)", () => {
+    expect(forecastRangePct(0.65)).toBe(0.30);
+    expect(forecastRangePct(0.85)).toBe(0.30);
+    expect(forecastRangePct(1.0)).toBe(0.30);
+  });
+
+  it("returns 0.50 for MEDIUM confidence (0.40 <= score < 0.65)", () => {
+    expect(forecastRangePct(0.40)).toBe(0.50);
+    expect(forecastRangePct(0.55)).toBe(0.50);
+    expect(forecastRangePct(0.64)).toBe(0.50);
+  });
+
+  it("returns 0.80 for LOW confidence (score < 0.40)", () => {
+    expect(forecastRangePct(0)).toBe(0.80);
+    expect(forecastRangePct(0.20)).toBe(0.80);
+    expect(forecastRangePct(0.39)).toBe(0.80);
+  });
+});
+
+describe("computeForecastRange (recalibrated 2026-05-07)", () => {
+  it("HIGH-confidence forecast widens by ±30%", () => {
+    expect(computeForecastRange(1000, 0.85)).toEqual({ low: 700, high: 1300 });
+  });
+
+  it("MEDIUM-confidence forecast widens by ±50%", () => {
+    expect(computeForecastRange(1000, 0.55)).toEqual({ low: 500, high: 1500 });
+  });
+
+  it("LOW-confidence forecast widens by ±80%", () => {
+    expect(computeForecastRange(1000, 0.20)).toEqual({ low: 200, high: 1800 });
+  });
+});
 
 // Minimal event-row factory. Only fills the fields the helpers under
 // test actually read; other Event fields are defaulted.
