@@ -76,7 +76,13 @@ export function SetupProgress({
       actionLabel: "Import CSV",
       actionHref: "/dashboard/integrations?tab=csv-import",
     },
-    ...(journeyContext !== undefined
+    // Hide the 10-events milestone until the operator has logged at
+    // least one. "Reach 10 events with sales (0/10)" on a fresh
+    // dashboard is demotivating and feels like a wall — the goal is
+    // far away, the progress is zero, no momentum signal. Once they
+    // have at least one logged sale, the milestone becomes meaningful
+    // ("you're 1/10 of the way there") and we surface it.
+    ...(journeyContext !== undefined && journeyContext.eventsWithSales > 0
       ? [
           {
             label: `Reach 10 events with sales (${Math.min(journeyContext.eventsWithSales, 10)}/10)`,
