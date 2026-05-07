@@ -56,16 +56,29 @@ export interface MonthlyAccuracySummary {
   inRange: number;
 }
 
+/** Minimum number of eligible events this month before the rolling
+ *  accuracy stat is shown. Below this, "X of Y" reads as statistical
+ *  noise (1/3 = 33% looks like the engine is broken; 2/4 = 50% looks
+ *  random). Wait until we have a meaningful sample, then surface. */
+const MIN_MONTH_SAMPLE = 5;
+
 /** Filters: past, booked, has positive net_sales, has positive
- *  forecast, not anomaly-disrupted (disrupted events are excluded
- *  from accuracy stats by convention since they signal an external
- *  factor that broke the forecast — see day-of-event-state). */
+ *  forecast, not flagged as an anomaly. Both "disrupted" and
+ *  "boosted" excluded — both signal an external factor the forecast
+ *  couldn't reasonably predict, so including them in the accuracy
+ *  stat is unfair to the model in either direction.
+ *
+ *  "boosted" added to the exclusion 2026-05-07 alongside the
+ *  engine recalibration audit — events like a $5,360 actual on a
+ *  $2,683 forecast (a Food Truck Fridays viral moment) shouldn't
+ *  count as a model "miss" any more than a rained-out event should. */
 function isEligible(event: Event, todayIso: string): boolean {
   if (!event.booked) return false;
   if (event.event_date >= todayIso) return false;
   if (event.net_sales === null || event.net_sales <= 0) return false;
   if (event.forecast_sales === null || event.forecast_sales <= 0) return false;
   if (event.anomaly_flag === "disrupted") return false;
+  if (event.anomaly_flag === "boosted") return false;
   return true;
 }
 
@@ -131,9 +144,11 @@ export function getMostRecentForecastResult(
 
 /** Computes how many of this calendar month's eligible past events
  *  landed in their forecast range. Returns null when the operator
- *  has zero eligible events this month — caller should hide the
- *  rolling accuracy line in that case rather than render "0 of 0
- *  in range." */
+ *  has fewer than MIN_MONTH_SAMPLE eligible events this month —
+ *  caller should hide the rolling accuracy line below that
+ *  threshold rather than render misleading small-sample noise like
+ *  "1 of 3 in range" (~33%, looks like engine failure on a
+ *  three-event sample where the variance is mostly randomness). */
 export function getThisMonthAccuracy(
   events: Event[],
   todayIso: string
@@ -147,7 +162,7 @@ export function getThisMonthAccuracy(
     (e) => isEligible(e, todayIso) && e.event_date.startsWith(monthPrefix)
   );
 
-  if (eligibleThisMonth.length === 0) return null;
+  if (eligibleThisMonth.length < MIN_MONTH_SAMPLE) return null;
 
   let inRange = 0;
   for (const event of eligibleThisMonth) {
