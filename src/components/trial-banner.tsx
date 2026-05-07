@@ -28,8 +28,9 @@ export async function TrialBanner() {
     if (!profile) return null;
 
   // Paid subscribers or manually-granted tiers — no banner.
-  // Covers Stripe subs AND legacy beta-code or admin-grant paths that set
-  // subscription_tier directly without attaching a Stripe customer.
+  // Covers Stripe subs AND admin-grant paths that set subscription_tier
+  // directly without attaching a Stripe customer (e.g. comp / partner
+  // accounts via the admin user-management UI).
   if (profile.stripe_subscription_id) return null;
   if (profile.subscription_tier && profile.subscription_tier !== "trial") return null;
 

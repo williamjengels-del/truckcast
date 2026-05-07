@@ -1,0 +1,31 @@
+-- Drop the beta_invites table.
+--
+-- Beta-invite flow retired 2026-05-07. The platform is mature enough
+-- that users should sign up through the standard /signup flow with a
+-- 14-day trial, not gated behind a code. Distribution of beta codes
+-- created friction without a clear conversion benefit at this stage.
+--
+-- Removed in the same PR:
+--   - src/app/api/beta/redeem/route.ts        (user-facing redemption)
+--   - src/app/api/admin/beta/generate/route.ts (admin generation)
+--   - src/app/dashboard/admin/beta/*           (admin UI)
+--   - admin nav references + Beta Codes card
+--
+-- The original create migration (20260403000002_create_beta_invites.sql)
+-- stays in /migrations/ as history. Don't squash or rewrite it.
+--
+-- Schema we're dropping:
+--   public.beta_invites (
+--     id, code, email, granted_tier, trial_days, expires_at,
+--     redeemed_by → profiles.id, redeemed_at, created_at
+--   )
+--   + indexes on code and redeemed_by
+--   + RLS policies for select/update by owner
+--
+-- Effect on existing data: users who redeemed a beta code in the past
+-- already had subscription_tier + trial_extended_until written to their
+-- profile row by the redeem route. Those values persist on the profile
+-- and continue to drive the trial gate. Dropping beta_invites does not
+-- claw back any access — it only removes the redemption history.
+
+drop table if exists public.beta_invites cascade;

@@ -14,7 +14,6 @@ const TABS = [
   { href: "/dashboard/admin/data", label: "Event Data" },
   { href: "/dashboard/admin/event-aliases", label: "Event Aliases" },
   { href: "/dashboard/admin/toast-inbox", label: "Toast Inbox" },
-  { href: "/dashboard/admin/beta", label: "Invites" },
   { href: "/dashboard/admin/content", label: "Content" },
   { href: "/dashboard/admin/feedback", label: "Feedback" },
 ] as const;
