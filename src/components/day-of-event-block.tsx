@@ -294,8 +294,10 @@ export async function DayOfEventBlock({
         {/* After-event wrap-up surfaces above the main card content
             when a today event has just ended without a summary.
             Operator can fill or skip; "Skip for now" hides locally,
-            saving for the events page. */}
-        {canSeeFinancials && state.needsWrapUp && (
+            saving for the events page. Pro+ only — Starter day-of
+            card is restricted to event name + time-to-setup +
+            address + start/end time. */}
+        {isPaidTier && canSeeFinancials && state.needsWrapUp && (
           <AfterEventSummary
             eventId={state.needsWrapUp.id}
             eventName={state.needsWrapUp.event_name}
@@ -319,7 +321,11 @@ export async function DayOfEventBlock({
               {event.event_name}
             </h2>
           </div>
-          {showLogSales && (
+          {/* Log-sales CTA on the day-of card is a Pro+ surface. Starter
+              operators still log sales — they just do it from /events
+              instead of from the day-of card, which keeps Starter's
+              day-of view to the bare scheduling essentials. */}
+          {isPaidTier && showLogSales && (
             <Link
               href="/dashboard/events?tab=needs_attention&chips=missing-sales"
               className="shrink-0"
@@ -391,7 +397,7 @@ export async function DayOfEventBlock({
             </div>
           )}
 
-          {event.parking_loadin_notes && (
+          {isPaidTier && event.parking_loadin_notes && (
             <div className="flex items-start gap-2 text-sm min-w-0 sm:col-span-2 -mt-1">
               <span className="text-xs uppercase tracking-wide text-muted-foreground shrink-0 pt-0.5">
                 Load-in
@@ -405,7 +411,7 @@ export async function DayOfEventBlock({
             </div>
           )}
 
-          {weather && (
+          {isPaidTier && weather && (
             <div className="flex items-start gap-2 text-sm" data-testid="day-of-event-weather">
               <Thermometer className="h-4 w-4 text-muted-foreground shrink-0 mt-0.5" />
               <div className="min-w-0">
@@ -481,8 +487,10 @@ export async function DayOfEventBlock({
             </div>
           )}
 
-          {/* Wind alert — Premium only, surfaces above weather row
-              when any service hour exceeds the canopy threshold. */}
+          {/* Wind alert — Premium only (also implies Pro+, so the
+              isPaidTier gate above the weather block doesn't need
+              to repeat here). Surfaces below weather row when any
+              service hour exceeds the canopy threshold. */}
           {showWindAlert && (
             <div
               className="flex items-start gap-2 text-sm sm:col-span-2 -mt-1 rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2"
@@ -497,8 +505,9 @@ export async function DayOfEventBlock({
 
           {/* Menu indicator — only surfaces when not the regular menu.
               "Regular menu" is the default + the assumed state, so
-              showing a "Regular" badge would just be visual noise. */}
-          {event.menu_type === "special" && (
+              showing a "Regular" badge would just be visual noise.
+              Pro+ only on day-of card (Starter day-of stays minimal). */}
+          {isPaidTier && event.menu_type === "special" && (
             <div
               className="flex items-start gap-2 text-sm min-w-0"
               data-testid="day-of-event-menu-special"
@@ -531,7 +540,7 @@ export async function DayOfEventBlock({
             </div>
           )}
 
-          {contact && (contact.phone || contact.email) && (
+          {isPaidTier && contact && (contact.phone || contact.email) && (
             <div className="flex items-start gap-2 text-sm min-w-0">
               <Phone className="h-4 w-4 text-muted-foreground shrink-0 mt-0.5" />
               <div className="min-w-0">
@@ -583,8 +592,10 @@ export async function DayOfEventBlock({
 
         {/* Sales pace bar — only on today's event. Hidden for catering
             (compare-against-invoice is out of scope for v1) and for
-            managers without Financials access (revenue display). */}
-        {canSeeFinancials && isToday && event.event_mode !== "catering" && (
+            managers without Financials access (revenue display). Pro+
+            only — Starter day-of card is restricted to scheduling
+            essentials. */}
+        {isPaidTier && canSeeFinancials && isToday && event.event_mode !== "catering" && (
           <div className="pt-2 border-t border-border/40">
             <SalesPaceBar
               currentSales={event.net_sales ?? 0}
@@ -595,8 +606,9 @@ export async function DayOfEventBlock({
 
         {/* In-service notes + content capture render only on today's
             event — they're operator-driven during the event itself.
-            Next-event / tomorrow cards strip these. */}
-        {isToday && (
+            Next-event / tomorrow cards strip these. Pro+ — Starter
+            day-of card stays minimal. */}
+        {isPaidTier && isToday && (
           <div className="space-y-4 pt-2 border-t border-border/40">
             <InServiceNotes
               eventId={event.id}
@@ -616,7 +628,7 @@ export async function DayOfEventBlock({
             v1 ships the collapsed list; auto-promotion of the next
             event is handled by computeDayOfState on the next render
             (i.e., when A's end_time passes). */}
-        {upcomingToday.length > 0 && (
+        {isPaidTier && upcomingToday.length > 0 && (
           <div className="pt-2 border-t border-border/40 space-y-2" data-testid="day-of-event-upcoming-today">
             <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">
               Up next today
