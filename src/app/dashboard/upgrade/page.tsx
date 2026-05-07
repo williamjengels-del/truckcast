@@ -5,58 +5,23 @@ import { Button } from "@/components/ui/button";
 import { Sparkles, Check, LogOut } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { useRouter } from "next/navigation";
+import { PRICING_PLANS } from "@/lib/pricing-plans";
 
-const PLANS = [
-  {
-    tier: "starter",
-    label: "Starter",
-    price: "$19",
-    annual: "$182/yr",
-    annualSave: "save $46",
-    description: "Everything you need to track events and revenue.",
-    features: [
-      "Unlimited event scheduling",
-      "Revenue & fee tracking",
-      "Event performance analytics",
-      "Public schedule page",
-      "Team share link",
-    ],
-    highlight: false,
-  },
-  {
-    tier: "pro",
-    label: "Pro",
-    price: "$39",
-    annual: "$374/yr",
-    annualSave: "save $94",
-    description: "Forecasting and integrations for serious operators.",
-    features: [
-      "Everything in Starter",
-      "Weather-adjusted forecasts",
-      "POS integration (Square, Toast, Clover)",
-      "CSV import",
-      "Cross-operator event benchmarks",
-    ],
-    highlight: true,
-  },
-  {
-    tier: "premium",
-    label: "Premium",
-    price: "$69",
-    annual: "$662/yr",
-    annualSave: "save $166",
-    description: "Advanced analytics for high-volume operations.",
-    features: [
-      "Everything in Pro",
-      "Organizer scoring & risk analysis",
-      "Monthly revenue reports",
-      "Follow My Truck (fan notifications)",
-      "Booking widget",
-    ],
-    highlight: false,
-  },
-];
-
+/**
+ * Trial-ended upgrade page. Shown to operators whose trial has
+ * elapsed and who don't yet have a Stripe subscription.
+ *
+ * Tier data: read from the canonical PRICING_PLANS in
+ * src/lib/pricing-plans.ts. The two other tier surfaces (/pricing
+ * and /dashboard/settings) already consume that file; this page
+ * was previously inlining its own copy of the tier list which
+ * silently drifted from the canonical source. Consolidated
+ * 2026-05-07 so all three tier surfaces stay in sync via one edit.
+ *
+ * Page-specific UX: highlights Pro as "Most popular" (computed
+ * locally — that styling decision is upgrade-page-specific) and
+ * frames the page as "your trial ended, pick a plan to keep going."
+ */
 export default function UpgradePage() {
   const [billing, setBilling] = useState<"monthly" | "annual">("annual");
   const [loading, setLoading] = useState<string | null>(null);
@@ -137,66 +102,73 @@ export default function UpgradePage() {
 
       {/* Plan cards */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 w-full max-w-3xl mb-8">
-        {PLANS.map((plan) => (
-          <div
-            key={plan.tier}
-            className={`relative rounded-xl border p-6 flex flex-col gap-4 ${
-              plan.highlight
-                ? "border-primary ring-2 ring-primary bg-primary/5"
-                : "border-border bg-card"
-            }`}
-          >
-            {plan.highlight && (
-              <div className="absolute -top-3 left-1/2 -translate-x-1/2">
-                <span className="bg-primary text-primary-foreground text-xs font-semibold px-3 py-1 rounded-full">
-                  Most popular
-                </span>
-              </div>
-            )}
-
-            <div>
-              <h2 className="text-lg font-bold">{plan.label}</h2>
-              <p className="text-muted-foreground text-sm mt-0.5">
-                {plan.description}
-              </p>
-            </div>
-
-            <div>
-              <div className="flex items-baseline gap-1">
-                <span className="text-3xl font-bold">{plan.price}</span>
-                <span className="text-muted-foreground text-sm">/mo</span>
-              </div>
-              {billing === "annual" && (
-                <p className="text-xs text-muted-foreground mt-0.5">
-                  {plan.annual}{" "}
-                  <span className="text-green-600 font-medium">
-                    ({plan.annualSave})
-                  </span>
-                </p>
-              )}
-            </div>
-
-            <ul className="space-y-2 flex-1">
-              {plan.features.map((feature) => (
-                <li key={feature} className="flex items-start gap-2 text-sm">
-                  <Check className="h-4 w-4 text-green-600 shrink-0 mt-0.5" />
-                  {feature}
-                </li>
-              ))}
-            </ul>
-
-            <Button
-              className="w-full"
-              variant={plan.highlight ? "default" : "outline"}
-              disabled={loading !== null}
-              onClick={() => handleCheckout(plan.tier)}
+        {PRICING_PLANS.map((plan) => {
+          const highlight = plan.tier === "pro";
+          return (
+            <div
+              key={plan.tier}
+              className={`relative rounded-xl border p-6 flex flex-col gap-4 ${
+                highlight
+                  ? "border-primary ring-2 ring-primary bg-primary/5"
+                  : "border-border bg-card"
+              }`}
             >
-              {loading === plan.tier
-                ? "Loading..."
-                : `Get ${plan.label}`}
-            </Button>
-          </div>
-        ))}
+              {highlight && (
+                <div className="absolute -top-3 left-1/2 -translate-x-1/2">
+                  <span className="bg-primary text-primary-foreground text-xs font-semibold px-3 py-1 rounded-full">
+                    Most popular
+                  </span>
+                </div>
+              )}
+
+              <div>
+                <h2 className="text-lg font-bold">{plan.label}</h2>
+                <p className="text-muted-foreground text-sm mt-0.5">
+                  {plan.description}
+                </p>
+              </div>
+
+              <div>
+                <div className="flex items-baseline gap-1">
+                  <span className="text-3xl font-bold">{plan.monthlyPrice}</span>
+                  <span className="text-muted-foreground text-sm">/mo</span>
+                </div>
+                {billing === "annual" && (
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    {plan.annualPrice}/yr{" "}
+                    <span className="text-green-600 font-medium">
+                      (save {plan.annualSavings})
+                    </span>
+                  </p>
+                )}
+              </div>
+
+              <ul className="space-y-2 flex-1">
+                {plan.features.map((feature) => (
+                  <li
+                    key={feature.name}
+                    className="flex items-start gap-2 text-sm"
+                    title={feature.description}
+                  >
+                    <Check className="h-4 w-4 text-green-600 shrink-0 mt-0.5" />
+                    {feature.name}
+                  </li>
+                ))}
+              </ul>
+
+              <Button
+                className="w-full"
+                variant={highlight ? "default" : "outline"}
+                disabled={loading !== null}
+                onClick={() => handleCheckout(plan.tier)}
+              >
+                {loading === plan.tier
+                  ? "Loading..."
+                  : `Get ${plan.label}`}
+              </Button>
+            </div>
+          );
+        })}
       </div>
 
       {error && (
