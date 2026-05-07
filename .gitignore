@@ -47,3 +47,10 @@ yarn-error.log*
 next-env.d.ts
 
 .vercel
+
+# operator-data artifacts produced by scripts/audit-* and scripts/apply-*
+# (TSVs contain per-operator event_id / event_name; not for the repo)
+*-proposals.tsv
+*-audit.tsv
+weather-location-audit.tsv
+start-times-audit.tsv
