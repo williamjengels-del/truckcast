@@ -307,13 +307,35 @@ export async function POST(request: Request) {
 
     if (matchedEvents.length > 1) {
       console.log(`[toast/inbound] Ambiguous: ${matchedEvents.length} events for user ${userId} on ${parsed.date}`);
+      // Queue into the same inbox the no-match branch uses. Without this
+      // the payment data is dropped on the floor — operator gets a sync
+      // status note but no row to act on, no recovery path. The resolve
+      // flow already supports routing to any event, so the operator
+      // picks which of the N candidates this payment belongs to in the
+      // same UI as no-match resolution.
+      const { error: insertError } = await supabase
+        .from("unmatched_toast_payments")
+        .insert({
+          user_id: userId,
+          source: "toast",
+          reported_date: parsed.date,
+          net_sales: parsed.netSales,
+          raw_subject: rawSubject,
+        });
+
+      if (insertError) {
+        console.error(`[toast/inbound] Inbox insert failed (ambiguous) for user ${userId}:`, insertError);
+      } else {
+        console.log(`[toast/inbound] Queued ambiguous-match for review: user ${userId}, ${parsed.date}, $${parsed.netSales}, ${matchedEvents.length} candidates`);
+      }
+
       await recordSyncAttempt(
         supabase,
         userId,
         "ambiguous_match",
-        `${matchedEvents.length} booked events on ${parsed.date}; pick the right one manually and log sales.`
+        `Toast reported $${parsed.netSales.toFixed(2)} on ${parsed.date} with ${matchedEvents.length} booked events. Queued for manual review in your integrations inbox.`
       );
-      return NextResponse.json({ ok: true, reason: "ambiguous_match" }, { status: 200 });
+      return NextResponse.json({ ok: true, reason: "ambiguous_match", candidates: matchedEvents.length }, { status: 200 });
     }
 
     // Exactly one match — sync it
