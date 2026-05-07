@@ -11,11 +11,23 @@ import type { Event, WeatherType } from "@/lib/database.types";
 /**
  * Server-side recalculation of event performance and forecasts.
  * Called after any event mutation (create, update, delete).
+ *
+ * Pass `suppliedClient` from contexts where a service-role client is
+ * required (Toast email inbound, POS cron, admin routes that mutate
+ * another operator's data). Without it, a cookie-scoped client is
+ * created — appropriate for the calling user's own mutations.
+ *
+ * Either way, all queries are `.eq("user_id", userId)` so the same
+ * pipeline runs through cookie + service paths. Keep this single
+ * source of truth — the route + service wrappers should not diverge.
  */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export async function recalculateForUser(
-  userId: string
+  userId: string,
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  suppliedClient?: any
 ): Promise<{ forecastsUpdated: number; performanceUpdated: number; weatherClassified: number }> {
-  const supabase = await createClient();
+  const supabase = suppliedClient ?? (await createClient());
 
   const { data: events } = await supabase
     .from("events")
