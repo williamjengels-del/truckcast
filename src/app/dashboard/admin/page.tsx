@@ -57,7 +57,6 @@ export default async function AdminOverviewPage() {
     { count: totalEvents },
     { count: activeThisWeek },
     { data: allProfiles },
-    { data: invites },
     { count: signupsCountIn30d },
     { data: signupsWithin30d },
     { count: eventsCountIn30d },
@@ -87,9 +86,6 @@ export default async function AdminOverviewPage() {
       .from("profiles")
       .select("id, data_sharing_enabled")
       .is("owner_user_id", null),
-    serviceClient
-      .from("beta_invites")
-      .select("id, redeemed_by"),
     // Platform metrics (Commit 8) — timestamp-only queries kept lean.
     //
     // Two queries per metric: a count-only headline (`head: true` so no
@@ -138,11 +134,6 @@ export default async function AdminOverviewPage() {
   const operatorIds = new Set<string>(
     (allProfiles ?? []).map((p: { id: string }) => p.id)
   );
-
-  const totalInvites = (invites ?? []).length;
-  const redeemedInvites = (invites ?? []).filter(
-    (i: { redeemed_by: string | null }) => i.redeemed_by
-  ).length;
 
   const today = new Date().toLocaleDateString("en-US", {
     weekday: "long",
@@ -299,17 +290,6 @@ export default async function AdminOverviewPage() {
             <p className="text-xs text-muted-foreground">{sharingDisabled} opted out</p>
           </CardContent>
         </Card>
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-xs font-normal text-muted-foreground uppercase tracking-wide">
-              Beta Codes
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-3xl font-bold">{redeemedInvites}</p>
-            <p className="text-xs text-muted-foreground">of {totalInvites} redeemed</p>
-          </CardContent>
-        </Card>
       </div>
 
       {/* Platform metrics (Commit 8) */}
@@ -326,7 +306,6 @@ export default async function AdminOverviewPage() {
         {[
           { href: "/dashboard/admin/users", label: "User Management", description: "View users, adjust subscription tiers" },
           { href: "/dashboard/admin/data", label: "Event Data", description: "Browse all events across users" },
-          { href: "/dashboard/admin/beta", label: "Beta Invites", description: "Generate and manage invite codes" },
           { href: "/dashboard/admin/feedback", label: "Feedback", description: "Read and delete user feedback" },
           { href: "/dashboard/admin/content", label: "Site Content", description: "Manage testimonials and stats" },
         ].map((card) => (
