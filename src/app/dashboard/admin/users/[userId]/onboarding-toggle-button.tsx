@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button";
 // Calls PATCH /api/admin/users/[userId]/onboarding which writes via
 // service role and audit-logs as user.onboarding_set.
 //
-// The flag gates marketplace inquiry routing — operators with
+// The flag gates inquiry routing — operators with
 // onboarding_completed=false are skipped by /request-event matching.
 // This button is the lightweight alternative to having an operator
 // re-walk the wizard.
@@ -35,7 +35,7 @@ export function OnboardingToggleButton({
     const next = !value;
     const verb = next ? "Mark onboarded" : "Reset onboarding";
     const body = next
-      ? `Mark ${targetLabel} as onboarded? They'll skip the setup wizard and become eligible for marketplace inquiry routing.`
+      ? `Mark ${targetLabel} as onboarded? They'll skip the setup wizard and become eligible for inquiry routing.`
       : `Reset ${targetLabel}'s onboarding? They'll be sent back through the setup wizard the next time they open the dashboard.`;
     if (!confirm(body)) return;
     setWorking(true);
@@ -73,7 +73,7 @@ export function OnboardingToggleButton({
           <p className="text-sm font-medium">Onboarding</p>
           <p className="text-xs text-muted-foreground">
             {value
-              ? "Completed — eligible for marketplace inquiry routing."
+              ? "Completed — eligible for inquiry routing."
               : "Not completed — skipped by /request-event matching until flipped."}
           </p>
         </div>

@@ -27,7 +27,7 @@ interface ChangelogEntry {
 const entries: ChangelogEntry[] = [
   {
     date: "May 3, 2026",
-    title: "Marketplace inbox v2 — notifications, claim flow, and a polished organizer surface",
+    title: "Inquiry inbox v2 — notifications, claim flow, and a polished organizer surface",
     items: [
       {
         kind: "feat",
@@ -79,7 +79,7 @@ const entries: ChangelogEntry[] = [
       },
       {
         kind: "fix",
-        text: "City spelling drift was breaking the marketplace match — 'St. Louis' vs 'Saint Louis' wouldn't pair up. Both sides now canonicalize to the same form ('Saint Louis'). Backfill applied to existing profiles.",
+        text: "City spelling drift was breaking inquiry matching — 'St. Louis' vs 'Saint Louis' wouldn't pair up. Both sides now canonicalize to the same form ('Saint Louis'). Backfill applied to existing profiles.",
       },
       {
         kind: "fix",
@@ -87,7 +87,7 @@ const entries: ChangelogEntry[] = [
       },
       {
         kind: "fix",
-        text: "Submitting the public request-event form on Chrome (with autofill enabled) was silently failing — autofill was filling our hidden bot-trap field. Fixed by switching to a different bot-trap that autofill ignores. The marketplace was effectively broken for ~70% of visitors before this.",
+        text: "Submitting the public request-event form on Chrome (with autofill enabled) was silently failing — autofill was filling our hidden bot-trap field. Fixed by switching to a different bot-trap that autofill ignores. Inquiry intake was effectively broken for ~70% of visitors before this.",
       },
       {
         kind: "fix",
