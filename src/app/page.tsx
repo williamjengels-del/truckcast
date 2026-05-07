@@ -329,12 +329,9 @@ export default async function LandingPage() {
             visual weight. */}
         <div className="border-t">
           <div className="container mx-auto px-4 py-20">
-            <h2 className="text-center text-3xl font-bold mb-4">
+            <h2 className="text-center text-3xl font-bold mb-12">
               Built for mobile vendor operators
             </h2>
-            <p className="text-center text-sm text-muted-foreground mb-12">
-              Purpose-built software for mobile vendor businesses.
-            </p>
             <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
               {FEATURE_CARDS.map((feature) => (
                 <div
