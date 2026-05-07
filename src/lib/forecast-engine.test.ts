@@ -4,7 +4,13 @@
  */
 
 import { describe, it, expect } from "vitest";
-import { calculateForecast, calibrateCoefficients, type ForecastOptions } from "./forecast-engine";
+import {
+  calculateForecast,
+  calibrateCoefficients,
+  computeOperatorOverallMedian,
+  INSUFFICIENT_DATA_FLOOR_RATIO,
+  type ForecastOptions,
+} from "./forecast-engine";
 import type { Event } from "./database.types";
 
 // Test helper: uses Record<string, unknown> so tests can pass arbitrary event_type strings
@@ -326,5 +332,82 @@ describe("forecast edge cases", () => {
     const result = calculateForecast({ event_name: "Real Event" }, withZeros);
     expect(result).not.toBeNull();
     expect(result!.forecast).toBeCloseTo(800, 0);
+  });
+});
+
+describe("insufficient-data floor", () => {
+  // Operator history dominated by ~$1,200 events. Median ~ $1,200.
+  // Floor at 10% = $120 — anything below is flagged insufficientData.
+  const operatorHistory: Event[] = [
+    makeEvent({ id: "n1", event_name: "Big Festival",   net_sales: 1200, event_date: "2024-01-15" }),
+    makeEvent({ id: "n2", event_name: "Big Festival",   net_sales: 1300, event_date: "2024-02-15" }),
+    makeEvent({ id: "n3", event_name: "Big Festival",   net_sales: 1100, event_date: "2024-03-15" }),
+    makeEvent({ id: "n4", event_name: "Solid Market",   net_sales: 1000, event_date: "2024-04-15" }),
+    makeEvent({ id: "n5", event_name: "Solid Market",   net_sales: 1100, event_date: "2024-05-15" }),
+    // Two near-zero events at a slow venue — exactly the audit's tail
+    // case (School of Rock, $2 forecast / $286 actual). With only these
+    // two as the L1 name match, the engine's weighted average is ~$10.
+    makeEvent({ id: "n6", event_name: "Slow Venue Open Mic", net_sales: 8,  event_date: "2024-06-15" }),
+    makeEvent({ id: "n7", event_name: "Slow Venue Open Mic", net_sales: 12, event_date: "2024-07-15" }),
+  ];
+
+  it("computeOperatorOverallMedian computes median across operator history", () => {
+    const m = computeOperatorOverallMedian(operatorHistory);
+    expect(m).toBeGreaterThan(900);
+    expect(m).toBeLessThan(1300);
+  });
+
+  it("flags insufficientData when L1 name-match forecast is below the floor", () => {
+    const result = calculateForecast(
+      { event_name: "Slow Venue Open Mic", event_date: "2024-09-01" },
+      operatorHistory
+    );
+    expect(result).not.toBeNull();
+    // Engine still returns a number — flag is the signal, not a null.
+    expect(result!.forecast).toBeGreaterThan(0);
+    expect(result!.forecast).toBeLessThan(50);
+    expect(result!.insufficientData).toBe(true);
+  });
+
+  it("does NOT flag insufficientData for legitimate quiet events above the floor", () => {
+    // A venue averaging $300 against operator overall median $1,200 is at
+    // ~25% — clearly above the 10% floor. Should NOT be suppressed.
+    const quietButLegit: Event[] = [
+      ...operatorHistory,
+      makeEvent({ id: "q1", event_name: "Wellspent Brewery Tuesday", net_sales: 280, event_date: "2024-08-01" }),
+      makeEvent({ id: "q2", event_name: "Wellspent Brewery Tuesday", net_sales: 320, event_date: "2024-08-15" }),
+    ];
+    const result = calculateForecast(
+      { event_name: "Wellspent Brewery Tuesday", event_date: "2024-09-01" },
+      quietButLegit
+    );
+    expect(result).not.toBeNull();
+    expect(result!.forecast).toBeGreaterThan(200);
+    expect(result!.insufficientData).toBe(false);
+  });
+
+  it("does NOT flag insufficientData for normal-volume L1 forecasts", () => {
+    const result = calculateForecast(
+      { event_name: "Big Festival", event_date: "2024-09-01" },
+      operatorHistory
+    );
+    expect(result).not.toBeNull();
+    expect(result!.forecast).toBeGreaterThan(900);
+    expect(result!.insufficientData).toBe(false);
+  });
+
+  it("floor ratio is 0.10 — keep the constant in sync with copy + recalc", () => {
+    // Pinned so a future change to the ratio is intentional and forces a
+    // test update + a UI-copy review (the threshold framing leaks into
+    // operator-facing language).
+    expect(INSUFFICIENT_DATA_FLOOR_RATIO).toBe(0.1);
+  });
+
+  it("does not flag when there is no operator history (engine returns null anyway)", () => {
+    // No history → engine returns null before the floor check ever fires.
+    // This documents the contract: the floor is a safety net on the
+    // forecast value, not a substitute for the engine's own preconditions.
+    const result = calculateForecast({ event_name: "Anything" }, []);
+    expect(result).toBeNull();
   });
 });

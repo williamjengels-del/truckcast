@@ -36,6 +36,24 @@ export function ForecastCard({ event, forecast }: ForecastCardProps) {
     );
   }
 
+  // Insufficient-data floor — engine produced a number it doesn't believe
+  // (final forecast under 10% of the operator's overall median; see
+  // INSUFFICIENT_DATA_FLOOR_RATIO in forecast-engine.ts). Suppress the
+  // bogus tail number entirely and tell the operator what would help.
+  // Live engine result is the source of truth here; on past events
+  // recalc clears the stored columns so this branch isn't reached
+  // through the stored fallback.
+  if (forecast?.insufficientData) {
+    return (
+      <div className="space-y-1.5 text-sm text-muted-foreground">
+        <p>Not enough history on this event yet to forecast.</p>
+        <p className="text-xs">
+          Log a few more bookings of {event.event_name ? `"${event.event_name}"` : "this event"} and we&rsquo;ll have a number for you.
+        </p>
+      </div>
+    );
+  }
+
   const primary = forecast?.forecast ?? event.forecast_sales ?? 0;
   const confidence = forecast?.confidence ?? event.forecast_confidence ?? null;
   // Per 2026-04-29 operator decision (Julian): drop ALL three confidence
@@ -168,6 +186,19 @@ export function ForecastInline({ event, forecast }: ForecastInlineProps) {
 
   if (!hasUsableForecast(forecast ?? null, event)) {
     return <span className="text-muted-foreground">—</span>;
+  }
+
+  // Insufficient-data floor: render an em-dash with a tooltip rather
+  // than the bogus tail number. Mirrors ForecastCard's full treatment.
+  if (forecast?.insufficientData) {
+    return (
+      <span
+        className="text-muted-foreground"
+        title="Not enough history on this event yet to forecast"
+      >
+        —
+      </span>
+    );
   }
 
   let low: number | null = null;
