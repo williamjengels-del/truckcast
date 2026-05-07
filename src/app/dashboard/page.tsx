@@ -25,7 +25,12 @@ import { DashboardCharts } from "./dashboard-charts";
 import { DashboardHeroChart } from "./hero-chart";
 import { SetupProgress } from "@/components/setup-progress";
 import { PosNudgeBanner } from "@/components/pos-nudge-banner";
+import { DashboardForecastCard } from "@/components/dashboard-forecast-card";
 import { DayOfEventBlock } from "@/components/day-of-event-block";
+import {
+  getMostRecentForecastResult,
+  getThisMonthAccuracy,
+} from "@/lib/forecast-vs-actual";
 import { DunningBanner } from "@/components/dunning-banner";
 import { JourneyCallout } from "@/components/journey-callout";
 import { KeyTakeaways } from "@/components/key-takeaways";
@@ -104,6 +109,13 @@ export default async function DashboardPage() {
 
   const today = new Date().toISOString().split("T")[0];
   const currentYear = new Date().getFullYear();
+
+  // Forecast-vs-actual rollups for the dashboard forecast card. The
+  // card surfaces above SetupProgress as the "aha moment" retention
+  // signal — operator logs a sale, sees how the forecast did right
+  // at the top of their next dashboard load. Empty for fresh accounts.
+  const recentForecastResult = getMostRecentForecastResult(events, today);
+  const monthAccuracy = getThisMonthAccuracy(events, today);
 
   // Setup progress checks
   const hasEvents = events.length > 0;
@@ -416,6 +428,15 @@ export default async function DashboardPage() {
           canSeeFinancials={financialsVisible}
         />
       )}
+
+      {/* Forecast card — "aha moment" retention surface. Renders only
+          when the operator has at least one past event with both
+          forecast + actual logged. Hidden for fresh accounts (no
+          past forecasts to show against actuals). */}
+      <DashboardForecastCard
+        recent={recentForecastResult}
+        monthAccuracy={monthAccuracy}
+      />
 
       <SetupProgress
         hasEvents={hasEvents}
