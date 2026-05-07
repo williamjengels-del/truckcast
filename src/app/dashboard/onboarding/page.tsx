@@ -8,7 +8,6 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { POSSetupGuide } from "@/components/pos-setup-guide";
 import { DataImportGuide } from "@/components/data-import-guide";
 import {
   Select,
@@ -29,9 +28,21 @@ import {
 import { US_STATES, US_TIMEZONES } from "@/lib/constants";
 import Link from "next/link";
 
+// Onboarding wizard. Three steps: profile -> events -> done.
+//
+// POS setup was previously step 3 of a four-step wizard, but operators
+// were almost always skipping it: at signup time they're rarely sitting
+// at their truck with POS credentials in hand. The skip created
+// onboarding friction without improving POS-attachment rate.
+//
+// Replaced 2026-05-07 with a contextual nudge: PosNudgeBanner on the
+// dashboard fires the first time the operator logs a sale manually
+// (Pro+ tier, no POS connection yet). The right moment to ask about
+// POS automation is when the operator has just done the work that POS
+// would have automated — not at signup.
 export default function OnboardingPage() {
   const [step, setStep] = useState(1);
-  const TOTAL_STEPS = 4;
+  const TOTAL_STEPS = 3;
   const [loading, setLoading] = useState(false);
   const [profile, setProfile] = useState({
     business_name: "",
@@ -104,7 +115,7 @@ export default function OnboardingPage() {
     router.refresh();
   }
 
-  async function handleSkipToStep3() {
+  async function handleSkipImport() {
     setLoading(true);
     const {
       data: { user },
@@ -118,7 +129,7 @@ export default function OnboardingPage() {
     }
 
     setLoading(false);
-    setStep(3); // POS setup step
+    setStep(3); // "You're all set" final step
   }
 
   return (
@@ -133,7 +144,7 @@ export default function OnboardingPage() {
 
       {/* Progress */}
       <div className="flex items-center justify-center gap-2 mb-8">
-        {[1, 2, 3, 4].map((s) => (
+        {[1, 2, 3].map((s) => (
           <div key={s} className="flex items-center gap-2">
             <div
               className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium ${
@@ -146,7 +157,7 @@ export default function OnboardingPage() {
             >
               {s < step ? <CheckCircle className="h-4 w-4" /> : s}
             </div>
-            {s < 4 && (
+            {s < TOTAL_STEPS && (
               <div
                 className={`w-16 h-0.5 ${
                   s < step ? "bg-primary" : "bg-muted"
@@ -262,7 +273,7 @@ export default function OnboardingPage() {
             <div className="pt-2 text-center">
               <button
                 type="button"
-                onClick={handleSkipToStep3}
+                onClick={handleSkipImport}
                 disabled={loading}
                 className="text-sm text-muted-foreground underline-offset-4 hover:text-foreground hover:underline disabled:opacity-50"
               >
@@ -276,32 +287,8 @@ export default function OnboardingPage() {
         </Card>
       )}
 
-      {/* Step 3: Connect your POS */}
+      {/* Step 3: You're ready! */}
       {step === 3 && (
-        <Card>
-          <CardHeader>
-            <CardTitle>Automate your sales logging</CardTitle>
-            <p className="text-sm text-muted-foreground">
-              Pick your POS and we&apos;ll walk you through connecting it — so sales log themselves after every event.
-            </p>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <POSSetupGuide onComplete={() => setStep(4)} />
-            <div className="pt-2 text-center">
-              <button
-                type="button"
-                onClick={() => setStep(4)}
-                className="text-sm text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
-              >
-                I&apos;ll set this up later
-              </button>
-            </div>
-          </CardContent>
-        </Card>
-      )}
-
-      {/* Step 4: You're ready! */}
-      {step === 4 && (
         <Card>
           <CardHeader>
             <CardTitle className="text-center">
