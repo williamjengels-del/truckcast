@@ -26,6 +26,10 @@ import {
   BarChart3,
 } from "lucide-react";
 import { US_STATES, US_TIMEZONES } from "@/lib/constants";
+import {
+  detectBrowserTimezone,
+  guessStateFromTimezone,
+} from "@/lib/locale-detect";
 import Link from "next/link";
 
 // Onboarding wizard. Three steps: profile -> events -> done.
@@ -53,8 +57,16 @@ export default function OnboardingPage() {
   const router = useRouter();
   const supabase = createClient();
 
-  // Pre-populate form with any existing profile data (helps returning users who
-  // were redirected back to onboarding before completing step 1)
+  // Pre-populate the form. Two paths:
+  //   1. If the operator has saved profile data (returning to
+  //      onboarding mid-flow) — pull those values.
+  //   2. If they're a fresh signup (no business_name yet) — pre-fill
+  //      timezone from the browser and best-guess state from that
+  //      timezone. Operator can override.
+  //
+  // Defaults pre-fill replaces the previous hardcoded
+  // "America/Chicago" timezone + blank state, which made operators
+  // outside the central time zone re-enter both fields.
   useEffect(() => {
     async function loadProfile() {
       const { data: { user } } = await supabase.auth.getUser();
@@ -64,13 +76,23 @@ export default function OnboardingPage() {
         .select("business_name, city, state, timezone")
         .eq("id", user.id)
         .single();
+
+      const detectedTimezone = detectBrowserTimezone();
+      const guessedState = guessStateFromTimezone(detectedTimezone);
+
       if (data) {
         setProfile({
           business_name: data.business_name ?? "",
           city: data.city ?? "",
-          state: data.state ?? "",
-          timezone: data.timezone ?? "America/Chicago",
+          state: data.state ?? guessedState ?? "",
+          timezone: data.timezone ?? detectedTimezone ?? "America/Chicago",
         });
+      } else {
+        setProfile((prev) => ({
+          ...prev,
+          state: guessedState ?? prev.state,
+          timezone: detectedTimezone ?? prev.timezone,
+        }));
       }
     }
     loadProfile();
@@ -92,6 +114,18 @@ export default function OnboardingPage() {
           onboarding_completed: true,
         })
         .eq("id", user.id);
+
+      // Welcome email migrated from /signup -> here so it's
+      // personalized with the business_name the operator just
+      // entered. Fire-and-forget; signup -> step 1 should not
+      // block on email send.
+      if (user.email && profile.business_name) {
+        fetch("/api/email/welcome", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ businessName: profile.business_name }),
+        }).catch(() => {});
+      }
     }
 
     setLoading(false);

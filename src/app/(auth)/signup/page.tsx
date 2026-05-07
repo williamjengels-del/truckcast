@@ -9,27 +9,16 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { US_STATES, US_STATE_NAMES, OTHER_STATE } from "@/lib/constants";
 
 /**
  * Plan/billing pickup from /pricing CTAs. The /pricing page links to
  * /signup?plan=<tier>&billing=<period> when an operator clicks a tier
- * card. We read those here so the form can confirm the chosen plan
- * and reduce drop-off ("yes, I'm starting the right trial").
+ * card. We persist `intended_tier` so /dashboard/settings can
+ * pre-highlight the matching tier on day-2.
  *
- * Persistence is intentionally NOT implemented yet — the trial is
- * plan-agnostic (every signup gets 14 days free regardless of which
- * tier they clicked) and Stripe checkout happens later via
- * /dashboard/settings. Adding an `intended_tier` column would need a
- * migration; out of scope for this PR. The banner is the operator-
- * facing reassurance; persistence is a future enhancement.
+ * The trial itself is plan-agnostic — every signup gets 14 days free
+ * regardless of which tier they clicked. Stripe checkout happens
+ * later via /dashboard/settings.
  */
 const VALID_PLANS = {
   starter: "Starter",
@@ -51,13 +40,19 @@ function isValidBilling(s: string | null): s is ValidBilling {
   return s !== null && Object.prototype.hasOwnProperty.call(VALID_BILLING, s);
 }
 
+/**
+ * Email + password signup. Slimmed 2026-05-07 from a 4-field form
+ * (business name, state, email, password) to email + password only.
+ *
+ * Why: business name + state were duplicating onboarding step 1,
+ * which collects them again. Removing the duplicate at the conversion
+ * moment trades a little post-signup friction for a clearer "just
+ * sign up" path. Welcome email migrated to fire after onboarding
+ * step 1 (where business name is captured), so it's still personalized.
+ */
 export default function SignupPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [businessName, setBusinessName] = useState("");
-  // Operator's home state — required. Used as the default pin at the
-  // top of EventForm's state dropdown for event creation later.
-  const [profileState, setProfileState] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
@@ -74,20 +69,11 @@ export default function SignupPage() {
     setLoading(true);
     setError(null);
 
-    if (!profileState) {
-      setError("Please select your home state.");
-      setLoading(false);
-      return;
-    }
-
     const { data, error } = await supabase.auth.signUp({
       email,
       password,
       options: {
         emailRedirectTo: `${window.location.origin}/auth/callback`,
-        data: {
-          business_name: businessName,
-        },
       },
     });
 
@@ -97,7 +83,10 @@ export default function SignupPage() {
       return;
     }
 
-    // Upsert profile — ensures row exists even if the DB trigger didn't fire.
+    // Upsert profile — ensures row exists even if the DB trigger
+    // didn't fire. business_name, city, state, timezone are collected
+    // in onboarding step 1, not here.
+    //
     // intended_tier persists the /pricing → /signup plan choice so
     // /dashboard/settings can pre-highlight the matching tier on
     // day-2. Only written when the URL carried a valid plan param;
@@ -108,8 +97,6 @@ export default function SignupPage() {
         .upsert(
           {
             id: data.user.id,
-            business_name: businessName,
-            state: profileState,
             subscription_tier: "starter",
             ...(intendedPlan ? { intended_tier: intendedPlan } : {}),
           },
@@ -117,14 +104,8 @@ export default function SignupPage() {
         );
     }
 
-    // Fire welcome email (non-blocking — don't await so signup isn't delayed)
-    if (data.user) {
-      fetch("/api/email/welcome", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ businessName }),
-      }).catch(() => {}); // silently ignore email errors
-    }
+    // Welcome email fires from onboarding step 1 (post-business-name
+    // capture) so the personalization still works.
 
     // If email confirmation is enabled
     if (data.user && !data.session) {
@@ -204,42 +185,6 @@ export default function SignupPage() {
           )}
           <form onSubmit={handleSignup} className="space-y-4">
             <div className="space-y-2">
-              <Label htmlFor="businessName">Business Name</Label>
-              <Input
-                id="businessName"
-                type="text"
-                placeholder="Your Business Name"
-                value={businessName}
-                onChange={(e) => setBusinessName(e.target.value)}
-                required
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="state">
-                Home State <span className="text-destructive">*</span>
-              </Label>
-              <Select
-                value={profileState}
-                onValueChange={(v) => setProfileState(v ?? "")}
-              >
-                <SelectTrigger id="state">
-                  <SelectValue placeholder="Select your state…" />
-                </SelectTrigger>
-                <SelectContent>
-                  {US_STATES.map((code) => (
-                    <SelectItem key={code} value={code}>
-                      {code} — {US_STATE_NAMES[code]}
-                    </SelectItem>
-                  ))}
-                  <SelectItem value={OTHER_STATE}>Other / International</SelectItem>
-                </SelectContent>
-              </Select>
-              <p className="text-xs text-muted-foreground">
-                Where your truck primarily operates. You can tag individual
-                events to other states later.
-              </p>
-            </div>
-            <div className="space-y-2">
               <Label htmlFor="email">Email</Label>
               <Input
                 id="email"
@@ -248,6 +193,7 @@ export default function SignupPage() {
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 required
+                autoFocus
               />
             </div>
             <div className="space-y-2">
