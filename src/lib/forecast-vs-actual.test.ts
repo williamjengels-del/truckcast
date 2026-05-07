@@ -87,6 +87,13 @@ describe("getMostRecentForecastResult", () => {
     expect(getMostRecentForecastResult(events, "2026-05-07")).toBeNull();
   });
 
+  it("ignores boosted events (added 2026-05-07)", () => {
+    const events = [
+      makeEvent({ event_date: "2026-04-15", anomaly_flag: "boosted" }),
+    ];
+    expect(getMostRecentForecastResult(events, "2026-05-07")).toBeNull();
+  });
+
   it("picks the most recent past event by date", () => {
     const events = [
       makeEvent({ event_date: "2026-03-01", event_name: "March" }),
@@ -162,44 +169,66 @@ describe("getThisMonthAccuracy", () => {
     expect(getThisMonthAccuracy(events, "2026-05-07")).toBeNull();
   });
 
-  it("counts only past events this month with both forecast + actual", () => {
-    const events = [
-      // In month, eligible (within range)
+  // 2026-05-07: small-sample suppression. Below 5 eligible events
+  // this month, the rolling stat is hidden — "1 of 3" reads as
+  // statistical noise on the dashboard, not a meaningful signal.
+  it("returns null below the small-sample threshold (< 5 events)", () => {
+    const events = Array.from({ length: 4 }, (_, i) =>
       makeEvent({
-        event_date: "2026-05-01",
+        event_date: `2026-05-0${i + 1}`,
         net_sales: 1000,
         forecast_low: 850,
         forecast_high: 1150,
-      }),
-      // In month, eligible (below range)
-      makeEvent({
-        event_date: "2026-05-03",
-        net_sales: 600,
-        forecast_low: 850,
-        forecast_high: 1150,
-      }),
+      })
+    );
+    expect(getThisMonthAccuracy(events, "2026-05-07")).toBeNull();
+  });
+
+  it("counts past events this month with both forecast + actual at the small-sample threshold", () => {
+    // 5 in-month eligible events — at the threshold, rolling stat
+    // surfaces. 3 within range, 2 below.
+    const events = [
+      makeEvent({ event_date: "2026-05-01", net_sales: 1000, forecast_low: 850, forecast_high: 1150 }),
+      makeEvent({ event_date: "2026-05-02", net_sales: 1050, forecast_low: 850, forecast_high: 1150 }),
+      makeEvent({ event_date: "2026-05-03", net_sales: 900, forecast_low: 850, forecast_high: 1150 }),
+      makeEvent({ event_date: "2026-05-04", net_sales: 600, forecast_low: 850, forecast_high: 1150 }),
+      makeEvent({ event_date: "2026-05-05", net_sales: 500, forecast_low: 850, forecast_high: 1150 }),
       // In month, future — excluded
       makeEvent({ event_date: "2026-05-30" }),
       // Different month — excluded
       makeEvent({ event_date: "2026-04-25" }),
       // No actual sales — excluded
-      makeEvent({ event_date: "2026-05-04", net_sales: null }),
+      makeEvent({ event_date: "2026-05-06", net_sales: null }),
     ];
     const result = getThisMonthAccuracy(events, "2026-05-07");
-    expect(result).toEqual({ total: 2, inRange: 1 });
+    expect(result).toEqual({ total: 5, inRange: 3 });
   });
 
-  it("uses ±20% fallback for events without explicit bounds", () => {
+  it("excludes boosted events from the rolling stat (added 2026-05-07)", () => {
+    // 5 events, but one is boosted. Only 4 eligible -> below
+    // threshold -> rolling stat suppressed.
     const events = [
+      makeEvent({ event_date: "2026-05-01", net_sales: 1000, forecast_low: 850, forecast_high: 1150 }),
+      makeEvent({ event_date: "2026-05-02", net_sales: 1050, forecast_low: 850, forecast_high: 1150 }),
+      makeEvent({ event_date: "2026-05-03", net_sales: 900, forecast_low: 850, forecast_high: 1150 }),
+      makeEvent({ event_date: "2026-05-04", net_sales: 600, forecast_low: 850, forecast_high: 1150 }),
+      makeEvent({ event_date: "2026-05-05", net_sales: 5000, forecast_low: 850, forecast_high: 1150, anomaly_flag: "boosted" }),
+    ];
+    expect(getThisMonthAccuracy(events, "2026-05-07")).toBeNull();
+  });
+
+  it("uses ±20% fallback for events without explicit bounds (when sample meets threshold)", () => {
+    // 5 in-month, no explicit bounds -> falls back to ±20%.
+    const events = Array.from({ length: 5 }, (_, i) =>
       makeEvent({
-        event_date: "2026-05-02",
+        event_date: `2026-05-0${i + 1}`,
         net_sales: 1100,
         forecast_sales: 1000,
         forecast_low: null,
         forecast_high: null,
-      }),
-    ];
+      })
+    );
     const result = getThisMonthAccuracy(events, "2026-05-07");
-    expect(result).toEqual({ total: 1, inRange: 1 });
+    expect(result).toEqual({ total: 5, inRange: 5 });
   });
 });
