@@ -45,6 +45,15 @@ export interface ForecastResult {
    *  base for Level 0 cold-start). UI uses this to decide when to
    *  surface the "based on X other operators" language. */
   platformBlendApplied: boolean;
+  /** True when the engine produced a forecast value far below the
+   *  operator's typical event revenue — signal that the per-event
+   *  history is too thin for the model to land on a believable
+   *  number. UI consumers should branch on this and surface
+   *  "insufficient data" copy instead of the bogus tail forecast.
+   *  Recalc clears the stored forecast columns when this fires so
+   *  past-event variance lines and dashboard hit-rate stats don't
+   *  count the row. See INSUFFICIENT_DATA_FLOOR_RATIO. */
+  insufficientData: boolean;
 }
 
 export interface ForecastOptions {
@@ -461,6 +470,64 @@ function confidenceScoreToLabel(score: number): "HIGH" | "MEDIUM" | "LOW" {
   return "LOW";
 }
 
+// --- Insufficient-data floor ---
+
+/**
+ * Floor ratio for the insufficient-data check. When the engine's
+ * final forecast is below this fraction of the operator's overall
+ * median event revenue, the result is flagged as insufficientData
+ * and UI consumers should surface a "not enough history" treatment
+ * instead of the bogus tail number.
+ *
+ * Why a floor at all: 2026-05-07 audit found the engine was producing
+ * $2-$200 point estimates for events that did $300-$5,000 (e.g.
+ * "School of Rock House Band at Wellspent" — $2 forecast, $286
+ * actual). These came from Level-1 name matches with 1-2 prior
+ * data points where the prior events had near-zero sales (off-night
+ * at a brewery, etc.) and the engine averaged on the small sample.
+ * The model has no business publishing those numbers as a forecast.
+ *
+ * 0.10 chosen because it cleanly separates the audit's tail-event
+ * misses (all under $200 against operator median ~$1,200) from
+ * legitimately quiet venues (Wellspent Brewery weeknight averages
+ * around $300, ~25% of overall median, stays above the floor).
+ */
+export const INSUFFICIENT_DATA_FLOOR_RATIO = 0.1;
+
+/**
+ * Median revenue across an operator's eligible historical events.
+ * Used as the anchor for the insufficient-data floor check.
+ */
+export function computeOperatorOverallMedian(events: Event[]): number {
+  const valid = events.filter(
+    (e) =>
+      e.booked &&
+      !e.cancellation_reason &&
+      hasRevenue(e) &&
+      e.anomaly_flag !== "disrupted"
+  );
+  if (valid.length === 0) return 0;
+  return median(valid.map(eventRevenue));
+}
+
+/**
+ * Mark a forecast result as insufficientData when the final number
+ * sits below the floor. Operates in place and returns the same
+ * reference for chaining. No-op when validEvents is empty (engine
+ * already returned null in that case) or median is zero.
+ */
+function markInsufficientDataIfBelowFloor(
+  result: ForecastResult,
+  validEvents: Event[]
+): ForecastResult {
+  const operatorMedian = median(validEvents.map(eventRevenue));
+  if (operatorMedian <= 0 || result.forecast <= 0) return result;
+  if (result.forecast < INSUFFICIENT_DATA_FLOOR_RATIO * operatorMedian) {
+    result.insufficientData = true;
+  }
+  return result;
+}
+
 // --- Main forecast engine ---
 
 /**
@@ -554,10 +621,10 @@ export function calculateForecast(
     result.platformBlendApplied = true;
     const finalResult = applyAdjustments(result, target, validEvents, calibrated, venueHistory);
     finalResult.forecast = Math.round(blended * 100) / 100;
-    return finalResult;
+    return markInsufficientDataIfBelowFloor(finalResult, validEvents);
   }
 
-  if (result) return applyAdjustments(result, target, validEvents, calibrated, venueHistory);
+  if (result) return markInsufficientDataIfBelowFloor(applyAdjustments(result, target, validEvents, calibrated, venueHistory), validEvents);
 
   // Level 0: Platform registry — no personal history but platform has enough operators
   if (platformMedian > 0 && platformOpCount >= 3) {
@@ -581,27 +648,28 @@ export function calculateForecast(
       platformOperatorCount: platformOpCount,
       platformMedianSales: Math.round(platformMedian * 100) / 100,
       platformBlendApplied: true,
+      insufficientData: false,
     };
-    return applyAdjustments(platformResult, target, validEvents, calibrated, venueHistory);
+    return markInsufficientDataIfBelowFloor(applyAdjustments(platformResult, target, validEvents, calibrated, venueHistory), validEvents);
   }
 
   // Level 2: Similar Event Combo (same type + city area)
   result = tryLevel2(target, validEvents);
-  if (result) return applyAdjustments(result, target, validEvents, calibrated, venueHistory);
+  if (result) return markInsufficientDataIfBelowFloor(applyAdjustments(result, target, validEvents, calibrated, venueHistory), validEvents);
 
   // Level 3: Event Type Average
   result = tryLevel3(target, validEvents, calibrated);
-  if (result) return applyAdjustments(result, target, validEvents, calibrated, venueHistory);
+  if (result) return markInsufficientDataIfBelowFloor(applyAdjustments(result, target, validEvents, calibrated, venueHistory), validEvents);
 
   // Level 4: Seasonal Monthly Average
   result = tryLevel4(target, validEvents, calibrated);
-  if (result) return applyAdjustments(result, target, validEvents, calibrated, venueHistory);
+  if (result) return markInsufficientDataIfBelowFloor(applyAdjustments(result, target, validEvents, calibrated, venueHistory), validEvents);
 
   return null;
 }
 
 function makeResult(
-  partial: Omit<ForecastResult, "confidenceScore" | "calibrated" | "venueFamiliarityApplied" | "platformBlendApplied">
+  partial: Omit<ForecastResult, "confidenceScore" | "calibrated" | "venueFamiliarityApplied" | "platformBlendApplied" | "insufficientData">
 ): ForecastResult {
   return {
     ...partial,
@@ -609,6 +677,7 @@ function makeResult(
     calibrated: false,
     venueFamiliarityApplied: false,
     platformBlendApplied: false,
+    insufficientData: false,
   };
 }
 

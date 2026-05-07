@@ -1,6 +1,10 @@
 import { createClient } from "@/lib/supabase/server";
 import { calculateEventPerformance } from "@/lib/event-performance";
-import { calculateForecast, calibrateCoefficients } from "@/lib/forecast-engine";
+import {
+  calculateForecast,
+  calibrateCoefficients,
+  type ForecastResult,
+} from "@/lib/forecast-engine";
 import {
   updatePlatformRegistry,
   getPlatformEventsExcludingUser,
@@ -120,15 +124,9 @@ export async function recalculateForUser(
       platformEvent,
     });
     if (result) {
-      const { low, high } = forecastRange(result.forecast, result.confidenceScore);
       await supabase
         .from("events")
-        .update({
-          forecast_sales: result.forecast,
-          forecast_low: low,
-          forecast_high: high,
-          forecast_confidence: result.confidence,
-        })
+        .update(forecastUpdate(result))
         .eq("id", event.id);
       forecastsUpdated++;
     }
@@ -158,15 +156,9 @@ export async function recalculateForUser(
       calibratedCoefficients: calibrated,
     });
     if (result) {
-      const { low, high } = forecastRange(result.forecast, result.confidenceScore);
       await supabase
         .from("events")
-        .update({
-          forecast_sales: result.forecast,
-          forecast_low: low,
-          forecast_high: high,
-          forecast_confidence: result.confidence,
-        })
+        .update(forecastUpdate(result))
         .eq("id", event.id);
       forecastsUpdated++;
     }
@@ -210,5 +202,61 @@ function forecastRange(forecast: number, confidenceScore: number): { low: number
   return {
     low:  Math.round(forecast * (1 - pct) * 100) / 100,
     high: Math.round(forecast * (1 + pct) * 100) / 100,
+  };
+}
+
+/**
+ * Build the events-row update payload for a forecast result.
+ *
+ * Two branches:
+ *
+ *   1. insufficientData=true — the engine produced a number it
+ *      doesn't believe (final forecast below 10% of operator's
+ *      historical median, see INSUFFICIENT_DATA_FLOOR_RATIO in
+ *      forecast-engine.ts). Clear all four forecast columns to
+ *      null so:
+ *        - past-event ForecastVsActual line renders nothing
+ *          (instead of "$2 forecast / $286 actual / +15,443%")
+ *        - dashboard rolling hit-rate stat correctly excludes
+ *          the row (its eligibility filter requires forecast_sales
+ *          > 0)
+ *        - the audit script's eligibility filter does the same
+ *      Live-forecast UI surfaces (forecast-card) read the engine
+ *      result directly and branch on insufficientData themselves
+ *      to show "not enough history yet" copy.
+ *
+ *   2. else — write the forecast value and the score-derived
+ *      low/high band, same as before this change.
+ *
+ * Note: writing forecast_confidence=null in the insufficientData
+ * branch instead of a new "INSUFFICIENT_DATA" CHECK-constraint
+ * value keeps the change schema-free. The original engine-fix
+ * brief proposed introducing an INSUFFICIENT_DATA label; we
+ * deferred it because expanding the CHECK constraint requires
+ * a migration paste-at-merge step, and the brief explicitly
+ * forbids shipping features that depend on a pending migration.
+ * If a categorical label is wanted later, add it via a migration
+ * in a follow-up PR.
+ */
+function forecastUpdate(result: ForecastResult): {
+  forecast_sales: number | null;
+  forecast_low: number | null;
+  forecast_high: number | null;
+  forecast_confidence: "HIGH" | "MEDIUM" | "LOW" | null;
+} {
+  if (result.insufficientData) {
+    return {
+      forecast_sales: null,
+      forecast_low: null,
+      forecast_high: null,
+      forecast_confidence: null,
+    };
+  }
+  const { low, high } = forecastRange(result.forecast, result.confidenceScore);
+  return {
+    forecast_sales: result.forecast,
+    forecast_low: low,
+    forecast_high: high,
+    forecast_confidence: result.confidence,
   };
 }
