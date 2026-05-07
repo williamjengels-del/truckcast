@@ -7,13 +7,19 @@ import {
 } from "@/lib/forecast-engine";
 import {
   calculateBayesianForecast,
+  aggregateHourlyForEventWindow,
   type BayesianForecastResult,
+  type WeatherSnapshot,
 } from "@/lib/forecast-engine-v2";
 import {
   updatePlatformRegistry,
   getPlatformEventsExcludingUser,
 } from "@/lib/platform-registry";
-import { autoClassifyWeather } from "@/lib/weather";
+import {
+  autoClassifyWeather,
+  getHourlyWeatherForEvent,
+  type HourlyWeatherEntry,
+} from "@/lib/weather";
 import type { Event, WeatherType } from "@/lib/database.types";
 
 /**
@@ -160,9 +166,11 @@ export async function recalculateForUser(
       const update = forecastUpdate(result);
       let v2: BayesianForecastResult | null = null;
       if (v2Available) {
+        const weatherSnapshot = await fetchWeatherSnapshot(supabase, event);
         v2 = calculateBayesianForecast(event, allEvents, {
           calibratedCoefficients: calibrated,
           platformEvent,
+          weatherSnapshot,
         });
         if (v2) {
           Object.assign(update, bayesianShadowUpdate(v2));
@@ -200,8 +208,10 @@ export async function recalculateForUser(
     if (result) {
       const update = forecastUpdate(result);
       if (v2Available) {
+        const weatherSnapshot = await fetchWeatherSnapshot(supabase, event);
         const v2 = calculateBayesianForecast(event, historicalWithout, {
           calibratedCoefficients: calibrated,
+          weatherSnapshot,
         });
         if (v2) {
           Object.assign(update, bayesianShadowUpdate(v2));
@@ -229,8 +239,10 @@ export async function recalculateForUser(
     );
     for (const event of pastEventsMissingV2) {
       const historicalWithout = allEvents.filter((e) => e.id !== event.id);
+      const weatherSnapshot = await fetchWeatherSnapshot(supabase, event);
       const v2 = calculateBayesianForecast(event, historicalWithout, {
         calibratedCoefficients: calibrated,
+        weatherSnapshot,
       });
       if (v2) {
         await supabase
@@ -398,4 +410,116 @@ async function probeBayesianShadowColumns(supabase: any): Promise<boolean> {
   } catch {
     return false;
   }
+}
+
+/**
+ * Parse "HH:MM:SS" or "HH:MM" to a 0-23 hour. Returns null if
+ * unparseable. Used by fetchWeatherSnapshot to bound the hourly
+ * aggregation window.
+ */
+function parseHour(t: string | null | undefined): number | null {
+  if (!t) return null;
+  const m = String(t).match(/^(\d{1,2}):/);
+  if (!m) return null;
+  const h = parseInt(m[1], 10);
+  if (isNaN(h) || h < 0 || h > 23) return null;
+  return h;
+}
+
+/**
+ * Build a continuous weather snapshot for an event by reading the
+ * cached daily values, plus (when start/end times are set) the
+ * cached hourly values aggregated over the event's active window.
+ *
+ * Strategy:
+ *   1. Look up weather_cache row for this event's lat/lng/date.
+ *   2. If hourly_data is present AND event has both start and end
+ *      times, aggregate hourly values within the [start, end) window.
+ *      This captures evening conditions for an evening event vs the
+ *      daily summary which would average a stormy afternoon with a
+ *      clear evening.
+ *   3. Otherwise, fall back to the daily max_temp_f /
+ *      precipitation_in / prev_day_precip_in.
+ *   4. If neither hourly nor daily is cached AND the event has
+ *      lat/lng, attempt to fetch hourly via getHourlyWeatherForEvent
+ *      (lazy populates the cache). Skip on failure.
+ *   5. Return null if no usable data — engine falls back to the
+ *      categorical bucket.
+ *
+ * Read-only on weather_cache when the row exists; writes happen via
+ * getHourlyWeatherForEvent's lazy upsert.
+ */
+async function fetchWeatherSnapshot(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  supabase: any,
+  event: Event
+): Promise<WeatherSnapshot | null> {
+  if (event.latitude == null || event.longitude == null) return null;
+  const lat = event.latitude;
+  const lng = event.longitude;
+  const date = event.event_date;
+
+  // Try the cache first.
+  const { data: cached } = await supabase
+    .from("weather_cache")
+    .select("max_temp_f, precipitation_in, prev_day_precip_in, hourly_data")
+    .eq("date", date)
+    .gte("latitude", lat - 0.1)
+    .lte("latitude", lat + 0.1)
+    .gte("longitude", lng - 0.1)
+    .lte("longitude", lng + 0.1)
+    .maybeSingle();
+
+  const startHour = parseHour(event.start_time);
+  const endHour = parseHour(event.end_time);
+
+  // Hourly aggregation when we have both a window AND cached hourly data.
+  if (
+    cached?.hourly_data &&
+    Array.isArray(cached.hourly_data) &&
+    cached.hourly_data.length > 0 &&
+    startHour != null &&
+    endHour != null &&
+    endHour > startHour
+  ) {
+    const window = aggregateHourlyForEventWindow(
+      cached.hourly_data as HourlyWeatherEntry[],
+      startHour,
+      endHour,
+      cached.prev_day_precip_in
+    );
+    if (window) return window;
+  }
+
+  // Fall back to daily summary if we have it cached.
+  if (cached && (cached.max_temp_f != null || cached.precipitation_in != null)) {
+    return {
+      maxTempF: cached.max_temp_f,
+      precipitationIn: cached.precipitation_in,
+      prevDayPrecipIn: cached.prev_day_precip_in,
+      source: "daily",
+    };
+  }
+
+  // Last resort: fetch hourly fresh and aggregate (also lazily caches
+  // for the next call). Only meaningful for events within the
+  // forecast horizon (next 16 days) — older events without a cached
+  // entry just get null and the engine falls back to the bucket.
+  if (startHour != null && endHour != null && endHour > startHour) {
+    try {
+      const hourly = await getHourlyWeatherForEvent(lat, lng, date, supabase);
+      if (hourly && hourly.length > 0) {
+        return aggregateHourlyForEventWindow(
+          hourly,
+          startHour,
+          endHour,
+          cached?.prev_day_precip_in ?? null
+        );
+      }
+    } catch {
+      // Non-fatal; engine falls back to bucket.
+    }
+  }
+
+  return null;
 }
