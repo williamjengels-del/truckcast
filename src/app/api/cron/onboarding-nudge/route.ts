@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient as createServiceClient } from "@supabase/supabase-js";
 import { sendOnboardingNudgeEmail } from "@/lib/email";
+import { assertCronSecret } from "@/lib/cron-auth";
 
 /**
  * GET /api/cron/onboarding-nudge
@@ -15,13 +16,8 @@ import { sendOnboardingNudgeEmail } from "@/lib/email";
  */
 
 export async function GET(req: NextRequest) {
-  const authHeader = req.headers.get("authorization");
-  if (
-    process.env.CRON_SECRET &&
-    authHeader !== `Bearer ${process.env.CRON_SECRET}`
-  ) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+  const unauthorized = assertCronSecret(req);
+  if (unauthorized) return unauthorized;
 
   if (!process.env.RESEND_API_KEY) {
     return NextResponse.json({ skipped: "No RESEND_API_KEY" });
