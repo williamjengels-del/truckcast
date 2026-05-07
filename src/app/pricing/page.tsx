@@ -65,8 +65,8 @@ export default function PricingPage() {
               data-testid="pricing-subline"
               className="mx-auto mt-6 max-w-2xl text-lg text-white/85"
             >
-              Three tiers. Same forecasting engine. Pay monthly or save with
-              annual.
+              Three tiers. Forecasts and direct inquiries in every one. No
+              commission, ever.
             </p>
           </div>
         </div>
@@ -76,6 +76,46 @@ export default function PricingPage() {
         <div className="border-t">
           <div className="container mx-auto max-w-6xl px-4 py-16">
             <PricingTiers />
+          </div>
+        </div>
+
+        {/* Coming-soon strip + trial-end FAQ — sits below the tier
+            cards so the "what's next / what happens after the trial"
+            questions get answered without an operator having to email
+            us. Custom domain was previously a Premium-listed feature
+            and was moved here 2026-05-07 to align listed tiers with
+            shipped surface. Re-promote when the feature ships. */}
+        <div className="border-t">
+          <div className="container mx-auto max-w-3xl px-4 py-12 space-y-10">
+            <div data-testid="pricing-coming-soon" className="space-y-3">
+              <h2 className="text-base font-semibold tracking-wide uppercase text-muted-foreground">
+                Coming soon
+              </h2>
+              <div className="rounded-lg border bg-card p-5">
+                <p className="font-semibold text-foreground">
+                  Custom domain
+                </p>
+                <p className="mt-1.5 text-sm text-muted-foreground">
+                  Point yourbusiness.vendcast.co (or your own domain) at
+                  your VendCast schedule page so customers see your
+                  brand, not ours. In development — no launch date yet.
+                </p>
+              </div>
+            </div>
+
+            <div data-testid="pricing-trial-faq" className="space-y-3">
+              <h2 className="text-base font-semibold tracking-wide uppercase text-muted-foreground">
+                What happens after 14 days?
+              </h2>
+              <p className="text-sm leading-relaxed text-muted-foreground">
+                Your trial ends and you pick a paid tier from the
+                dashboard. Nothing auto-charges — we don&apos;t take
+                your card up front. If you don&apos;t pick a tier,
+                your dashboard becomes read-only until you do; your
+                data stays put, you just can&apos;t add new events or
+                receive new inquiries until you&apos;re on a plan.
+              </p>
+            </div>
           </div>
         </div>
 

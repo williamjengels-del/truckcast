@@ -3,7 +3,12 @@
 import Link from "next/link";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
-import { Check } from "lucide-react";
+import { Check, Info } from "lucide-react";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import {
   PRICING_PLANS,
   MAX_ANNUAL_SAVINGS,
@@ -99,9 +104,32 @@ export function PricingTiers() {
               )}
               <ul className="mt-6 space-y-2 text-sm">
                 {plan.features.map((feature) => (
-                  <li key={feature} className="flex items-start gap-2">
+                  <li key={feature.name} className="flex items-start gap-2">
                     <Check className="mt-0.5 h-4 w-4 shrink-0 text-brand-teal" />
-                    <span>{feature}</span>
+                    <span className="flex-1 inline-flex items-center gap-1.5">
+                      {feature.name}
+                      {feature.description && (
+                        <Tooltip>
+                          <TooltipTrigger
+                            render={
+                              <button
+                                type="button"
+                                aria-label={`More about ${feature.name}`}
+                                className="text-muted-foreground hover:text-foreground transition-colors focus:outline-none focus-visible:text-foreground"
+                              >
+                                <Info className="h-3.5 w-3.5" />
+                              </button>
+                            }
+                          />
+                          <TooltipContent
+                            side="top"
+                            className="max-w-xs text-xs leading-relaxed"
+                          >
+                            {feature.description}
+                          </TooltipContent>
+                        </Tooltip>
+                      )}
+                    </span>
                   </li>
                 ))}
               </ul>
