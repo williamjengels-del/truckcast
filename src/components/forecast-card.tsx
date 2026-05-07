@@ -66,6 +66,16 @@ export function ForecastCard({ event, forecast }: ForecastCardProps) {
     event.forecast_bayesian_low_80 != null &&
     event.forecast_bayesian_high_80 != null;
 
+  // Cold-start: v2 fired but with zero personal observations of this
+  // event_name. Posterior collapses to the operator-overall prior,
+  // which gives a wide interval that LOOKS like a forecast but
+  // isn't really informative — the model has no history to ground
+  // on. Show explicit "first time" copy instead of pretending the
+  // 50% interval is actionable. Operator request 2026-05-07 after
+  // seeing $339-$1,172 displayed for a brand-new event.
+  const isColdStart =
+    hasV2 && (event.forecast_bayesian_n_obs ?? 0) === 0;
+
   const primary = hasV2
     ? event.forecast_bayesian_point!
     : (forecast?.forecast ?? event.forecast_sales ?? 0);
@@ -125,30 +135,50 @@ export function ForecastCard({ event, forecast }: ForecastCardProps) {
         {formatDollars(primary)} <span className="text-sm font-normal text-muted-foreground">expected</span>
       </div>
 
-      {/* Inner range = "most likely" (50% credible interval, v2 only).
-          Tighter band, the actionable number for staffing/inventory.
-          When inner is unavailable (legacy v1 row, no v2 stored values),
-          we fall back to showing only the outer range as before. */}
-      {innerLow !== null && innerHigh !== null && (
-        <div className="text-sm text-muted-foreground">
-          Most likely{" "}
-          <span className="font-medium text-foreground">
-            {formatDollars(innerLow)}–{formatDollars(innerHigh)}
-          </span>
-        </div>
-      )}
+      {/* Cold-start treatment — n_obs = 0 means the engine has no
+          history for this event_name and the wide interval reflects
+          "I have no idea" rather than a calibrated guess. Tell the
+          operator that explicitly instead of dressing it up as a
+          50% interval they can act on. */}
+      {isColdStart ? (
+        <>
+          <p className="text-sm text-muted-foreground">
+            First time at this event — no history to ground a forecast yet.
+          </p>
+          {outerLow !== null && outerHigh !== null && (
+            <p className="text-xs text-muted-foreground">
+              Wide range based on your overall average: {formatDollars(outerLow)}–{formatDollars(outerHigh)}
+            </p>
+          )}
+        </>
+      ) : (
+        <>
+          {/* Inner range = "most likely" (50% credible interval, v2 only).
+              Tighter band, the actionable number for staffing/inventory.
+              When inner is unavailable (legacy v1 row, no v2 stored values),
+              we fall back to showing only the outer range as before. */}
+          {innerLow !== null && innerHigh !== null && (
+            <div className="text-sm text-muted-foreground">
+              Most likely{" "}
+              <span className="font-medium text-foreground">
+                {formatDollars(innerLow)}–{formatDollars(innerHigh)}
+              </span>
+            </div>
+          )}
 
-      {/* Outer range = "could swing" (80% interval for v2, full range
-          for v1). Surfaces the wider tail without making it the
-          headline. When inner range is shown, this reads as
-          secondary; when inner is null (v1 fallback), this is the
-          primary range and uses the legacy "Likely $X-$Y" format. */}
-      {outerLow !== null && outerHigh !== null && (
-        <div className="text-xs text-muted-foreground">
-          {innerLow !== null && innerHigh !== null
-            ? <>Could swing {formatDollars(outerLow)}–{formatDollars(outerHigh)}</>
-            : formatForecastRange(outerLow, outerHigh)}
-        </div>
+          {/* Outer range = "could swing" (80% interval for v2, full range
+              for v1). Surfaces the wider tail without making it the
+              headline. When inner range is shown, this reads as
+              secondary; when inner is null (v1 fallback), this is the
+              primary range and uses the legacy "Likely $X-$Y" format. */}
+          {outerLow !== null && outerHigh !== null && (
+            <div className="text-xs text-muted-foreground">
+              {innerLow !== null && innerHigh !== null
+                ? <>Could swing {formatDollars(outerLow)}–{formatDollars(outerHigh)}</>
+                : formatForecastRange(outerLow, outerHigh)}
+            </div>
+          )}
+        </>
       )}
 
       {anchor && (
