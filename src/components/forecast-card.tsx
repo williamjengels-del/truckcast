@@ -54,7 +54,21 @@ export function ForecastCard({ event, forecast }: ForecastCardProps) {
     );
   }
 
-  const primary = forecast?.forecast ?? event.forecast_sales ?? 0;
+  // v2 stored values take precedence when available — the Bayesian
+  // posterior produces an honest 50% credible interval ("most likely")
+  // alongside the 80% interval ("could swing"). Showing both gives
+  // the operator an actionable inner band while still surfacing the
+  // wider tail. Fall back to v1's single-range UX when v2 hasn't
+  // populated for the row yet (operator will see the legacy framing
+  // until the next recalc cycle fills the shadow columns).
+  const hasV2 =
+    event.forecast_bayesian_point != null &&
+    event.forecast_bayesian_low_80 != null &&
+    event.forecast_bayesian_high_80 != null;
+
+  const primary = hasV2
+    ? event.forecast_bayesian_point!
+    : (forecast?.forecast ?? event.forecast_sales ?? 0);
   const confidence = forecast?.confidence ?? event.forecast_confidence ?? null;
   // Per 2026-04-29 operator decision (Julian): drop ALL three confidence
   // pills (Calibrated / Building / Learning) for now. No badge ever — the
@@ -66,19 +80,30 @@ export function ForecastCard({ event, forecast }: ForecastCardProps) {
   // when calibration improves.
   const density = dataDensityFromConfidence(confidence);
 
-  // Range: prefer live computation when we have a forecast result (so /forecasts
-  // stays in sync with events-list without waiting for recalc). Fall back to
-  // stored columns. Only suppress when we genuinely lack a confidenceScore AND
-  // stored range.
-  let low: number | null = null;
-  let high: number | null = null;
-  if (forecast) {
+  // Inner range = "most likely" — narrower band, the actionable
+  // number for staffing/inventory. From v2's 50% credible interval
+  // when stored, otherwise null (v1 fallback shows only one range).
+  // Outer range = "could swing" — wider band acknowledging the tail.
+  // From v2's 80% credible interval when stored, otherwise from v1's
+  // band (the only range v1 produced).
+  let innerLow: number | null = null;
+  let innerHigh: number | null = null;
+  let outerLow: number | null = null;
+  let outerHigh: number | null = null;
+  if (hasV2) {
+    if (event.forecast_bayesian_low_50 != null && event.forecast_bayesian_high_50 != null) {
+      innerLow = event.forecast_bayesian_low_50;
+      innerHigh = event.forecast_bayesian_high_50;
+    }
+    outerLow = event.forecast_bayesian_low_80!;
+    outerHigh = event.forecast_bayesian_high_80!;
+  } else if (forecast) {
     const r = computeForecastRange(forecast.forecast, forecast.confidenceScore);
-    low = r.low;
-    high = r.high;
+    outerLow = r.low;
+    outerHigh = r.high;
   } else if (event.forecast_low && event.forecast_high) {
-    low = event.forecast_low;
-    high = event.forecast_high;
+    outerLow = event.forecast_low;
+    outerHigh = event.forecast_high;
   }
 
   // Low-confidence anchor sentence — softer landing for thin-data forecasts.
@@ -100,9 +125,29 @@ export function ForecastCard({ event, forecast }: ForecastCardProps) {
         {formatDollars(primary)} <span className="text-sm font-normal text-muted-foreground">expected</span>
       </div>
 
-      {low !== null && high !== null && (
+      {/* Inner range = "most likely" (50% credible interval, v2 only).
+          Tighter band, the actionable number for staffing/inventory.
+          When inner is unavailable (legacy v1 row, no v2 stored values),
+          we fall back to showing only the outer range as before. */}
+      {innerLow !== null && innerHigh !== null && (
         <div className="text-sm text-muted-foreground">
-          {formatForecastRange(low, high)}
+          Most likely{" "}
+          <span className="font-medium text-foreground">
+            {formatDollars(innerLow)}–{formatDollars(innerHigh)}
+          </span>
+        </div>
+      )}
+
+      {/* Outer range = "could swing" (80% interval for v2, full range
+          for v1). Surfaces the wider tail without making it the
+          headline. When inner range is shown, this reads as
+          secondary; when inner is null (v1 fallback), this is the
+          primary range and uses the legacy "Likely $X-$Y" format. */}
+      {outerLow !== null && outerHigh !== null && (
+        <div className="text-xs text-muted-foreground">
+          {innerLow !== null && innerHigh !== null
+            ? <>Could swing {formatDollars(outerLow)}–{formatDollars(outerHigh)}</>
+            : formatForecastRange(outerLow, outerHigh)}
         </div>
       )}
 
@@ -201,9 +246,19 @@ export function ForecastInline({ event, forecast }: ForecastInlineProps) {
     );
   }
 
+  // Inline variant prefers the v2 50% interval for the dense range.
+  // The 80% interval would be too wide to read at a glance in a dense
+  // table; the 50% gives a tight actionable number with the same
+  // honesty story as the full card. Falls back to v1's range when
+  // v2 isn't stored for the row.
   let low: number | null = null;
   let high: number | null = null;
-  if (forecast) {
+  const hasV2Inline =
+    event.forecast_bayesian_low_50 != null && event.forecast_bayesian_high_50 != null;
+  if (hasV2Inline) {
+    low = event.forecast_bayesian_low_50!;
+    high = event.forecast_bayesian_high_50!;
+  } else if (forecast) {
     const r = computeForecastRange(forecast.forecast, forecast.confidenceScore);
     low = r.low;
     high = r.high;
@@ -220,7 +275,9 @@ export function ForecastInline({ event, forecast }: ForecastInlineProps) {
         </div>
       ) : (
         <div className="tabular-nums">
-          {formatDollars(forecast?.forecast ?? event.forecast_sales ?? 0)}
+          {formatDollars(
+            event.forecast_bayesian_point ?? forecast?.forecast ?? event.forecast_sales ?? 0
+          )}
         </div>
       )}
     </div>

@@ -87,6 +87,21 @@ function rangeBoundsFor(event: Event): {
   high: number;
   hasExplicitBounds: boolean;
 } {
+  // Prefer v2's 80% credible interval when stored — it's an honestly
+  // calibrated band (~76% observed coverage in shadow rollout) vs
+  // v1's heuristic ±X%-by-confidence-label that observed at ~55%.
+  // The "X of Y in range" stat reads more honestly when the band is
+  // actually keeping its promise.
+  if (
+    event.forecast_bayesian_low_80 != null &&
+    event.forecast_bayesian_high_80 != null
+  ) {
+    return {
+      low: event.forecast_bayesian_low_80,
+      high: event.forecast_bayesian_high_80,
+      hasExplicitBounds: true,
+    };
+  }
   const forecast = event.forecast_sales ?? 0;
   if (event.forecast_low !== null && event.forecast_high !== null) {
     return {
@@ -129,12 +144,19 @@ export function getMostRecentForecastResult(
   const event = sorted[0];
 
   const { low, high, hasExplicitBounds } = rangeBoundsFor(event);
+  // Forecast value: prefer v2 point when stored. Falls back to v1
+  // forecast_sales for legacy rows. Range and outcome already use
+  // v2 when available via rangeBoundsFor.
+  const forecastValue =
+    event.forecast_bayesian_point != null
+      ? event.forecast_bayesian_point
+      : event.forecast_sales!;
   return {
     eventId: event.id,
     eventName: event.event_name,
     eventDate: event.event_date,
     actual: event.net_sales!,
-    forecast: event.forecast_sales!,
+    forecast: forecastValue,
     forecastLow: low,
     forecastHigh: high,
     hasExplicitBounds,
