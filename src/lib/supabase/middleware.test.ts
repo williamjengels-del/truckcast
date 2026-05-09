@@ -22,7 +22,7 @@ import {
   buildImpersonationCookiePayload,
   signImpersonationPayload,
 } from "@/lib/admin-impersonation";
-import { updateSession } from "./middleware";
+import { updateSession, isTrialHardGateExpired } from "./middleware";
 
 const TEST_SECRET = "a".repeat(64);
 const ADMIN_ID = "11111111-1111-1111-1111-111111111111";
@@ -231,5 +231,132 @@ describe("updateSession — impersonation mutation block (Commit 5b)", () => {
       return;
     }
     expect(res!.headers.get("x-impersonation-blocked")).toBeNull();
+  });
+});
+
+describe("isTrialHardGateExpired — pure helper", () => {
+  // 14 + 1 days back, well past HARD_GATE_DATE (2026-05-01), no
+  // subscription, no extension, not a manager → expired.
+  const now = new Date("2026-05-09T00:00:00Z");
+  const longAgo = new Date("2026-04-01T00:00:00Z").toISOString();
+  const recently = new Date("2026-05-05T00:00:00Z").toISOString();
+
+  it("returns true when trial is past 14 days and now ≥ HARD_GATE_DATE", () => {
+    expect(
+      isTrialHardGateExpired(
+        {
+          created_at: longAgo,
+          stripe_subscription_id: null,
+          trial_extended_until: null,
+          owner_user_id: null,
+        },
+        now
+      )
+    ).toBe(true);
+  });
+
+  it("returns false when trial is still within 14-day window", () => {
+    expect(
+      isTrialHardGateExpired(
+        {
+          created_at: recently,
+          stripe_subscription_id: null,
+          trial_extended_until: null,
+          owner_user_id: null,
+        },
+        now
+      )
+    ).toBe(false);
+  });
+
+  it("returns false when user has an active stripe_subscription_id", () => {
+    expect(
+      isTrialHardGateExpired(
+        {
+          created_at: longAgo,
+          stripe_subscription_id: "sub_123",
+          trial_extended_until: null,
+          owner_user_id: null,
+        },
+        now
+      )
+    ).toBe(false);
+  });
+
+  it("returns false for managers (owner_user_id set) regardless of trial state", () => {
+    expect(
+      isTrialHardGateExpired(
+        {
+          created_at: longAgo,
+          stripe_subscription_id: null,
+          trial_extended_until: null,
+          owner_user_id: "11111111-1111-1111-1111-111111111111",
+        },
+        now
+      )
+    ).toBe(false);
+  });
+
+  it("returns false when admin-extended trial is still active", () => {
+    expect(
+      isTrialHardGateExpired(
+        {
+          created_at: longAgo,
+          stripe_subscription_id: null,
+          trial_extended_until: new Date("2026-06-01T00:00:00Z").toISOString(),
+          owner_user_id: null,
+        },
+        now
+      )
+    ).toBe(false);
+  });
+
+  it("returns true when admin extension has itself expired", () => {
+    expect(
+      isTrialHardGateExpired(
+        {
+          created_at: longAgo,
+          stripe_subscription_id: null,
+          trial_extended_until: new Date("2026-04-15T00:00:00Z").toISOString(),
+          owner_user_id: null,
+        },
+        now
+      )
+    ).toBe(true);
+  });
+
+  it("returns false before HARD_GATE_DATE even when trial mathematically expired", () => {
+    // pre-hard-gate: dashboard banner only, no enforcement
+    const beforeHardGate = new Date("2026-04-25T00:00:00Z");
+    expect(
+      isTrialHardGateExpired(
+        {
+          created_at: new Date("2026-03-01T00:00:00Z").toISOString(),
+          stripe_subscription_id: null,
+          trial_extended_until: null,
+          owner_user_id: null,
+        },
+        beforeHardGate
+      )
+    ).toBe(false);
+  });
+
+  it("returns false for null/undefined profile (no accidental lockout)", () => {
+    expect(isTrialHardGateExpired(null, now)).toBe(false);
+    expect(isTrialHardGateExpired(undefined, now)).toBe(false);
+  });
+
+  it("returns false when created_at is null (defensive)", () => {
+    expect(
+      isTrialHardGateExpired(
+        {
+          created_at: null,
+          stripe_subscription_id: null,
+          trial_extended_until: null,
+          owner_user_id: null,
+        },
+        now
+      )
+    ).toBe(false);
   });
 });
