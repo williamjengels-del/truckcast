@@ -40,7 +40,7 @@ import type { Event, WeatherType } from "@/lib/database.types";
  * pipeline runs through cookie + service paths. Keep this single
  * source of truth — the route + service wrappers should not diverge.
  */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+ 
 export async function recalculateForUser(
   userId: string,
   // eslint-disable-next-line @typescript-eslint/no-explicit-any

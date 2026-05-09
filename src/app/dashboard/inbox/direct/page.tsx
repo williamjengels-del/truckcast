@@ -60,7 +60,7 @@ export default function BookingsPage() {
   // effectiveUserId is the precise signal for scope flips; load itself
   // is useCallback-stable but kept in the deps for lint correctness.
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
+     
     load();
   }, [load, effectiveUserId]);
 

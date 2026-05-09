@@ -278,7 +278,7 @@ export function EventForm({
   // When the dialog opens (or re-opens for a different event), sync ALL state from
   // initialData. This is required because the EventForm is always-mounted (needed for
   // Base UI dialog animations), so useState initializers only run once with initialData=null.
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+   
   useEffect(() => {
     if (!open) return;
     setIsPrivate(initialData?.is_private ?? false);
