@@ -18,8 +18,6 @@ export interface JourneyContext {
   };
 }
 
-const TODAY = new Date().toISOString().split("T")[0];
-
 const NEXT_STEPS: Record<JourneyState, { label: string; href: string; description: string }> = {
   new_user: {
     label: "Add your first event",
@@ -64,7 +62,13 @@ export function computeJourneyState(
       (e.net_sales !== null && e.net_sales > 0) ||
       (e.event_mode === "catering" && (e.invoice_revenue ?? 0) > 0)
   ).length;
-  const hasUpcoming = events.some((e) => e.event_date > TODAY);
+  // Compute "today" per call, NOT at module load. The previous
+  // module-level `const TODAY = new Date().toISOString().split("T")[0]`
+  // was frozen at server boot and drifted forever — Vercel cold-start
+  // would mask it briefly but warm instances would compound. Detected
+  // 2026-05-08 deep-dive timezone audit.
+  const todayStr = new Date().toISOString().split("T")[0];
+  const hasUpcoming = events.some((e) => e.event_date > todayStr);
 
   let state: JourneyState;
 
