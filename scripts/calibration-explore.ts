@@ -181,12 +181,9 @@ async function main() {
         const hi = r.point + kHi * (r.hi50 - r.point);
         return r.actual >= lo && r.actual <= hi;
       }).length;
-      // Closest to 80% AND prefer narrowest (sum of multipliers).
-      const cov80 = c80 / records.length;
-      const dist80 = Math.abs(cov80 - 0.80);
-      const cov50 = c50 / records.length;
-      const dist50 = Math.abs(cov50 - 0.50);
       // Track only points that hit the target band, prefer narrowest.
+      const cov80 = c80 / records.length;
+      const cov50 = c50 / records.length;
       if (cov80 >= 0.78 && cov80 <= 0.82) {
         const width = kLo + kHi;
         const bestWidth = bestPair.kLo + bestPair.kHi;
