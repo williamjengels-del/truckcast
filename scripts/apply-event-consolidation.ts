@@ -52,7 +52,7 @@ main().catch((err) => {
 // True-duplicate merges. Each entry: { from: [old names], to: canonical }.
 // Names compared case-insensitively after trim.
 const NAME_MERGES: Array<{ from: string[]; to: string }> = [
-  { from: ["Night at the Zoo"], to: "Jammin' at the Zoo" },
+  { from: ["Jammin' at the Zoo", "Jammin at the Zoo", "Jammin'  at the Zoo"], to: "Night at the Zoo" },
   { from: ["Finally Fridays", "Finally Friday"], to: "Laumeier Fridays" },
   {
     from: ["St. Patrick's Day Parade"],
@@ -87,6 +87,9 @@ const VENUE_TIME_RULES: VenueTimeRule[] = [
   { pattern: /^harvest\s+fest/i, setup: "10:00", start: "11:00", end: "17:00", label: "Harvest Fest" },
   { pattern: /^grub\s+n\s+groove/i, setup: "11:00", start: "14:00", end: "22:00", label: "Grub n Groove" },
   { pattern: /^food\s+truck\s+fridays?$/i, setup: "15:00", start: "16:00", end: "20:00", label: "Food Truck Fridays" },
+  { pattern: /^mercy\s+hospital\s+dinner/i, setup: "17:00", start: "18:00", end: "23:00", label: "Mercy Hospital Dinner" },
+  { pattern: /^lunch\s+on\s+the\s+landing/i, setup: "10:00", start: "11:00", end: "13:00", label: "Lunch on the Landing" },
+  { pattern: /^laumeier\s+fridays?/i, setup: "15:00", start: "16:00", end: "20:00", label: "Laumeier Fridays" },
 ];
 
 // Multi-day events with per-day-of-cluster time patterns. Each rule
