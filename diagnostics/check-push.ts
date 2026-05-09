@@ -1,4 +1,4 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
+ 
 // Diagnostic: inspect Julian's push_subscriptions row.
 // Run: npx tsx --env-file=.env.local diagnostics/check-push.ts
 

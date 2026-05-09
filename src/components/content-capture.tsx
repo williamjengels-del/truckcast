@@ -48,10 +48,16 @@ export function ContentCapture({ eventId, initialValue }: Props) {
     return () => {
       if (timeoutRef.current) clearTimeout(timeoutRef.current);
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+     
   }, [value, eventId]);
 
-  // Brief "Saved" pip — fades out 2s after each save.
+  // Brief "Saved" pip — fades out 2s after each save. Uses Date.now()
+  // during render which the lint flags as impure; intentional here
+  // because the pip is a 2s-window UI hint and re-renders triggered by
+  // unrelated state changes naturally re-evaluate. A setTimeout-driven
+  // boolean would also work but adds another effect for a transient
+  // hint.
+  // eslint-disable-next-line react-hooks/purity -- intentional 2s-window UI hint, re-evaluates on any render
   const showSaved = savedAt !== null && Date.now() - savedAt < 2000;
 
   return (

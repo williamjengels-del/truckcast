@@ -93,7 +93,7 @@ function PosSettingsContent() {
   // switching from self to target leaves pos connections + profile
   // showing the admin's data until a manual page refresh.
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
+     
     loadData();
   }, [loadData, effectiveUserId]);
 
