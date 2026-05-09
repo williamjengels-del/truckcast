@@ -1,11 +1,43 @@
 "use server";
 
-import { createClient } from "@/lib/supabase/server";
 import { revalidatePath } from "next/cache";
 import { recalculateForUser } from "@/lib/recalculate";
 import { autoClassifyWeather } from "@/lib/weather";
 import { canonicalizeCityAndState } from "@/lib/city-normalize";
+import { resolveScopedSupabase, type DashboardScope } from "@/lib/dashboard-scope";
 import type { Event } from "@/lib/database.types";
+
+// M-3 fix (2026-05-09): every server action below resolves through
+// resolveScopedSupabase() so manager + impersonation + normal sessions
+// all write under the correct user_id. Pre-fix, every action did
+// `user_id: user.id` directly — manager INSERTs got RLS-rejected
+// (their own id != owner_user_id) and the Premium "Add a manager"
+// feature was effectively non-functional.
+//
+// Conventions:
+//   - scope.userId is the OWNER's id for manager sessions, the user's
+//     own id for normal sessions, the target's id for impersonation.
+//   - scope.realUserId is the actor's id (the manager themselves, or
+//     the admin doing the impersonation). Use for audit trails.
+//   - scope.client is RLS-authed for normal/manager, service-role for
+//     impersonation. RLS policies on events + event_performance now
+//     cover the manager case via team_members lookup; service-role
+//     bypasses for impersonation.
+//   - recalculateForUser(scope.userId) — recalc writes against owner's
+//     event_performance (RLS extended in 20260509000005).
+//
+// Bulk-destructive actions (deleteAllEvents) remain owner-only by an
+// explicit scope.kind === "normal" check, even though the underlying
+// RLS would let managers run them. "Delete every event your owner has"
+// is policy-grade dangerous and shouldn't be fireable from a manager
+// session.
+
+function requireWritableScope(scope: DashboardScope) {
+  if (scope.kind === "unauthorized") {
+    throw new Error("Not authenticated");
+  }
+  return scope;
+}
 
 export type EventFormData = {
   event_name: string;
@@ -53,15 +85,14 @@ export type EventFormData = {
 };
 
 export async function createEvent(formData: EventFormData) {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  if (!user) throw new Error("Not authenticated");
+  const scope = requireWritableScope(await resolveScopedSupabase());
+  const { client: supabase, userId } = scope as Exclude<
+    DashboardScope,
+    { kind: "unauthorized" }
+  >;
 
   const insertData: Record<string, unknown> = {
-    user_id: user.id,
+    user_id: userId,
     event_name: formData.event_name,
     event_date: formData.event_date,
     booked: formData.booked ?? true,
@@ -157,19 +188,19 @@ export async function createEvent(formData: EventFormData) {
   revalidatePath("/dashboard");
   revalidatePath("/dashboard/performance");
 
-  // Recalculate performance and forecasts in the background
-  recalculateForUser(user.id).catch(() => {});
+  // Recalculate performance and forecasts in the background — for
+  // the OWNER's data, regardless of who triggered the action.
+  recalculateForUser(userId).catch(() => {});
 
   return data as Event;
 }
 
 export async function updateEvent(id: string, formData: Partial<EventFormData>) {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  if (!user) throw new Error("Not authenticated");
+  const scope = requireWritableScope(await resolveScopedSupabase());
+  const { client: supabase, userId } = scope as Exclude<
+    DashboardScope,
+    { kind: "unauthorized" }
+  >;
 
   const updateData: Record<string, unknown> = {};
 
@@ -193,8 +224,8 @@ export async function updateEvent(id: string, formData: Partial<EventFormData>) 
     if (!("state" in formData) && extractedState) {
       // Operator didn't touch state; populate from the suffix we just
       // peeled off the city string. (When formData.state IS provided,
-      // the existing loop at line 176 has already copied it to
-      // updateData and the explicit value wins.)
+      // the existing loop above has already copied it to updateData
+      // and the explicit value wins.)
       updateData.state = extractedState;
     }
   }
@@ -212,7 +243,7 @@ export async function updateEvent(id: string, formData: Partial<EventFormData>) 
       .from("events")
       .select("city, state, event_date, latitude, longitude")
       .eq("id", id)
-      .eq("user_id", user.id)
+      .eq("user_id", userId)
       .single();
     const resolvedCity = newCity ?? current?.city;
     const resolvedDate = newDate ?? current?.event_date;
@@ -240,7 +271,7 @@ export async function updateEvent(id: string, formData: Partial<EventFormData>) 
     .from("events")
     .update(updateData)
     .eq("id", id)
-    .eq("user_id", user.id)
+    .eq("user_id", userId)
     .select()
     .single();
 
@@ -249,7 +280,7 @@ export async function updateEvent(id: string, formData: Partial<EventFormData>) 
   revalidatePath("/dashboard/events");
   revalidatePath("/dashboard");
   revalidatePath("/dashboard/performance");
-  recalculateForUser(user.id).catch(() => {});
+  recalculateForUser(userId).catch(() => {});
   return data as Event;
 }
 
@@ -265,11 +296,11 @@ export async function appendInServiceNote(eventId: string, text: string) {
   const trimmed = text.trim();
   if (!trimmed) throw new Error("Note text required");
 
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) throw new Error("Not authenticated");
+  const scope = requireWritableScope(await resolveScopedSupabase());
+  const { client: supabase, userId } = scope as Exclude<
+    DashboardScope,
+    { kind: "unauthorized" }
+  >;
 
   // Read-modify-write — Supabase doesn't expose jsonb_array_append on
   // the JS client. RLS keeps this scoped to the operator's own row.
@@ -277,7 +308,7 @@ export async function appendInServiceNote(eventId: string, text: string) {
     .from("events")
     .select("in_service_notes")
     .eq("id", eventId)
-    .eq("user_id", user.id)
+    .eq("user_id", userId)
     .single();
   if (readErr) throw new Error(readErr.message);
 
@@ -290,7 +321,7 @@ export async function appendInServiceNote(eventId: string, text: string) {
     .from("events")
     .update({ in_service_notes: next })
     .eq("id", eventId)
-    .eq("user_id", user.id);
+    .eq("user_id", userId);
   if (writeErr) throw new Error(writeErr.message);
 
   revalidatePath("/dashboard");
@@ -310,11 +341,11 @@ export async function saveAfterEventSummary(
     what_id_change: string | null;
   }
 ) {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) throw new Error("Not authenticated");
+  const scope = requireWritableScope(await resolveScopedSupabase());
+  const { client: supabase, userId } = scope as Exclude<
+    DashboardScope,
+    { kind: "unauthorized" }
+  >;
 
   const update: Record<string, unknown> = { after_event_summary: summary };
   // If the operator entered a final sales number during wrap-up,
@@ -329,12 +360,12 @@ export async function saveAfterEventSummary(
     .from("events")
     .update(update)
     .eq("id", eventId)
-    .eq("user_id", user.id);
+    .eq("user_id", userId);
   if (error) throw new Error(error.message);
 
   revalidatePath("/dashboard");
   revalidatePath("/dashboard/events");
-  recalculateForUser(user.id).catch(() => {});
+  recalculateForUser(userId).catch(() => {});
 }
 
 /**
@@ -343,57 +374,55 @@ export async function saveAfterEventSummary(
  * latest write wins.
  */
 export async function updateContentCapture(eventId: string, text: string) {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) throw new Error("Not authenticated");
+  const scope = requireWritableScope(await resolveScopedSupabase());
+  const { client: supabase, userId } = scope as Exclude<
+    DashboardScope,
+    { kind: "unauthorized" }
+  >;
 
   const { error } = await supabase
     .from("events")
     .update({ content_capture_notes: text || null })
     .eq("id", eventId)
-    .eq("user_id", user.id);
+    .eq("user_id", userId);
   if (error) throw new Error(error.message);
 
   revalidatePath("/dashboard");
 }
 
 export async function deleteEvent(id: string) {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  if (!user) throw new Error("Not authenticated");
+  const scope = requireWritableScope(await resolveScopedSupabase());
+  const { client: supabase, userId } = scope as Exclude<
+    DashboardScope,
+    { kind: "unauthorized" }
+  >;
 
   const { error } = await supabase
     .from("events")
     .delete()
     .eq("id", id)
-    .eq("user_id", user.id);
+    .eq("user_id", userId);
 
   if (error) throw new Error(error.message);
 
   revalidatePath("/dashboard/events");
   revalidatePath("/dashboard");
   revalidatePath("/dashboard/performance");
-  recalculateForUser(user.id).catch(() => {});
+  recalculateForUser(userId).catch(() => {});
 }
 
 export async function updateEventSales(id: string, netSales: number) {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  if (!user) throw new Error("Not authenticated");
+  const scope = requireWritableScope(await resolveScopedSupabase());
+  const { client: supabase, userId } = scope as Exclude<
+    DashboardScope,
+    { kind: "unauthorized" }
+  >;
 
   const { data, error } = await supabase
     .from("events")
     .update({ net_sales: netSales })
     .eq("id", id)
-    .eq("user_id", user.id)
+    .eq("user_id", userId)
     .select()
     .single();
 
@@ -402,7 +431,7 @@ export async function updateEventSales(id: string, netSales: number) {
   revalidatePath("/dashboard/events");
   revalidatePath("/dashboard");
   revalidatePath("/dashboard/performance");
-  recalculateForUser(user.id).catch(() => {});
+  recalculateForUser(userId).catch(() => {});
   return data as Event;
 }
 
@@ -415,12 +444,11 @@ export async function dismissFlaggedEvent(
   id: string,
   reason: "disrupted" | "charity"
 ) {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  if (!user) throw new Error("Not authenticated");
+  const scope = requireWritableScope(await resolveScopedSupabase());
+  const { client: supabase, userId } = scope as Exclude<
+    DashboardScope,
+    { kind: "unauthorized" }
+  >;
 
   const updateData: Record<string, unknown> =
     reason === "disrupted"
@@ -431,27 +459,37 @@ export async function dismissFlaggedEvent(
     .from("events")
     .update(updateData)
     .eq("id", id)
-    .eq("user_id", user.id);
+    .eq("user_id", userId);
 
   if (error) throw new Error(error.message);
 
   revalidatePath("/dashboard/events");
   revalidatePath("/dashboard");
-  recalculateForUser(user.id).catch(() => {});
+  recalculateForUser(userId).catch(() => {});
 }
 
 export async function deleteAllEvents() {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const scope = requireWritableScope(await resolveScopedSupabase());
 
-  if (!user) throw new Error("Not authenticated");
+  // Owner-only. Even though manager RLS allows DELETE on individual
+  // events (migration 20260509000005), bulk wipe is a policy-grade
+  // destructive action and a manager session shouldn't be able to fire
+  // it. Surfacing kind === "manager" as a different error makes the
+  // refusal explicit instead of silently no-op'ing the call.
+  if (scope.kind === "manager") {
+    throw new Error(
+      "Only the owner can delete all events. Ask the account owner to perform this action."
+    );
+  }
+  const { client: supabase, userId } = scope as Exclude<
+    DashboardScope,
+    { kind: "unauthorized" | "manager" }
+  >;
 
   const { error } = await supabase
     .from("events")
     .delete()
-    .eq("user_id", user.id);
+    .eq("user_id", userId);
 
   if (error) throw new Error(error.message);
 
@@ -459,7 +497,7 @@ export async function deleteAllEvents() {
   await supabase
     .from("event_performance")
     .delete()
-    .eq("user_id", user.id);
+    .eq("user_id", userId);
 
   revalidatePath("/dashboard/events");
   revalidatePath("/dashboard");
@@ -474,17 +512,16 @@ export async function getEvents(filters?: {
   booked?: boolean;
   search?: string;
 }) {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  if (!user) throw new Error("Not authenticated");
+  const scope = requireWritableScope(await resolveScopedSupabase());
+  const { client: supabase, userId } = scope as Exclude<
+    DashboardScope,
+    { kind: "unauthorized" }
+  >;
 
   let query = supabase
     .from("events")
     .select("*")
-    .eq("user_id", user.id)
+    .eq("user_id", userId)
     .order("event_date", { ascending: false });
 
   if (filters?.upcoming) {
@@ -506,18 +543,17 @@ export async function getEvents(filters?: {
 }
 
 export async function getEvent(id: string) {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  if (!user) throw new Error("Not authenticated");
+  const scope = requireWritableScope(await resolveScopedSupabase());
+  const { client: supabase, userId } = scope as Exclude<
+    DashboardScope,
+    { kind: "unauthorized" }
+  >;
 
   const { data, error } = await supabase
     .from("events")
     .select("*")
     .eq("id", id)
-    .eq("user_id", user.id)
+    .eq("user_id", userId)
     .single();
 
   if (error) throw new Error(error.message);
