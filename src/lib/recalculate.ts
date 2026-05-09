@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import { calculateEventPerformance } from "@/lib/event-performance";
+import { tryAcquireRecalcLock, releaseRecalcLock } from "@/lib/recalc-lock";
 import {
   calculateForecast,
   calibrateCoefficients,
@@ -57,8 +58,54 @@ export async function recalculateForUser(
    *  this run. Will be 0 when the tier columns migration hasn't been
    *  applied yet (paste-at-merge gate, same pattern as v2). */
   tiersInferred: number;
+  /** True when the lock helper found another recalc in-flight for this
+   *  user and short-circuited. Callers can ignore (fire-and-forget) or
+   *  surface a 202 Accepted (the API route does). */
+  skipped?: boolean;
 }> {
   const supabase = suppliedClient ?? (await createClient());
+
+  // ── Per-user advisory lock (race-1 / race-3 / race-4 / race-6 / race-8) ─
+  // tryAcquireRecalcLock returns 'not-installed' when the migration
+  // hasn't been pasted yet — in that window we proceed without locking
+  // (identical to pre-PR behavior). After paste, the function returns
+  // 'busy' for a duplicate in-flight recalc and we short-circuit.
+  const lockState = await tryAcquireRecalcLock(supabase, userId);
+  if (lockState === "busy") {
+    return {
+      forecastsUpdated: 0,
+      performanceUpdated: 0,
+      weatherClassified: 0,
+      bayesianShadowWritten: 0,
+      tiersInferred: 0,
+      skipped: true,
+    };
+  }
+
+  try {
+    return await recalculateForUserUnlocked(userId, supabase);
+  } finally {
+    if (lockState === "acquired") {
+      await releaseRecalcLock(supabase, userId);
+    }
+  }
+}
+
+// Inner body of the recalc — wrapped by recalculateForUser which
+// handles locking. Split into its own function so the try/finally
+// in the outer wrapper stays readable. All call sites use the public
+// recalculateForUser entry point above.
+async function recalculateForUserUnlocked(
+  userId: string,
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  supabase: any
+): Promise<{
+  forecastsUpdated: number;
+  performanceUpdated: number;
+  weatherClassified: number;
+  bayesianShadowWritten: number;
+  tiersInferred: number;
+}> {
 
   // Probe for optional column families that depend on paste-at-merge
   // migrations. Probe once per recalc rather than failing per event.
