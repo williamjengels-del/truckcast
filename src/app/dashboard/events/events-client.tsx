@@ -67,6 +67,7 @@ import {
 } from "@/app/dashboard/events/actions";
 import { WEATHER_COEFFICIENTS, US_STATE_NAMES } from "@/lib/constants";
 import { cityGeocodeCandidates } from "@/lib/weather";
+import { csvSafeDocument } from "@/lib/csv-safe";
 import type { Event } from "@/lib/database.types";
 import type { EventFormData } from "@/app/dashboard/events/actions";
 import { DataImportTrigger } from "@/components/data-import-guide";
@@ -1993,13 +1994,17 @@ export function EventsClient({ initialEvents, userId = "", businessName = "", us
         e.sales_minimum ?? "",
         e.event_weather ?? "",
         e.anomaly_flag ?? "",
-        (e.notes ?? "").replace(/"/g, '""'),
+        e.notes ?? "",
       ];
     });
 
-    const csv = [headers, ...rows]
-      .map((row) => row.map((cell) => `"${cell}"`).join(","))
-      .join("\n");
+    // csvSafeDocument handles formula-injection prefix + RFC 4180
+    // double-quote escape on every cell. Previously we only escaped
+    // notes — other text fields containing `"` would silently produce
+    // malformed CSV. Worse, an attacker-planted Toast/Square value
+    // starting with `=`/`+`/`-`/`@` would execute as a formula when
+    // the operator opens their own export in Excel/Sheets.
+    const csv = csvSafeDocument([headers, ...rows]);
 
     const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
     const url = URL.createObjectURL(blob);
