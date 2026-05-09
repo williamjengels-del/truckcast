@@ -67,15 +67,21 @@ export async function POST(req: Request) {
   const result = await sendPushToSubscriptions(subs, payload);
 
   // Clean up dead endpoints so we don't keep hammering them.
+  // user_id scoping is critical: two users could theoretically share
+  // an endpoint string (rare, but possible if a shared device is
+  // reused across accounts or if cleanup logic ever leaks endpoints
+  // from another user's lookup). Without this filter, the service-
+  // role delete would remove other users' subs to the same endpoint.
   if (result.invalidEndpoints.length > 0) {
     await service
       .from("push_subscriptions")
       .delete()
+      .eq("user_id", userId)
       .in("endpoint", result.invalidEndpoints);
   }
 
   // Touch last_used_at for surviving subs so we can see which devices are
-  // actually receiving pushes.
+  // actually receiving pushes. Same user_id-scope rationale as above.
   const survivingEndpoints = subs
     .map((s) => s.endpoint)
     .filter((e) => !result.invalidEndpoints.includes(e));
@@ -83,6 +89,7 @@ export async function POST(req: Request) {
     await service
       .from("push_subscriptions")
       .update({ last_used_at: new Date().toISOString() })
+      .eq("user_id", userId)
       .in("endpoint", survivingEndpoints);
   }
 

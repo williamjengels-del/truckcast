@@ -348,10 +348,14 @@ async function pushOperator(
   );
 
   // Reuse the same dead-endpoint cleanup pattern as book/submit.
+  // user_id scope: see book/submit route for the same rationale —
+  // service-role delete must filter by user_id so a shared endpoint
+  // string can't cause cross-user removal.
   if (result.invalidEndpoints.length > 0) {
     await service
       .from("push_subscriptions")
       .delete()
+      .eq("user_id", operatorUserId)
       .in("endpoint", result.invalidEndpoints);
   }
   const survivingEndpoints = (subs as PushSubscriptionRow[])
@@ -361,6 +365,7 @@ async function pushOperator(
     await service
       .from("push_subscriptions")
       .update({ last_used_at: new Date().toISOString() })
+      .eq("user_id", operatorUserId)
       .in("endpoint", survivingEndpoints);
   }
 }
