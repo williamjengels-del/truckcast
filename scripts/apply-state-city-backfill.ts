@@ -150,7 +150,7 @@ async function main() {
       oldCity,
       oldState
     );
-    let newCity = nullIfEmpty(canonCity);
+    const newCity = nullIfEmpty(canonCity);
     let newState: string | null = canonState;
 
     // Step 2: STATE_DEFAULT — if state is still null after extraction

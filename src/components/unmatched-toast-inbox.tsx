@@ -94,6 +94,12 @@ export function UnmatchedToastInbox() {
   }, []);
 
   useEffect(() => {
+    // Lint flags this as setState-in-effect — the loaders end up
+    // calling setState async after their fetches resolve. This is the
+    // canonical "load data on mount" pattern; the actual setStates
+    // happen on the post-fetch microtask, not synchronously inside the
+    // effect, so no real cascading-render risk.
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- canonical mount-time data load
     loadPayments();
     loadEvents();
   }, [loadPayments, loadEvents]);

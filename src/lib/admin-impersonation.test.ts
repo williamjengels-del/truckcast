@@ -127,7 +127,8 @@ describe("verifyImpersonationCookie — field validation", () => {
     // Construct a cookie with a payload that has only partial fields.
     // We have to reach into the wire format to do this — emulate what a
     // poorly-written forger might send.
-    const crypto = require("crypto") as typeof import("crypto");
+    // eslint-disable-next-line @typescript-eslint/no-require-imports -- vitest CJS test env, dynamic require keeps the import out of module scope
+    const crypto: typeof import("crypto") = require("crypto");
     const partial = { t: TARGET_ID, a: ADMIN_ID }; // missing s and e
     const payloadB64 = Buffer.from(JSON.stringify(partial))
       .toString("base64")
