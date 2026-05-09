@@ -117,6 +117,18 @@ export async function GET(request: NextRequest) {
         continue;
       }
 
+      // Load operator's timezone for date attribution. Without this,
+      // aggregateByDate falls back to its America/Chicago default —
+      // PNW operators' late-night orders silently land on the wrong
+      // day in cron, but on the right day for manual sync (which loads
+      // profile.timezone). Surfaced 2026-05-08 deep-dive.
+      const { data: profile } = await serviceClient
+        .from("profiles")
+        .select("timezone")
+        .eq("id", connection.user_id)
+        .single();
+      const operatorTimezone = profile?.timezone ?? "America/Chicago";
+
       // Fetch orders for yesterday
       const orders = await fetchSquareOrders(
         accessToken,
@@ -125,7 +137,7 @@ export async function GET(request: NextRequest) {
         targetDate
       );
 
-      const dailySales = aggregateByDate(orders);
+      const dailySales = aggregateByDate(orders, { timeZone: operatorTimezone });
 
       const eventsUpdated = await matchAndUpdateSales(
         connection.user_id,
