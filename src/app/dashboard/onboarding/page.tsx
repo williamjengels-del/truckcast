@@ -44,10 +44,18 @@ import Link from "next/link";
 // (Pro+ tier, no POS connection yet). The right moment to ask about
 // POS automation is when the operator has just done the work that POS
 // would have automated — not at signup.
+// Hard-gate date — pre-this-date, trial-expired only shows the banner.
+// Mirrors HARD_GATE_DATE in src/lib/supabase/middleware.ts. Both should
+// reference the same constant ideally; consolidating is a future
+// cleanup once the wizard moves to a server component.
+const HARD_GATE_DATE = new Date("2026-05-01T00:00:00Z");
+const TRIAL_DAYS = 14;
+
 export default function OnboardingPage() {
   const [step, setStep] = useState(1);
   const TOTAL_STEPS = 3;
   const [loading, setLoading] = useState(false);
+  const [trialExpired, setTrialExpired] = useState(false);
   const [profile, setProfile] = useState({
     business_name: "",
     city: "",
@@ -73,7 +81,9 @@ export default function OnboardingPage() {
       if (!user) return;
       const { data } = await supabase
         .from("profiles")
-        .select("business_name, city, state, timezone, onboarding_completed")
+        .select(
+          "business_name, city, state, timezone, onboarding_completed, created_at, stripe_subscription_id, trial_extended_until"
+        )
         .eq("id", user.id)
         .single();
 
@@ -85,6 +95,30 @@ export default function OnboardingPage() {
       if (data?.onboarding_completed) {
         router.replace("/dashboard");
         return;
+      }
+
+      // om-3 (O-5): detect trial-expired state so the wizard renders
+      // an inline "trial expired — upgrade now" banner with a link to
+      // /dashboard/upgrade. Pre-fix, an operator in this state had no
+      // visible exit from the wizard. Detection mirrors the middleware
+      // hard-gate logic (HARD_GATE_DATE + 14-day window + admin
+      // extension). Manager check is unnecessary here — managers don't
+      // hit this page (it's in MANAGER_BLOCKED_PATHS).
+      if (data && !data.stripe_subscription_id) {
+        const now = new Date();
+        const extendedUntil = data.trial_extended_until
+          ? new Date(data.trial_extended_until)
+          : null;
+        const stillExtended = extendedUntil && extendedUntil > now;
+        if (!stillExtended && data.created_at && now >= HARD_GATE_DATE) {
+          const trialEnd = new Date(
+            new Date(data.created_at).getTime() +
+              TRIAL_DAYS * 24 * 60 * 60 * 1000
+          );
+          if (now > trialEnd) {
+            setTrialExpired(true);
+          }
+        }
       }
 
       const detectedTimezone = detectBrowserTimezone();
@@ -194,6 +228,33 @@ export default function OnboardingPage() {
           Let&apos;s get your calendar set up in a few quick steps
         </p>
       </div>
+
+      {/* om-3 (O-5): trial-expired exit. Pre-fix, an operator with an
+          expired trial AND incomplete onboarding had no path to the
+          upgrade page — middleware bounced them back here. This banner
+          is the visible escape hatch. Operator can still finish setup
+          (they'll need it post-upgrade) or jump straight to billing. */}
+      {trialExpired && (
+        <div className="mb-6 rounded-lg border border-brand-orange/40 bg-brand-orange/5 p-4">
+          <div className="flex items-start gap-3">
+            <div className="flex-1">
+              <h2 className="font-semibold text-foreground">
+                Your free trial has ended
+              </h2>
+              <p className="mt-1 text-sm text-muted-foreground">
+                Subscribe to keep using VendCast. You can finish setup
+                first or upgrade now — your work here will be saved
+                either way.
+              </p>
+            </div>
+            <Link href="/dashboard/upgrade">
+              <Button size="sm" className="shrink-0">
+                Upgrade now
+              </Button>
+            </Link>
+          </div>
+        </div>
+      )}
 
       {/* Progress */}
       <div className="flex items-center justify-center gap-2 mb-8">
