@@ -290,12 +290,25 @@ export function parseDate(dateStr: string): string | null {
     if (iso) return iso;
   }
 
-  const parsed = new Date(s);
-  if (!isNaN(parsed.getTime())) {
-    const y = parsed.getFullYear();
-    const m = String(parsed.getMonth() + 1).padStart(2, "0");
-    const d = String(parsed.getDate()).padStart(2, "0");
-    return `${y}-${m}-${d}`;
+  // Long-format fallback (e.g. "September 14, 2024", "Sep 14 2024").
+  // We only fall through to `new Date()` when the input contains an
+  // English month name — those shapes are deterministic in V8.
+  // Numeric-only inputs that didn't match the explicit shapes above
+  // are NOT passed to `new Date()` because V8's lax parser would
+  // silently mis-classify ambiguous strings like "02-03-2024" or
+  // "2024-13-01". Better to return null + surface a row error.
+  const hasMonthName =
+    /\b(jan(uary)?|feb(ruary)?|mar(ch)?|apr(il)?|may|jun(e)?|jul(y)?|aug(ust)?|sep(t(ember)?)?|oct(ober)?|nov(ember)?|dec(ember)?)\b/i.test(
+      s
+    );
+  if (hasMonthName) {
+    const parsed = new Date(s);
+    if (!isNaN(parsed.getTime())) {
+      const y = parsed.getFullYear();
+      const m = String(parsed.getMonth() + 1).padStart(2, "0");
+      const d = String(parsed.getDate()).padStart(2, "0");
+      return `${y}-${m}-${d}`;
+    }
   }
   return null;
 }
@@ -557,7 +570,12 @@ export interface ParsedCsv {
 // contract so downstream field parsers are unaffected. Interior
 // whitespace (including embedded newlines) inside a cell is preserved.
 export function parseCSV(text: string): ParsedCsv {
-  const result = Papa.parse<string[]>(text, {
+  // Strip a leading UTF-8 BOM (`﻿`). Files saved from Excel /
+  // Google Sheets in UTF-8 mode start with one; without stripping,
+  // Papa.parse keeps it as part of the first header string and every
+  // matchHeader lookup against that column silently fails.
+  const cleanText = text.replace(/^﻿/, "");
+  const result = Papa.parse<string[]>(cleanText, {
     skipEmptyLines: "greedy",
   });
   const data = result.data;
