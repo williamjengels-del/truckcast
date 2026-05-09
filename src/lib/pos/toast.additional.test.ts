@@ -3,8 +3,21 @@
  * Supplements the main toast.test.ts.
  */
 
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi, beforeAll, afterAll } from "vitest";
 import { parseToastEmail } from "./toast";
+
+// Freeze time so the missing-year-defaults tests below are stable
+// across the calendar. pos-9 (in toast.ts) rolls year back when the
+// resulting date is in the future relative to NOW; without a fixed
+// clock the rollback would fire on different inputs depending on
+// wall-clock date.
+beforeAll(() => {
+  vi.useFakeTimers();
+  vi.setSystemTime(new Date("2026-05-09T12:00:00Z"));
+});
+afterAll(() => {
+  vi.useRealTimers();
+});
 
 describe("parseToastEmail — edge cases", () => {
   it("handles 'Fwd: Fwd:' double-forward prefix", () => {
@@ -84,12 +97,24 @@ Tax $180.00`;
     expect(result.netSales).toBeCloseTo(2450.00);
   });
 
-  it("parses date without year and defaults to current year", () => {
-    const currentYear = new Date().getFullYear();
-    const text = `Daily Summary - Thursday, August 15
+  it("parses date without year and defaults to current year (when past)", () => {
+    // March 1 is past May 9 (frozen "today"), so 2026-03-01 is a valid
+    // past date — current year applies. pos-9 only rolls back when the
+    // would-be date is in the future.
+    const text = `Daily Summary - Sunday, March 1
 Net sales $340.00`;
     const result = parseToastEmail(text);
-    expect(result.date).toMatch(new RegExp(`^${currentYear}-08-15$`));
+    expect(result.date).toBe("2026-03-01");
+  });
+
+  it("pos-9: year-less subject for a future date rolls back to prior year", () => {
+    // August 15 > May 9 → 2026-08-15 would be future. Toast doesn't
+    // send emails for future events; almost certainly last year's
+    // email being reprocessed. Heuristic drops to 2025-08-15.
+    const text = `Daily Summary - Friday, August 15
+Net sales $340.00`;
+    const result = parseToastEmail(text);
+    expect(result.date).toBe("2025-08-15");
   });
 
   it("returns rawSubject that strips Fwd: prefix", () => {

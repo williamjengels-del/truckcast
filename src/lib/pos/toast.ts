@@ -51,8 +51,26 @@ export function parseToastEmail(rawText: string): ToastParseResult {
     if (subjectMatch) {
       rawSubject = normalized;
       const datePart = subjectMatch[1]; // e.g. "April 3"
-      const yearPart = subjectMatch[2] ?? String(new Date().getFullYear());
-      const parsed = new Date(`${datePart}, ${yearPart}`);
+      // pos-9: when Toast omits the year (e.g. forwarded subject got
+      // the year stripped), default to current year — but if the
+      // resulting date is in the future relative to today, drop one
+      // year. Toast sends end-of-day emails; an email about "April 3"
+      // that arrives after April 3 of the current year and is therefore
+      // valid; if today is March and we see "April 3" without a year,
+      // it's almost certainly last year's email being reprocessed.
+      const now = new Date();
+      let yearGuess = subjectMatch[2]
+        ? Number(subjectMatch[2])
+        : now.getFullYear();
+      let parsed = new Date(`${datePart}, ${yearGuess}`);
+      if (
+        !subjectMatch[2] &&
+        !isNaN(parsed.getTime()) &&
+        parsed.getTime() > now.getTime()
+      ) {
+        yearGuess -= 1;
+        parsed = new Date(`${datePart}, ${yearGuess}`);
+      }
       if (!isNaN(parsed.getTime())) {
         // Defensive: detect day-rollover bugs. `new Date("April 31, 2025")`
         // silently rolls to "May 1" — would attribute Toast revenue to
@@ -89,6 +107,15 @@ export function parseToastEmail(rawText: string): ToastParseResult {
   }
 
   // --- Extract net sales ---
+  // pos-11: tightened to validate proper comma placement + end-of-number
+  // boundary. The prior [\d,]+ accepted "$1,2345.67" → 12345.67 (10x off)
+  // silently. The naive tighter regex without end-boundary still
+  // partially-matched "1,234" out of "1,2345.67" → 1234 (~10000x off).
+  //
+  // The (?![,\d.]) lookahead rejects any residual digit/comma/dot
+  // immediately after the captured value — guarantees we're not
+  // truncating a malformed number.
+  const NET_SALES_VALUE = /\$?((?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d{1,2})?)(?![,\d.])/;
   let netSales: number | null = null;
 
   for (let i = 0; i < lines.length; i++) {
@@ -96,7 +123,7 @@ export function parseToastEmail(rawText: string): ToastParseResult {
 
     // Pattern 1: value on same line — "Net Sales $1,234.56" or "Net Sales: $1,234.56"
     const sameLine = line.match(
-      /(?:total\s+)?net\s+sales[:\s]+\$?([\d,]+(?:\.\d{1,2})?)/i
+      new RegExp(`(?:total\\s+)?net\\s+sales[:\\s]+${NET_SALES_VALUE.source}`, "i")
     );
     if (sameLine) {
       netSales = parseFloat(sameLine[1].replace(/,/g, ""));
@@ -106,7 +133,7 @@ export function parseToastEmail(rawText: string): ToastParseResult {
     // Pattern 2: label on this line, dollar amount on next line (HTML table cells)
     if (/(?:total\s+)?net\s+sales/i.test(line)) {
       const nextLine = lines[i + 1] ?? "";
-      const nextMatch = nextLine.match(/\$?([\d,]+\.\d{2})/);
+      const nextMatch = nextLine.match(NET_SALES_VALUE);
       if (nextMatch) {
         netSales = parseFloat(nextMatch[1].replace(/,/g, ""));
         break;
