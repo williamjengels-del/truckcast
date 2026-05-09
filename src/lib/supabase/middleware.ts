@@ -391,10 +391,18 @@ export async function updateSession(request: NextRequest) {
     //    bounces them between /dashboard and /dashboard/onboarding
     //    forever (browser-side ERR_TOO_MANY_REDIRECTS). Surfaced
     //    2026-05-04 when Rohini hit the loop on real login.
+    //
+    //    om-3 (O-5): trial-exempt paths are ALSO exempt from the
+    //    onboarding gate. Pre-fix: a trial-expired operator who hadn't
+    //    finished onboarding was bounced from /dashboard/upgrade back
+    //    to /dashboard/onboarding — they could never reach the upgrade
+    //    surface. Fix: lets them route to /dashboard/upgrade or
+    //    /dashboard/settings even mid-onboarding.
     if (
       profile &&
       !profile.onboarding_completed &&
       !isOnboardingRoute &&
+      !isTrialExempt &&
       !profile.owner_user_id
     ) {
       const url = request.nextUrl.clone();
