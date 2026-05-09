@@ -181,7 +181,16 @@ export async function DayOfEventBlock({
   // stacks "Up next today," and falls through to tomorrow / future
   // when today is exhausted. Auto-ended audit IDs let us lazily
   // backfill auto_ended_at server-side without a cron.
-  const state = computeDayOfState(bookedFuture, today, Date.now(), timezone);
+  //
+  // `Date.now()` here is safe in this Server Component — it renders
+  // once per request, so the snapshot is stable for the whole render
+  // tree. The react-hooks/purity rule flags it as impure (correct
+  // guidance for client components where re-renders happen mid-session,
+  // but not applicable to RSC). Snapshotting to a local first so the
+  // disable is scoped tightly.
+  // eslint-disable-next-line react-hooks/purity -- Server Component renders once per request; nowMs is request-stable.
+  const nowMs = Date.now();
+  const state = computeDayOfState(bookedFuture, today, nowMs, timezone);
   if (!state.current) {
     return (
       <Card data-testid="day-of-event-block">
