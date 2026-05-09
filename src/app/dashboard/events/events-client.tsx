@@ -483,10 +483,14 @@ interface ListViewProps {
   // Derived / memoized collections
   initialEvents: Event[];
   tabCounts: TabCounts;
-  /** Post-chip count for the active tab. When this is less than
-   *  `tabCounts[activeTab]`, the chip filter is hiding rows — the
-   *  active tab pill renders "(N of M)" so the operator notices. */
-  activeTabFilteredCount: number;
+  /** Post-chip filtered counts for each tab. When a tab's filtered
+   *  count is less than its total, the tab pill renders "(N of M)" so
+   *  the operator notices that chip filters are hiding rows on that
+   *  tab — even if they're currently looking at a different tab.
+   *  Operator-surfaced 2026-05-06: previously we only hinted on the
+   *  active tab, so switching away from a filtered tab silently lost
+   *  the indicator. */
+  tabFilteredCounts: TabCounts;
   filtered: Event[];
   sorted: Event[];
   weatherMap: Map<string, WeatherForecast>;
@@ -535,7 +539,7 @@ function ListView({
   setDuplicatingEvent,
   initialEvents,
   tabCounts,
-  activeTabFilteredCount,
+  tabFilteredCounts,
   filtered,
   sorted,
   weatherMap,
@@ -590,8 +594,8 @@ function ListView({
           }`}
           onClick={() => handleTabChange("all")}
         >
-          All ({activeTab === "all" && activeTabFilteredCount < tabCounts.all
-            ? `${activeTabFilteredCount} of ${tabCounts.all}`
+          All ({tabFilteredCounts.all < tabCounts.all
+            ? `${tabFilteredCounts.all} of ${tabCounts.all}`
             : tabCounts.all})
         </button>
         <button
@@ -602,8 +606,8 @@ function ListView({
           }`}
           onClick={() => handleTabChange("upcoming")}
         >
-          Upcoming ({activeTab === "upcoming" && activeTabFilteredCount < tabCounts.upcoming
-            ? `${activeTabFilteredCount} of ${tabCounts.upcoming}`
+          Upcoming ({tabFilteredCounts.upcoming < tabCounts.upcoming
+            ? `${tabFilteredCounts.upcoming} of ${tabCounts.upcoming}`
             : tabCounts.upcoming})
         </button>
         <button
@@ -614,8 +618,8 @@ function ListView({
           }`}
           onClick={() => handleTabChange("past")}
         >
-          Past ({activeTab === "past" && activeTabFilteredCount < tabCounts.past
-            ? `${activeTabFilteredCount} of ${tabCounts.past}`
+          Past ({tabFilteredCounts.past < tabCounts.past
+            ? `${tabFilteredCounts.past} of ${tabCounts.past}`
             : tabCounts.past})
         </button>
         {tabCounts.needs_attention > 0 && (
@@ -629,9 +633,8 @@ function ListView({
           >
             Needs attention
             <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-brand-orange px-1.5 text-[10px] font-bold text-white">
-              {activeTab === "needs_attention" &&
-              activeTabFilteredCount < tabCounts.needs_attention
-                ? `${activeTabFilteredCount} of ${tabCounts.needs_attention}`
+              {tabFilteredCounts.needs_attention < tabCounts.needs_attention
+                ? `${tabFilteredCounts.needs_attention} of ${tabCounts.needs_attention}`
                 : tabCounts.needs_attention}
             </span>
           </button>
@@ -1665,6 +1668,21 @@ export function EventsClient({ initialEvents, userId = "", businessName = "", us
     [tabScopedAll, tabScopedUpcoming, tabScopedPast, tabScopedNeedsAttention]
   );
 
+  // Post-chip counts for ALL tabs (not just the active one). Used by
+  // tab pills to surface "(N of M)" when a filter is hiding rows on a
+  // tab the operator isn't currently looking at. Cheap to compute —
+  // applyChips runs the same predicate the active list uses, just
+  // against each tab-scoped slice. Operator-surfaced 2026-05-06.
+  const tabFilteredCounts: TabCounts = useMemo(
+    () => ({
+      all: applyChips(tabScopedAll, selectedChips, today).length,
+      upcoming: applyChips(tabScopedUpcoming, selectedChips, today).length,
+      past: applyChips(tabScopedPast, selectedChips, today).length,
+      needs_attention: applyChips(tabScopedNeedsAttention, selectedChips, today).length,
+    }),
+    [tabScopedAll, tabScopedUpcoming, tabScopedPast, tabScopedNeedsAttention, selectedChips, today]
+  );
+
   // The active list = tab-scoped events filtered through the chip
   // composition (status chips OR field chips, AND-composed).
   const activeEvents = useMemo(() => {
@@ -2677,7 +2695,7 @@ export function EventsClient({ initialEvents, userId = "", businessName = "", us
             setDuplicatingEvent={setDuplicatingEvent}
             initialEvents={initialEvents}
             tabCounts={tabCounts}
-            activeTabFilteredCount={activeEvents.length}
+            tabFilteredCounts={tabFilteredCounts}
             filtered={filtered}
             sorted={sorted}
             weatherMap={weatherMap}
