@@ -203,6 +203,34 @@ const PRIOR_STRENGTH = {
  *  operator overall median. */
 const INSUFFICIENT_DATA_FLOOR_RATIO = 0.1;
 
+/** Empirical interval-coverage calibration multiplier. Widens credible
+ *  intervals around the log-space median so observed coverage matches
+ *  stated coverage (80% interval covers ~80% of actuals, 50% covers
+ *  ~50%). Derived from a 384-pair forecast-vs-actual audit on
+ *  2026-05-08 (calibration-explore.ts): raw engine intervals covered
+ *  73.4% / 41.4%; symmetric ×1.20 brings coverage into the 75-85% /
+ *  45-55% acceptance bands.
+ *
+ *  Engine emits log-Normal posteriors. Calibration applied in log-space
+ *  around the predictive median (μ_n) — preserves positivity by
+ *  construction and respects the multiplicative shape of the posterior:
+ *    log_low_cal  = μ_n - k * (μ_n - log_low_raw)
+ *    log_high_cal = μ_n + k * (log_high_raw - μ_n)
+ *  In revenue space this is power-law scaling around the median:
+ *    cal_low  = median * (raw_low / median)^k
+ *    cal_high = median * (raw_high / median)^k
+ *  Linear (revenue-space) scaling was tried first and produced negative
+ *  lower bounds for wide intervals where raw_low < point * (1 - 1/k).
+ *
+ *  Same k for 80% and 50% — single dimensionless number, easy to reason
+ *  about. Per-percentile (k_80=1.225, k_50=1.301) was rejected:
+ *  marginally tighter fit, overfits the specific 384-pair sample, adds
+ *  a knob nobody can interpret.
+ *
+ *  Re-tune at quarterly review if measured coverage drifts > 5pp from
+ *  target. Set to 1.00 to disable scaling for ablation tests. */
+const INTERVAL_CALIBRATION_MULTIPLIER = 1.20;
+
 // --- Helpers ---
 
 /** Recency window matching v1's `weightedAverage`. Events within this
@@ -861,11 +889,22 @@ export function calculateBayesianForecast(
   const log25 = predictiveLogQuantile(posterior, 0.25);
   const log75 = predictiveLogQuantile(posterior, 0.75);
 
+  // Empirical coverage calibration — widen intervals in log-space
+  // around the predictive median (posterior.muN). See
+  // INTERVAL_CALIBRATION_MULTIPLIER definition for the audit that
+  // drove the value and for why log-space.
+  const k = INTERVAL_CALIBRATION_MULTIPLIER;
+  const logMedian = posterior.muN;
+  const log10cal = logMedian - k * (logMedian - log10);
+  const log90cal = logMedian + k * (log90 - logMedian);
+  const log25cal = logMedian - k * (logMedian - log25);
+  const log75cal = logMedian + k * (log75 - logMedian);
+
   const adjFactor = dowCoeff * wCoeff * holCoeff;
-  const credibleLow = Math.exp(log10) * adjFactor;
-  const credibleHigh = Math.exp(log90) * adjFactor;
-  const credible50Low = Math.exp(log25) * adjFactor;
-  const credible50High = Math.exp(log75) * adjFactor;
+  const credibleLow = Math.exp(log10cal) * adjFactor;
+  const credibleHigh = Math.exp(log90cal) * adjFactor;
+  const credible50Low = Math.exp(log25cal) * adjFactor;
+  const credible50High = Math.exp(log75cal) * adjFactor;
 
   // Insufficient-data floor (mirrors v1 behavior). Uses the predictive
   // MEDIAN, not the mean, so variance-inflated tails don't mask cases
