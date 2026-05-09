@@ -20,6 +20,11 @@ import {
   getHourlyWeatherForEvent,
   type HourlyWeatherEntry,
 } from "@/lib/weather";
+import {
+  inferTier,
+  computeVenueMediansForTierInference,
+  type EventSizeTier,
+} from "@/lib/event-size-tier";
 import type { Event, WeatherType } from "@/lib/database.types";
 
 /**
@@ -48,16 +53,19 @@ export async function recalculateForUser(
    *  when the shadow-columns migration hasn't been applied yet —
    *  not an error, just a signal that v2 isn't running yet. */
   bayesianShadowWritten: number;
+  /** Number of past events that had `event_size_tier_inferred` written
+   *  this run. Will be 0 when the tier columns migration hasn't been
+   *  applied yet (paste-at-merge gate, same pattern as v2). */
+  tiersInferred: number;
 }> {
   const supabase = suppliedClient ?? (await createClient());
 
-  // Probe for the Bayesian shadow columns once per recalc — they're
-  // optional and gated on a paste-at-merge migration. Until the
-  // operator runs the migration, every v2 write would fail; rather
-  // than 396 failed UPDATEs, we detect the column's existence once
-  // and skip the v2 path entirely if it's missing. After the migration
-  // applies, the next recalc auto-detects and starts writing v2.
+  // Probe for optional column families that depend on paste-at-merge
+  // migrations. Probe once per recalc rather than failing per event.
+  // Same pattern: when the migration applies, the next recalc auto-
+  // detects and starts populating the columns.
   const v2Available = await probeBayesianShadowColumns(supabase);
+  const tierColumnsAvailable = await probeEventSizeTierColumns(supabase);
 
   const { data: events } = await supabase
     .from("events")
@@ -254,11 +262,52 @@ export async function recalculateForUser(
     }
   }
 
+  // Event size tier — populate event_size_tier_inferred for past events
+  // with actuals. Foundation pass: writes the column but the engine
+  // doesn't read tier yet (PR 3 will add the partition logic). Backfills
+  // every past event with revenue on each recalc so threshold tweaks
+  // propagate without requiring a separate one-shot script.
+  let tiersInferred = 0;
+  if (tierColumnsAvailable) {
+    const venueMedians = computeVenueMediansForTierInference(allEvents, today);
+    const pastEventsForTier = allEvents.filter(
+      (e) =>
+        e.event_date < today &&
+        e.booked &&
+        ((e.net_sales !== null && e.net_sales > 0) ||
+          (e.event_mode === "catering" && e.invoice_revenue > 0)) &&
+        e.anomaly_flag !== "disrupted" &&
+        e.anomaly_flag !== "boosted"
+    );
+    const computedAt = new Date().toISOString();
+    for (const event of pastEventsForTier) {
+      const revenue =
+        event.event_mode === "catering"
+          ? event.invoice_revenue ?? 0
+          : event.net_sales ?? 0;
+      const venueMedian = venueMedians.get(event.event_name.toLowerCase().trim());
+      const tier: EventSizeTier | null = inferTier(revenue, venueMedian);
+      // Only update when the inferred value would change. Avoids
+      // pointless writes (and updated_at churn) on stable rows.
+      if (tier !== null && tier !== event.event_size_tier_inferred) {
+        await supabase
+          .from("events")
+          .update({
+            event_size_tier_inferred: tier,
+            event_size_tier_inferred_at: computedAt,
+          })
+          .eq("id", event.id);
+        tiersInferred++;
+      }
+    }
+  }
+
   return {
     forecastsUpdated,
     performanceUpdated: eventNames.length,
     weatherClassified: weatherUpdates.size,
     bayesianShadowWritten,
+    tiersInferred,
   };
 }
 
@@ -405,6 +454,26 @@ async function probeBayesianShadowColumns(supabase: any): Promise<boolean> {
     const { error } = await supabase
       .from("events")
       .select("forecast_bayesian_point")
+      .limit(1);
+    return !error;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Detect whether the event-size-tier migration has been applied. Same
+ * pattern as probeBayesianShadowColumns — paste-at-merge gate. Until
+ * the migration runs, tier writes would 42703 against the missing
+ * column and we skip the tier pass entirely. After the migration
+ * applies, the next recalc auto-detects.
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function probeEventSizeTierColumns(supabase: any): Promise<boolean> {
+  try {
+    const { error } = await supabase
+      .from("events")
+      .select("event_size_tier_inferred")
       .limit(1);
     return !error;
   } catch {
