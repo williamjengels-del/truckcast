@@ -103,9 +103,19 @@ function normalizeTier(raw: string | null | undefined): EventSizeTier | null {
  * eventRevenue (net_sales for food trucks, invoice_revenue for
  * catering) of past events with actuals at the same event_name.
  *
- * 12-month rolling window so the baseline reflects the operator's
- * current draw rather than 3-year-old history that may not represent
- * the venue today.
+ * **All-history**, NOT a rolling window. The 2026-05-08 first-recalc
+ * audit found that a 12-month window left 215 of 384 past events with
+ * no usable median (their event_name had no peer within the year). Tier
+ * is fundamentally a relative-to-venue classification — coverage beats
+ * recency at this layer. Engine partition (PR 3) can decide whether
+ * downstream forecasting should weight recent events more heavily.
+ *
+ * Excludes disrupted / boosted events (their revenue isn't
+ * representative of the venue's typical draw).
+ *
+ * The asOfDate parameter is preserved to bound the median to PAST
+ * events relative to a chosen anchor — useful for backtesting tier
+ * inference. Default is today; recalc passes today implicitly.
  *
  * Returns a map keyed by event_name (lowercased + trimmed) → median.
  * Empty map when no eligible events.
@@ -114,13 +124,9 @@ export function computeVenueMediansForTierInference(
   events: Pick<Event, "event_name" | "event_date" | "net_sales" | "invoice_revenue" | "event_mode" | "anomaly_flag">[],
   asOfDate: string = new Date().toISOString().slice(0, 10)
 ): Map<string, number> {
-  const cutoff = new Date(asOfDate + "T00:00:00");
-  cutoff.setFullYear(cutoff.getFullYear() - 1);
-  const cutoffStr = cutoff.toISOString().slice(0, 10);
-
   const byName = new Map<string, number[]>();
   for (const e of events) {
-    if (e.event_date < cutoffStr || e.event_date > asOfDate) continue;
+    if (e.event_date > asOfDate) continue;
     if (e.anomaly_flag === "disrupted" || e.anomaly_flag === "boosted") continue;
     const revenue =
       e.event_mode === "catering"
