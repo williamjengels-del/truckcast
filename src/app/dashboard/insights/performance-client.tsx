@@ -207,12 +207,12 @@ export function PerformanceClient({ performances }: PerformanceClientProps) {
                 </p>
               </div>
               <div className="flex gap-2 justify-center">
-                <a href="/dashboard/events/import" className="inline-flex items-center gap-1.5 rounded-md bg-primary text-primary-foreground px-3 py-1.5 text-xs font-medium hover:bg-primary/90 transition-colors">
+                <Link href="/dashboard/events/import" className="inline-flex items-center gap-1.5 rounded-md bg-primary text-primary-foreground px-3 py-1.5 text-xs font-medium hover:bg-primary/90 transition-colors">
                   Import events →
-                </a>
-                <a href="/dashboard/events" className="inline-flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-xs font-medium hover:bg-muted transition-colors">
+                </Link>
+                <Link href="/dashboard/events" className="inline-flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-xs font-medium hover:bg-muted transition-colors">
                   Log sales
-                </a>
+                </Link>
               </div>
             </div>
           ) : sorted.length === 0 ? (

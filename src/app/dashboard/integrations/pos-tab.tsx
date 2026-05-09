@@ -1,6 +1,7 @@
 "use client";
 
 import { Suspense, useState, useEffect, useCallback } from "react";
+import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { useImpersonation } from "@/components/impersonation-context";
@@ -195,12 +196,12 @@ function PosSettingsContent() {
         <div className="rounded-md border border-brand-orange/40 bg-brand-orange/5 p-4">
           <p className="text-sm text-foreground">
             POS integrations require a Pro or Premium subscription.{" "}
-            <a
+            <Link
               href="/dashboard/settings"
               className="font-medium text-brand-orange underline-offset-2 hover:underline"
             >
               Upgrade your plan
-            </a>
+            </Link>
           </p>
         </div>
       )}
