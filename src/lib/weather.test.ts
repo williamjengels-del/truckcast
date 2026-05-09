@@ -4,7 +4,7 @@
  */
 
 import { describe, it, expect } from "vitest";
-import { classifyWeather } from "./weather";
+import { classifyWeather, normalizeCityForGeocoding, cityGeocodeCandidates } from "./weather";
 
 describe("classifyWeather", () => {
   // Priority 1: Snow
@@ -83,5 +83,83 @@ describe("classifyWeather", () => {
   // Boundary: Snow takes priority over Rain checks
   it("Snow takes priority over Rain During Event (cold + high precip)", () => {
     expect(classifyWeather({ maxTempF: 30, minTempF: 20, precipitationIn: 1.5, prevDayPrecipIn: 0 })).toBe("Snow");
+  });
+});
+
+describe("normalizeCityForGeocoding", () => {
+  it("strips trailing state abbreviation", () => {
+    expect(normalizeCityForGeocoding("Saint Louis, MO")).toBe("Saint Louis");
+    expect(normalizeCityForGeocoding("Belleville, IL")).toBe("Belleville");
+  });
+
+  it("does NOT swap Saint↔St (the historical bug — see candidates instead)", () => {
+    // Saint Ann is in Open-Meteo as "Saint Ann"; converting to "St Ann"
+    // returned no US results (audit 2026-05-08, 33 events flagged
+    // GEOCODE_FAILED). Keep input form; let candidates handle the swap retry.
+    expect(normalizeCityForGeocoding("Saint Ann")).toBe("Saint Ann");
+    expect(normalizeCityForGeocoding("Saint Peters")).toBe("Saint Peters");
+  });
+
+  it("trims whitespace", () => {
+    expect(normalizeCityForGeocoding("  Saint Louis  ")).toBe("Saint Louis");
+  });
+
+  it("returns empty for empty input", () => {
+    expect(normalizeCityForGeocoding("")).toBe("");
+  });
+});
+
+describe("cityGeocodeCandidates", () => {
+  it("includes both Saint and St forms for a Saint-prefix city", () => {
+    const candidates = cityGeocodeCandidates("Saint Louis");
+    expect(candidates).toContain("Saint Louis");
+    expect(candidates).toContain("St Louis");
+  });
+
+  it("includes both St and Saint forms for an abbreviated input", () => {
+    const candidates = cityGeocodeCandidates("St Charles");
+    expect(candidates).toContain("St Charles");
+    expect(candidates).toContain("Saint Charles");
+  });
+
+  it("Scott AFB aliases to Belleville (military base, not in GeoNames)", () => {
+    expect(cityGeocodeCandidates("Scott Afb")[0]).toBe("Belleville");
+  });
+
+  it("Scott AFB alias is case-insensitive", () => {
+    expect(cityGeocodeCandidates("scott afb")[0]).toBe("Belleville");
+    expect(cityGeocodeCandidates("SCOTT AFB")[0]).toBe("Belleville");
+  });
+
+  it("Central West End aliases to Saint Louis (neighborhood, not city)", () => {
+    expect(cityGeocodeCandidates("Central West End")[0]).toBe("Saint Louis");
+    expect(cityGeocodeCandidates("Central West End Saint Louis")[0]).toBe("Saint Louis");
+  });
+
+  it("alias result also gets Saint↔St swap variants for Open-Meteo lookup", () => {
+    const cwe = cityGeocodeCandidates("Central West End");
+    expect(cwe).toContain("Saint Louis");
+    expect(cwe).toContain("St Louis");
+  });
+
+  it("strips state suffix before generating candidates", () => {
+    const candidates = cityGeocodeCandidates("Saint Louis, MO");
+    expect(candidates).toContain("Saint Louis");
+    expect(candidates).not.toContain("Saint Louis, MO");
+  });
+
+  it("dedupes candidates that collapse to the same string", () => {
+    const candidates = cityGeocodeCandidates("Belleville");
+    expect(candidates).toEqual(["Belleville"]);
+  });
+
+  it("handles empty input", () => {
+    expect(cityGeocodeCandidates("")).toEqual([]);
+    expect(cityGeocodeCandidates("   ")).toEqual([]);
+  });
+
+  it("preserves operator's typing for plain cities", () => {
+    expect(cityGeocodeCandidates("Manchester")[0]).toBe("Manchester");
+    expect(cityGeocodeCandidates("Chicago")[0]).toBe("Chicago");
   });
 });
