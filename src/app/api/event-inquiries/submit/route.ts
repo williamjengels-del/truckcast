@@ -9,6 +9,7 @@ import {
 import { sendPushToSubscriptions, type PushSubscriptionRow } from "@/lib/push";
 import { EVENT_TYPES } from "@/lib/constants";
 import { canonicalizeCity } from "@/lib/city-normalize";
+import { checkRateLimit, clientIpFromRequest } from "@/lib/rate-limit";
 
 /**
  * POST /api/event-inquiries/submit
@@ -150,19 +151,28 @@ export async function POST(req: NextRequest) {
     process.env.SUPABASE_SERVICE_ROLE_KEY!
   );
 
-  // Light IP-based rate limit. Forwarded-For first; falls back to
-  // X-Real-IP, then "unknown" (we won't enforce on traffic we can't
-  // identify — Vercel always sets one of these).
-  const ip =
-    (req.headers.get("x-forwarded-for") ?? "").split(",")[0].trim() ||
-    req.headers.get("x-real-ip") ||
-    "unknown";
+  // email-3: dual-track rate limit. The original implementation only
+  // counted inquiries by email_address — a bot that varies the address
+  // per submit could trivially bypass it. Now we ALSO check IP via
+  // the in-memory bucket so a single IP can't email-bomb the system
+  // even with rotating email addresses.
+  const ip = clientIpFromRequest(req);
+  if (
+    ip !== "unknown" &&
+    !checkRateLimit(`inquiry:${ip}`, RATE_LIMIT_PER_HOUR, 60 * 60 * 1000)
+  ) {
+    return NextResponse.json(
+      { error: "Too many submissions in the last hour. Try again later." },
+      { status: 429, headers: { "Retry-After": "3600" } }
+    );
+  }
+  // Email-based rate limit retained as a defense layer (catches the
+  // shared-IP case where multiple legit submissions are fine but
+  // multiple from the SAME organizer are suspicious). Bots rotating
+  // both IP and email still slip through; that's where CAPTCHA earns
+  // its place.
   if (ip !== "unknown") {
     const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000).toISOString();
-    // We track IP via the organizer_email proxy isn't reliable; keep
-    // it loose for v1 — count any inquiries in the last hour with the
-    // same organizer_email. Bots that vary email per submit slip
-    // through; that's where a CAPTCHA earns its place.
     const { count } = await service
       .from("event_inquiries")
       .select("id", { count: "exact", head: true })

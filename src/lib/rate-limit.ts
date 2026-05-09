@@ -54,6 +54,22 @@ export function checkRateLimit(
 }
 
 /**
+ * Pull a best-effort client IP from a Request's headers. Vercel always
+ * sets one of x-forwarded-for or x-real-ip; "unknown" is the fallback
+ * for local dev or atypical edge configurations. Callers should treat
+ * "unknown" as "skip rate-limit" to avoid blanket-rejecting traffic
+ * we can't identify.
+ */
+export function clientIpFromRequest(req: Request): string {
+  const xff = req.headers.get("x-forwarded-for") ?? "";
+  const first = xff.split(",")[0]?.trim();
+  if (first) return first;
+  const real = req.headers.get("x-real-ip");
+  if (real) return real;
+  return "unknown";
+}
+
+/**
  * Housekeeping — drop buckets whose most recent entry is older than
  * the window. Call periodically or opportunistically; safe to skip.
  * Keeps the Map from growing unbounded across long-running instances.

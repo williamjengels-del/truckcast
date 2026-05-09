@@ -1,7 +1,26 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { checkRateLimit, clientIpFromRequest } from "@/lib/rate-limit";
+
+// email-1: IP-based rate limit on the unauthenticated subscriber-add
+// endpoint. 10 / hour / IP — well above plausible legitimate use
+// (operator self-testing or shared-LAN signups), low enough to cap the
+// confirmation-email-bomb scenario.
+const SUBSCRIBE_RATE_LIMIT = 10;
+const SUBSCRIBE_RATE_WINDOW_MS = 60 * 60 * 1000;
 
 export async function POST(request: NextRequest) {
+  const ip = clientIpFromRequest(request);
+  if (
+    ip !== "unknown" &&
+    !checkRateLimit(`follow:${ip}`, SUBSCRIBE_RATE_LIMIT, SUBSCRIBE_RATE_WINDOW_MS)
+  ) {
+    return NextResponse.json(
+      { error: "Too many subscription requests. Please try again later." },
+      { status: 429, headers: { "Retry-After": "3600" } }
+    );
+  }
+
   try {
     const body = await request.json();
     const { userId, email, name } = body;
