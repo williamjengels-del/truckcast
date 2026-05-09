@@ -886,6 +886,81 @@ export async function sendNewDeviceLoginEmail(
   });
 }
 
+// ─── MFA Disabled via Recovery Code Email ──────────────────────────────────
+
+export interface MfaDisabledViaRecoveryEmailPayload {
+  to: string;
+  businessName: string;
+  /** Best-effort IP from the request that consumed the code. */
+  ip: string;
+  /** ISO timestamp the recovery code was used. */
+  consumedAt: string;
+}
+
+/**
+ * mfa-4: notify the operator when a recovery code is consumed (which
+ * deletes their TOTP factor). Pre-fix this was silent — an attacker
+ * with both password and a single recovery code could disable 2FA
+ * without the legitimate operator getting any signal.
+ *
+ * Plain-English copy because this is a security-critical email — no
+ * marketing voice, no clever framing. Surfaces the support escalation
+ * path prominently.
+ */
+export async function sendMfaDisabledViaRecoveryEmail(
+  payload: MfaDisabledViaRecoveryEmailPayload
+) {
+  if (!process.env.RESEND_API_KEY) return;
+  const resend = getResend();
+  const displayName = payload.businessName || "there";
+  const subject = "Two-factor authentication was disabled on your VendCast account";
+
+  const html = `
+<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
+<body style="margin:0;padding:0;background:#f9fafb;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;">
+  <div style="max-width:560px;margin:40px auto;background:#fff;border-radius:12px;overflow:hidden;border:1px solid #e5e7eb;">
+    <div style="background:#0d4f5c;padding:32px 40px;">
+      <div style="color:white;font-size:28px;font-weight:800;letter-spacing:-1px;">VendCast</div>
+      <div style="color:rgba(255,255,255,0.7);font-size:13px;margin-top:6px;">Account security</div>
+    </div>
+    <div style="padding:40px;">
+      <h1 style="margin:0 0 16px;font-size:22px;font-weight:700;color:#111827;">Two-factor was just disabled</h1>
+      <p style="margin:0 0 16px;font-size:15px;line-height:1.6;color:#374151;">
+        Hi ${escapeHtml(displayName)} — a recovery code was used to sign into your VendCast account. As part of that flow, your authenticator-app two-factor was removed.
+      </p>
+      <table cellpadding="0" cellspacing="0" border="0" style="width:100%;margin:20px 0;">
+        <tbody>
+          <tr><td style="padding:6px 0;font-size:13px;color:#6b7280;width:140px;">When</td><td style="padding:6px 0;font-size:14px;color:#111827;">${escapeHtml(payload.consumedAt)}</td></tr>
+          <tr><td style="padding:6px 0;font-size:13px;color:#6b7280;">IP</td><td style="padding:6px 0;font-size:14px;color:#111827;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;">${escapeHtml(payload.ip)}</td></tr>
+        </tbody>
+      </table>
+      <p style="margin:24px 0 8px;font-size:15px;color:#111827;font-weight:600;">If this was you</p>
+      <p style="margin:0 0 20px;font-size:14px;color:#6b7280;line-height:1.6;">
+        Re-enroll a new authenticator at <a href="${APP_URL}/dashboard/settings#security" style="color:#0d4f5c;">${APP_URL}/dashboard/settings#security</a> to restore two-factor protection. A fresh batch of recovery codes is generated as part of that.
+      </p>
+      <p style="margin:24px 0 8px;font-size:15px;color:#111827;font-weight:600;">If this wasn't you</p>
+      <p style="margin:0 0 20px;font-size:14px;color:#6b7280;line-height:1.6;">
+        Reset your password immediately at <a href="${APP_URL}/login" style="color:#0d4f5c;">${APP_URL}/login</a>, then email <a href="mailto:support@vendcast.co" style="color:#0d4f5c;">support@vendcast.co</a> so we can lock the account and review activity. We'll respond within one business day.
+      </p>
+      <p style="margin:32px 0 0;font-size:13px;color:#9ca3af;line-height:1.6;">
+        You're receiving this because you have a VendCast account. Security notifications can't be turned off.
+      </p>
+    </div>
+  </div>
+</body>
+</html>
+  `.trim();
+
+  await resend.emails.send({
+    from: FROM,
+    to: payload.to,
+    subject,
+    html,
+  });
+}
+
 // ─── Weekly Digest Email ───────────────────────────────────────────────────
 
 /**

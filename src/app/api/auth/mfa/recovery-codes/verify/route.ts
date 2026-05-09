@@ -5,6 +5,17 @@ import {
   hashRecoveryCode,
   isWellFormedRecoveryCode,
 } from "@/lib/recovery-codes";
+import { checkRateLimit, clientIpFromRequest } from "@/lib/rate-limit";
+import { sendMfaDisabledViaRecoveryEmail } from "@/lib/email";
+
+// mfa-3: 5 attempts per IP per hour. Recovery codes are 10-character
+// base32-ish strings — at 5/hour an attacker brute-forcing the
+// keyspace would need ~10^14 hours per IP. The legitimate operator
+// using a recovery code typically gets it right on the first try
+// from their saved list, so 5/hour is well above any plausible
+// real-use volume.
+const RECOVERY_VERIFY_RATE_LIMIT = 5;
+const RECOVERY_VERIFY_RATE_WINDOW_MS = 60 * 60 * 1000;
 
 /**
  * POST /api/auth/mfa/recovery-codes/verify
@@ -38,6 +49,29 @@ export async function POST(request: Request) {
   } = await supabase.auth.getUser();
   if (!user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  // mfa-3: rate limit BEFORE doing any work. Key on (user.id, ip)
+  // composite so an attacker controlling one user's session can't
+  // brute-force from a single IP, AND a legitimate operator behind a
+  // shared IP (corporate NAT) doesn't get blocked because someone
+  // else on the same IP is fumbling THEIR recovery codes.
+  const ip = clientIpFromRequest(request);
+  const rateKey = `mfa-recovery:${user.id}:${ip}`;
+  if (
+    !checkRateLimit(
+      rateKey,
+      RECOVERY_VERIFY_RATE_LIMIT,
+      RECOVERY_VERIFY_RATE_WINDOW_MS
+    )
+  ) {
+    return NextResponse.json(
+      {
+        error:
+          "Too many recovery code attempts. Wait a few minutes before trying again, or contact support@vendcast.co.",
+      },
+      { status: 429, headers: { "Retry-After": "3600" } }
+    );
   }
 
   let body: unknown;
@@ -115,6 +149,29 @@ export async function POST(request: Request) {
     .from("profile_recovery_codes")
     .delete()
     .eq("user_id", user.id);
+
+  // mfa-4: notify the operator that 2FA was just disabled. Pre-fix
+  // this was silent — an attacker with both password and a single
+  // recovery code could disable 2FA without any signal to the
+  // legitimate operator. Fire-and-forget so email infrastructure
+  // issues don't fail the recovery flow itself.
+  if (user.email) {
+    const { data: profile } = await service
+      .from("profiles")
+      .select("business_name")
+      .eq("id", user.id)
+      .maybeSingle();
+    sendMfaDisabledViaRecoveryEmail({
+      to: user.email,
+      businessName:
+        (profile as { business_name: string | null } | null)?.business_name ??
+        "",
+      ip,
+      consumedAt: new Date().toISOString(),
+    }).catch((err) => {
+      console.warn("[mfa-recovery] notify email failed:", err);
+    });
+  }
 
   return NextResponse.json({ ok: true });
 }
