@@ -305,7 +305,7 @@ export function EventAliasesClient({
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="alias-notes" className="text-xs">
-                Notes (optional — why you're aliasing)
+                Notes (optional — why you&apos;re aliasing)
               </Label>
               <Textarea
                 id="alias-notes"

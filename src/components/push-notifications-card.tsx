@@ -73,6 +73,11 @@ export function PushNotificationsCard() {
   }, []);
 
   useEffect(() => {
+    // Lint flags this as setState-in-effect. This is a one-shot mount
+    // detection — read the iOS-non-standalone status from window once
+    // and trigger the initial subscription refresh. No cascading
+    // render risk because dep array is the stable refreshSubscription.
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- one-shot mount detection of iOS standalone state
     setIosCaveat(detectIOSNonStandalone());
     refreshSubscription();
   }, [refreshSubscription]);
