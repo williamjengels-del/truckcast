@@ -19,12 +19,17 @@ import {
  * if the operator loses their authenticator AND the codes is the
  * admin-reset path documented in src/app/(auth)/login/2fa/page.tsx.
  *
- * Caller must already be authenticated (any AAL level — this endpoint
- * is reachable from the post-enroll flow where the operator just
- * completed a TOTP challenge, OR from settings where they want to
- * regenerate while already at AAL2). The proxy AAL gate exempts
- * /api/auth/mfa/* so AAL1 sessions can still generate codes during
- * the initial enroll flow before the AAL2 step-up happens.
+ * mfa-6: requires AAL2. Both legitimate entry paths reach here at
+ * AAL2 already — post-TOTP-enroll-verify (the verify call itself
+ * elevates the session) and regenerate-from-settings (settings is
+ * dashboard-gated and requires AAL2 for users with a factor).
+ *
+ * Pre-fix: the comment claimed AAL1 was needed, but AAL1 wasn't
+ * actually required by either flow. Leaving the endpoint AAL1-
+ * reachable meant an attacker who had the password but not the
+ * authenticator could wipe-and-reissue recovery codes from a
+ * password-only session, then use the new codes via the recovery
+ * flow to disable 2FA entirely.
  */
 export async function POST() {
   const supabase = await createClient();
@@ -33,6 +38,22 @@ export async function POST() {
   } = await supabase.auth.getUser();
   if (!user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  // mfa-6: require AAL2. The proxy AAL gate exempts /api/auth/mfa/*
+  // (so the challenge endpoint itself can run at AAL1 to elevate the
+  // session), but recovery-code GENERATION shouldn't be reachable
+  // from a password-only session.
+  const { data: aal } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel();
+  if (aal?.currentLevel !== "aal2") {
+    return NextResponse.json(
+      {
+        error: "Two-factor verification required",
+        detail:
+          "Generate fresh recovery codes only after passing the two-factor challenge.",
+      },
+      { status: 403, headers: { "x-aal-required": "aal2" } }
+    );
   }
 
   const codes = generateRecoveryCodes();
