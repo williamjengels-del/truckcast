@@ -134,6 +134,19 @@ export interface Event {
   forecast_bayesian_prior_src?: "platform" | "operator" | "default" | null;
   forecast_bayesian_insufficient?: boolean | null;
   forecast_bayesian_computed_at?: string | null;
+  /** Event size tier columns (migration
+   *  20260509000001_add_event_size_tier.sql). Foundation for the
+   *  major-event-tag workstream — engine partitions per-event-name
+   *  posterior by tier so flagship nights aren't averaged with typical
+   *  nights. event_size_tier_inferred is auto-derived from
+   *  actual / venue_median. event_size_tier_operator is the operator
+   *  override (set on event form or by clicking the tier chip).
+   *  Effective tier = operator ?? inferred ?? 'NORMAL' (see
+   *  src/lib/event-size-tier.ts:effectiveTier). All nullable until the
+   *  migration applies + first recalc populates inferred values. */
+  event_size_tier_inferred?: "SMALL" | "NORMAL" | "LARGE" | "FLAGSHIP" | null;
+  event_size_tier_operator?: "SMALL" | "NORMAL" | "LARGE" | "FLAGSHIP" | null;
+  event_size_tier_inferred_at?: string | null;
   food_cost: number | null;
   labor_cost: number | null;
   other_costs: number | null;
