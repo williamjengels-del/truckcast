@@ -25,6 +25,68 @@ const TRIAL_GATE_EXEMPT = [
 ];
 
 /**
+ * API prefixes always allowed for trial-expired users:
+ *   - /api/stripe/* — checkout/portal/webhook (so they can pay to unlock)
+ *   - /api/auth/* — login/logout/password-reset/2fa
+ *   - /api/admin/* — admin operations are gated separately
+ *   - /api/cron/* — cron jobs run without user auth; defensive exemption
+ *   - /api/status, /api/version — diagnostic GETs are already mutation-exempt,
+ *     listed for clarity
+ */
+const TRIAL_GATE_EXEMPT_API_PREFIXES = [
+  "/api/stripe/",
+  "/api/auth/",
+  "/api/admin/",
+  "/api/cron/",
+  "/api/status",
+  "/api/version",
+];
+
+function isTrialExemptApi(pathname: string): boolean {
+  return TRIAL_GATE_EXEMPT_API_PREFIXES.some((p) => pathname.startsWith(p));
+}
+
+type TrialProfile = {
+  created_at: string | null;
+  stripe_subscription_id: string | null;
+  trial_extended_until: string | null;
+  owner_user_id: string | null;
+};
+
+/**
+ * Pure function: is this profile past the hard-gate trial expiry?
+ * Mirrors the dashboard gate logic at line 306 — extracted so the
+ * API/server-action gate uses identical semantics.
+ *
+ * Managers (owner_user_id set) never count as expired — the owner pays.
+ * Subscribers (stripe_subscription_id set) never count as expired.
+ * Admin-extended trials win over the 14-day rolling window.
+ *
+ * Returns false (allow) for any null/undefined profile so a missing
+ * row never accidentally gates everything off.
+ */
+export function isTrialHardGateExpired(
+  profile: TrialProfile | null | undefined,
+  now: Date = new Date()
+): boolean {
+  if (!profile) return false;
+  if (profile.owner_user_id) return false;
+  if (profile.stripe_subscription_id) return false;
+  if (now < HARD_GATE_DATE) return false;
+  if (
+    profile.trial_extended_until &&
+    new Date(profile.trial_extended_until) > now
+  ) {
+    return false;
+  }
+  if (!profile.created_at) return false;
+  const trialEnd = new Date(
+    new Date(profile.created_at).getTime() + TRIAL_DAYS * 24 * 60 * 60 * 1000
+  );
+  return now > trialEnd;
+}
+
+/**
  * Owner-only dashboard routes — bounce managers to /dashboard.
  *
  *   - /dashboard/insights — analytics + reports (revenue-heavy)
@@ -226,6 +288,46 @@ export async function updateSession(request: NextRequest) {
     );
   }
 
+  // Trial gate for API + server-action mutations. The dashboard-page
+  // gate at line 255+ only fires for navigating browser requests; before
+  // this gate, a trial-expired operator could still mutate via direct
+  // API hits or server actions invoked from a stale tab. Now they get
+  // a 403 JSON instead, mirroring the AAL gate shape above.
+  //
+  // Skipped for: read-only methods (already), MFA endpoints (own gate),
+  // exempt API prefixes (stripe/auth/admin/cron/status/version), and
+  // server actions invoked from trial-exempt dashboard pages
+  // (so /dashboard/upgrade form posts keep working).
+  const serverActionExempt =
+    isServerAction && TRIAL_GATE_EXEMPT.some((p) => pathname.startsWith(p));
+  if (
+    user &&
+    !isDashboard && // dashboard requests get the redirect-style gate below
+    ((isApi && isMutation && !isMfaApi && !isTrialExemptApi(pathname)) ||
+      (isServerAction && !serverActionExempt))
+  ) {
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select(
+        "created_at, stripe_subscription_id, trial_extended_until, owner_user_id"
+      )
+      .eq("id", user.id)
+      .single();
+    if (isTrialHardGateExpired(profile)) {
+      return NextResponse.json(
+        {
+          error: "Trial expired",
+          detail:
+            "Your free trial has ended. Subscribe to continue using VendCast — visit /dashboard/upgrade.",
+        },
+        {
+          status: 403,
+          headers: { "x-trial-expired": "1" },
+        }
+      );
+    }
+  }
+
   // Redirect authenticated users away from auth pages — but route
   // password-authenticated users with a factor to /login/2fa first
   // instead of bouncing through /dashboard.
@@ -302,32 +404,17 @@ export async function updateSession(request: NextRequest) {
 
     // 2. Trial gate — skip for exempt paths, the onboarding wizard,
     //    and managers (they don't have a subscription of their own —
-    //    the owner pays).
+    //    the owner pays). Uses the shared isTrialHardGateExpired helper
+    //    so dashboard-redirect and API-403 gates can't drift apart.
     if (
       profile &&
-      !profile.stripe_subscription_id &&
       !isTrialExempt &&
       !isOnboardingRoute &&
-      !profile.owner_user_id
+      isTrialHardGateExpired(profile)
     ) {
-      const now = new Date();
-
-      // Admin-granted trial extension takes priority over created_at calculation
-      if (profile.trial_extended_until && new Date(profile.trial_extended_until) > now) {
-        // Extended trial still active — allow through
-      } else {
-        const trialEnd = new Date(
-          new Date(profile.created_at).getTime() +
-            TRIAL_DAYS * 24 * 60 * 60 * 1000
-        );
-        if (now > trialEnd && now >= HARD_GATE_DATE) {
-          // Hard gate only enforces on or after HARD_GATE_DATE.
-          // Before that date, expired-trial users see the dashboard banner instead.
-          const url = request.nextUrl.clone();
-          url.pathname = "/dashboard/upgrade";
-          return NextResponse.redirect(url);
-        }
-      }
+      const url = request.nextUrl.clone();
+      url.pathname = "/dashboard/upgrade";
+      return NextResponse.redirect(url);
     }
   }
 
