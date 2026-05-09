@@ -120,10 +120,10 @@ export async function sendManagerInviteEmail(
   await resend.emails.send({
     from: FROM,
     to,
-    // Subject is plain-text — strip any HTML tags from operator-controlled
-    // ownerLabel rather than HTML-escape them (entities would render as
-    // visible &lt;...&gt; in mail clients). HTML-escape for body usages below.
-    subject: `You've been invited to manage ${ownerLabel.replace(/<[^>]*>/g, "")} on VendCast`,
+    // email-8: use the shared safeSubjectFragment helper instead of an
+    // ad-hoc tag strip — also normalizes CRLF and truncates pathological
+    // input that would otherwise inflate header size.
+    subject: `You've been invited to manage ${safeSubjectFragment(ownerLabel) || "your operator"} on VendCast`,
     html: `
 <!DOCTYPE html>
 <html>
@@ -342,7 +342,10 @@ export async function sendBookingInquiryEmail(
   await resend.emails.send({
     from: FROM,
     to,
-    subject: `New booking inquiry from ${payload.requesterName}`,
+    // email-7: route operator's reply directly to the requester. Without
+    // this, "Reply" goes to hello@vendcast.co and silently dies.
+    replyTo: payload.requesterEmail,
+    subject: `New booking inquiry from ${safeSubjectFragment(payload.requesterName)}`,
     html: `
 <!DOCTYPE html>
 <html>
@@ -385,6 +388,24 @@ function escapeHtml(s: string): string {
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;")
     .replace(/'/g, "&#39;");
+}
+
+/**
+ * Sanitize an operator/public-controlled string before splicing into a
+ * Subject header. email-8: stripping CR/LF/tabs prevents header
+ * injection (CRLF in subject can break MIME boundaries on some
+ * clients), and stripping HTML tags + truncating defends against
+ * subject-line spoofing attempts. Subjects are NOT HTML-escaped because
+ * mail clients display the raw text; entity-escaping would render
+ * as literal `&lt;...`.
+ */
+export function safeSubjectFragment(s: string | null | undefined): string {
+  if (!s) return "";
+  return s
+    .replace(/<[^>]*>/g, "")
+    .replace(/[\r\n\t]+/g, " ")
+    .trim()
+    .slice(0, 120);
 }
 
 // ─── Direct Inquiry Notification Email ────────────────────────────────────
@@ -496,7 +517,11 @@ export async function sendInquiryNotificationEmail(
   await resend.emails.send({
     from: FROM,
     to,
-    subject: `New event request — ${payload.city}, ${payload.state}`,
+    // email-7: route operator's reply directly to the organizer. Marketplace
+    // inquiries fan out to multiple operators; whoever replies first wins
+    // — reply going to hello@vendcast.co would silently kill that path.
+    replyTo: payload.organizerEmail,
+    subject: `New event request — ${safeSubjectFragment(payload.city)}, ${safeSubjectFragment(payload.state)}`,
     html: `
 <!DOCTYPE html>
 <html>
@@ -1116,7 +1141,10 @@ export async function sendEventInquiryConfirmation(p: EventInquiryConfirmationPa
     // sender (hello@vendcast.co) which may not forward.
     replyTo: "support@vendcast.co",
     to: p.to,
-    subject: `We received your event request — ${escapeHtml(p.eventType)} on ${dateLabel}`,
+    // email-8: subjects shouldn't be HTML-escaped (clients show raw text;
+    // &amp; and friends would render literally). Use safeSubjectFragment
+    // for tag stripping + CRLF normalization instead.
+    subject: `We received your event request — ${safeSubjectFragment(p.eventType)} on ${dateLabel}`,
     html: `
 <!DOCTYPE html>
 <html>
