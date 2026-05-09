@@ -73,9 +73,19 @@ export default function OnboardingPage() {
       if (!user) return;
       const { data } = await supabase
         .from("profiles")
-        .select("business_name, city, state, timezone")
+        .select("business_name, city, state, timezone, onboarding_completed")
         .eq("id", user.id)
         .single();
+
+      // Guard against re-running onboarding after completion (O-3).
+      // Without this, an operator who manually navigates back to
+      // /dashboard/onboarding can overwrite their settings with the
+      // wizard's stale local state — and re-trigger the welcome email
+      // (O-1).
+      if (data?.onboarding_completed) {
+        router.replace("/dashboard");
+        return;
+      }
 
       const detectedTimezone = detectBrowserTimezone();
       const guessedState = guessStateFromTimezone(detectedTimezone);
@@ -106,19 +116,28 @@ export default function OnboardingPage() {
     } = await supabase.auth.getUser();
 
     if (user) {
+      // Persist profile fields ONLY. Don't flip onboarding_completed
+      // here (O-2) — the wizard isn't done; steps 2/3 still need to
+      // run. The flag is set in handleComplete / handleSkipImport
+      // when the operator actually finishes the wizard. Without this
+      // separation, an operator who closes the browser between step
+      // 1 and step 2 silently bypasses the rest of the wizard on
+      // their next visit (middleware sees the flag as true and lets
+      // them past).
       await supabase
         .from("profiles")
         .update({
           ...profile,
           city: canonicalizeCity(profile.city),
-          onboarding_completed: true,
         })
         .eq("id", user.id);
 
-      // Welcome email migrated from /signup -> here so it's
-      // personalized with the business_name the operator just
-      // entered. Fire-and-forget; signup -> step 1 should not
-      // block on email send.
+      // Welcome email — fire-and-forget. Send only on the FIRST save.
+      // The loadProfile redirect above guarantees we only reach this
+      // function when onboarding_completed was previously false; that
+      // alone makes this a one-time event for any given user. The
+      // business_name guard prevents an empty-name email on a totally-
+      // skipped form.
       if (user.email && profile.business_name) {
         fetch("/api/email/welcome", {
           method: "POST",
