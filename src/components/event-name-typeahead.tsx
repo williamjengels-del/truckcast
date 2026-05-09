@@ -56,13 +56,13 @@ export function EventNameTypeahead({
   const lastQueryRef = useRef("");
 
   // Debounced fetch. 200ms is enough to feel snappy but spares the
-  // DB while the operator is mid-word.
+  // DB while the operator is mid-word. The "query too short" reset
+  // is derived at render time below (see `displayedSuggestions`) so
+  // we don't synchronously call setState inside the effect — that
+  // would cascade re-renders on every keystroke under React 19.
   useEffect(() => {
     const trimmed = value.trim();
-    if (trimmed.length < 2) {
-      setSuggestions([]);
-      return;
-    }
+    if (trimmed.length < 2) return;
     lastQueryRef.current = trimmed;
     const t = setTimeout(async () => {
       try {
@@ -81,6 +81,12 @@ export function EventNameTypeahead({
     }, 200);
     return () => clearTimeout(t);
   }, [value]);
+
+  // Derived: when the input is below the 2-char threshold the list is
+  // hidden regardless of stale fetched suggestions. Equivalent to the
+  // pre-fix `setSuggestions([])` reset, but expressed at render time.
+  const displayedSuggestions =
+    value.trim().length < 2 ? ([] as Suggestion[]) : suggestions;
 
   // Close on outside click.
   useEffect(() => {
@@ -102,23 +108,23 @@ export function EventNameTypeahead({
   }
 
   function onKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
-    if (!open || suggestions.length === 0) return;
+    if (!open || displayedSuggestions.length === 0) return;
     if (e.key === "ArrowDown") {
       e.preventDefault();
-      setActiveIdx((i) => (i + 1) % suggestions.length);
+      setActiveIdx((i) => (i + 1) % displayedSuggestions.length);
     } else if (e.key === "ArrowUp") {
       e.preventDefault();
-      setActiveIdx((i) => (i <= 0 ? suggestions.length - 1 : i - 1));
+      setActiveIdx((i) => (i <= 0 ? displayedSuggestions.length - 1 : i - 1));
     } else if (e.key === "Enter" && activeIdx >= 0) {
       e.preventDefault();
-      pick(suggestions[activeIdx]);
+      pick(displayedSuggestions[activeIdx]);
     } else if (e.key === "Escape") {
       setOpen(false);
       setActiveIdx(-1);
     }
   }
 
-  const showList = open && suggestions.length > 0;
+  const showList = open && displayedSuggestions.length > 0;
 
   return (
     <div ref={wrapRef} className="relative">
@@ -147,7 +153,7 @@ export function EventNameTypeahead({
           role="listbox"
           className="absolute z-20 mt-1 w-full rounded-md border bg-popover shadow-md max-h-72 overflow-auto py-1"
         >
-          {suggestions.map((s, i) => {
+          {displayedSuggestions.map((s, i) => {
             const active = i === activeIdx;
             return (
               <li

@@ -93,6 +93,13 @@ export function InstallPrompt() {
     if (sessionCount < SHOW_AFTER_SESSIONS) return;
 
     // Initial detection (before beforeinstallprompt has fired).
+    // Lint flags this as setState-in-effect (cascading-render risk)
+    // but this is the canonical "read browser environment on mount"
+    // pattern — runs exactly once after the SSR-safe initial state.
+    // useSyncExternalStore would be cleaner if we needed reactivity to
+    // platform changes, but we don't; the event listeners below
+    // handle live updates.
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- one-shot mount detection
     setPlatform(detectPlatform(false));
 
     // Re-classify if the browser later fires beforeinstallprompt.

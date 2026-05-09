@@ -23,6 +23,11 @@ export function InstallSettingsCard() {
       window.matchMedia("(display-mode: standalone)").matches ||
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       (window.navigator as any).standalone === true;
+    // Lint flags setState-in-effect but this is the canonical
+    // "read browser environment on mount" pattern — runs exactly once
+    // after the SSR-safe initial null state. No cascading render risk
+    // because the dependency array is empty.
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- one-shot mount detection of standalone display mode
     setStandalone(isStandalone);
   }, []);
 
