@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { resolveScopedSupabase } from "@/lib/dashboard-scope";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
@@ -599,12 +600,12 @@ export async function AnalyticsTab({ searchParams }: AnalyticsTabProps) {
               </p>
             </div>
             <div className="flex gap-2 justify-center">
-              <a href="/dashboard/events/import" className="inline-flex items-center gap-1.5 rounded-md bg-primary text-primary-foreground px-3 py-1.5 text-sm font-medium hover:bg-primary/90 transition-colors">
+              <Link href="/dashboard/events/import" className="inline-flex items-center gap-1.5 rounded-md bg-primary text-primary-foreground px-3 py-1.5 text-sm font-medium hover:bg-primary/90 transition-colors">
                 Import your events →
-              </a>
-              <a href="/dashboard/events?new=true" className="inline-flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-sm font-medium hover:bg-muted transition-colors">
+              </Link>
+              <Link href="/dashboard/events?new=true" className="inline-flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-sm font-medium hover:bg-muted transition-colors">
                 Add manually
-              </a>
+              </Link>
             </div>
           </CardContent>
         </Card>

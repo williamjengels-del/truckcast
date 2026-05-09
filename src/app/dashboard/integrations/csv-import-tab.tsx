@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useMemo, useCallback, useRef } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import {
@@ -46,7 +47,7 @@ import {
   Columns,
   Eye,
   Download,
-  Link,
+  Link as LinkIcon,
   Loader2,
   ChevronDown,
   ChevronRight,
@@ -551,12 +552,12 @@ export function CsvImportTab() {
           <p className="text-muted-foreground">
             Upload a CSV file to import historical events
           </p>
-          <a
+          <Link
             href="/dashboard/events/import/historical"
             className="inline-flex items-center gap-1 text-sm text-primary hover:underline mt-1"
           >
             Already using Square or Clover? Pull sales by date range →
-          </a>
+          </Link>
         </div>
         <Button variant="outline" size="sm" onClick={handleDownloadTemplate} className="shrink-0 gap-2">
           <Download className="h-4 w-4" />
@@ -621,7 +622,7 @@ export function CsvImportTab() {
                     : "bg-background border-input hover:bg-muted"
                 }`}
               >
-                <Link className="h-4 w-4" />
+                <LinkIcon className="h-4 w-4" />
                 Google Sheets
               </button>
             </div>

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Sparkles, Check, LogOut } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
@@ -179,12 +180,12 @@ export default function UpgradePage() {
 
       {/* Footer links */}
       <div className="flex items-center gap-6 text-sm text-muted-foreground">
-        <a
+        <Link
           href="/dashboard/settings"
           className="hover:text-foreground transition-colors"
         >
           Already upgraded? Go to settings
-        </a>
+        </Link>
         <span>·</span>
         <button
           onClick={handleSignOut}
