@@ -22,6 +22,24 @@ export async function POST() {
 
     const result = await recalculateForUser(user.id);
 
+    // Lock helper returned 'busy' — another recalc is running for this
+    // user (operator double-clicked Refresh, or a Toast inbound +
+    // Refresh-button collided). Surface 202 Accepted so the client can
+    // tell the difference between "ran" and "skipped" and decide
+    // whether to retry. Retry-After=5 because lock expiry is 5min,
+    // typical recalc < 10s — 5s is a reasonable poll cadence.
+    if (result.skipped) {
+      return NextResponse.json(
+        {
+          success: false,
+          skipped: true,
+          detail:
+            "Another recalculation is already running for your account. Try again in a few seconds.",
+        },
+        { status: 202, headers: { "Retry-After": "5" } }
+      );
+    }
+
     return NextResponse.json({
       success: true,
       ...result,
