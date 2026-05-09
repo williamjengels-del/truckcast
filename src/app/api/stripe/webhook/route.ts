@@ -39,6 +39,43 @@ export async function POST(request: Request) {
 
   const supabase = getAdminSupabase();
 
+  // ── Idempotency gate ───────────────────────────────────────────────
+  // Check whether this event.id has already been processed. Pre-fix,
+  // a replay (or aggressive Stripe retry across borderline-timeout
+  // responses) re-ran the switch and could downgrade-upgraded users
+  // or clear failed-payment state on data that had since moved on.
+  //
+  // If the table doesn't exist yet (migration 20260509000006 not yet
+  // pasted), the SELECT returns 42P01 — log and fall through to the
+  // legacy non-idempotent path. After paste, the gate activates
+  // automatically. Same paste-at-merge pattern as race-1 / event-tier.
+  let idempotencyAvailable = true;
+  try {
+    const { data: existing, error: idempErr } = await supabase
+      .from("stripe_processed_events")
+      .select("id")
+      .eq("id", event.id)
+      .maybeSingle();
+    if (idempErr) {
+      if (idempErr.code === "42P01") {
+        idempotencyAvailable = false;
+      } else {
+        console.warn("[stripe-webhook] idempotency lookup error:", idempErr);
+        idempotencyAvailable = false;
+      }
+    } else if (existing) {
+      // Already processed — ack to Stripe so it stops retrying.
+      return NextResponse.json({
+        received: true,
+        idempotent_skip: true,
+        event_id: event.id,
+      });
+    }
+  } catch (e) {
+    console.warn("[stripe-webhook] idempotency lookup threw:", e);
+    idempotencyAvailable = false;
+  }
+
   switch (event.type) {
     case "checkout.session.completed": {
       const session = event.data.object as Stripe.Checkout.Session;
@@ -224,6 +261,32 @@ export async function POST(request: Request) {
         },
       });
       break;
+    }
+  }
+
+  // Mark this event.id as processed. AFTER the switch (not before) so
+  // a real processing failure leaves no stale row — Stripe retry will
+  // re-run the case. ON CONFLICT DO NOTHING handles the rare
+  // concurrent-retry race where two workers process the same event.id
+  // (idempotent UPDATEs above mean this is harmless even if both
+  // succeed in processing).
+  if (idempotencyAvailable) {
+    try {
+      const { error: insertErr } = await supabase
+        .from("stripe_processed_events")
+        .insert({ id: event.id, type: event.type });
+      // 23505 = unique_violation = concurrent worker beat us. Fine.
+      if (insertErr && insertErr.code !== "23505") {
+        console.warn(
+          "[stripe-webhook] processed-events insert error:",
+          insertErr
+        );
+      }
+    } catch (e) {
+      // Don't fail the webhook ack on idempotency-table issues — at
+      // worst this means the same event might re-process if Stripe
+      // retries (better than 5xx'ing successful processing).
+      console.warn("[stripe-webhook] processed-events insert threw:", e);
     }
   }
 
