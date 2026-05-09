@@ -1,0 +1,32 @@
+-- Tighten follow_subscribers UPDATE policy.
+--
+-- Surfaced 2026-05-08 deep-dive data-integrity audit. The original
+-- policy at follow_subscribers.sql:31 allowed `using(true) with
+-- check(true)` for UPDATE — meaning ANY anonymous request to Supabase
+-- with the anon key could mutate ANY column on ANY subscriber row
+-- (email, name, confirmed, unsubscribed_at). Premium-tier subscriber
+-- lists were tamper-able by any visitor with the public follow page
+-- URL.
+--
+-- The route at /api/follow/unsubscribe was already only writing the
+-- unsubscribed_at column, but the RLS hole meant a malicious client
+-- bypassing the route (calling Supabase directly with the anon key)
+-- could rewrite emails, flip confirmed flags, or clear unsubscribed
+-- timestamps to re-spam unsubscribers.
+--
+-- Fix: drop the public UPDATE policy entirely. The /api/follow/
+-- unsubscribe route is updated in the same PR to use a service-role
+-- client (server-side only — anon key never sees these writes), so
+-- the legitimate unsubscribe flow continues to work.
+--
+-- Public can still SUBSCRIBE (the INSERT policy is unchanged) and
+-- truck owners can still SELECT their own subscribers (unchanged).
+--
+-- Paste-at-merge per standing rule.
+
+drop policy if exists "Public can update for unsubscribe" on follow_subscribers;
+
+-- No replacement — UPDATE now goes through the service-role-backed
+-- /api/follow/unsubscribe route. Truck owners can still UPDATE their
+-- own subscribers via the existing owner SELECT policy + a future
+-- owner UPDATE policy if/when that surface ships.

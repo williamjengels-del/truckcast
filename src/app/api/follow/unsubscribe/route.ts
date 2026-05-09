@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
+import { createClient } from "@supabase/supabase-js";
 
 export async function POST(request: NextRequest) {
   try {
@@ -13,7 +13,23 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const supabase = await createClient();
+    // Use service role intentionally: the public RLS UPDATE policy on
+    // follow_subscribers was dropped in migration 20260509000002 because
+    // it allowed any-column mutation by any anonymous client. The route
+    // is the chokepoint that enforces "update only the unsubscribed_at
+    // column on a row matching (userId, email)". Server-side only —
+    // service key never reaches a browser.
+    const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+    const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+    if (!url || !key) {
+      return NextResponse.json(
+        { error: "Server misconfigured" },
+        { status: 503 }
+      );
+    }
+    const supabase = createClient(url, key, {
+      auth: { persistSession: false, autoRefreshToken: false },
+    });
 
     const { error } = await supabase
       .from("follow_subscribers")
