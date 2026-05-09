@@ -191,15 +191,19 @@ async function notifyOperatorOfBooking(
   );
 
   // Clean up dead endpoints so the next push doesn't retry them.
+  // user_id scoping: two users could theoretically share an endpoint
+  // string (rare). Without the filter, the service-role delete could
+  // remove another user's sub to the same endpoint.
   if (result.invalidEndpoints.length > 0) {
     await service
       .from("push_subscriptions")
       .delete()
+      .eq("user_id", operatorUserId)
       .in("endpoint", result.invalidEndpoints);
   }
 
   // Touch last_used_at for surviving subs — gives visibility into which
-  // devices are actually reachable at send time.
+  // devices are actually reachable at send time. Same scope rationale.
   const survivingEndpoints = (subs as PushSubscriptionRow[])
     .map((s) => s.endpoint)
     .filter((e) => !result.invalidEndpoints.includes(e));
@@ -207,6 +211,7 @@ async function notifyOperatorOfBooking(
     await service
       .from("push_subscriptions")
       .update({ last_used_at: new Date().toISOString() })
+      .eq("user_id", operatorUserId)
       .in("endpoint", survivingEndpoints);
   }
 }
