@@ -160,15 +160,26 @@ describe("computeVenueMediansForTierInference", () => {
     expect(medians.get("venue")).toBe(250); // (200 + 300) / 2
   });
 
-  it("excludes events older than 12 months", () => {
+  it("includes all-history events (no rolling window — coverage beats recency at tier classification layer)", () => {
+    // Decision documented in event-size-tier.ts: 2026-05-08 first-recalc
+    // audit showed a 12-month window left 215 of 384 events with no
+    // usable median. Tier is relative-to-venue, so all-history matters.
     const events = [
-      ev("Old Venue", "2024-01-01", 1000), // > 12 mo, excluded
-      ev("Old Venue", "2025-04-01", 800),  // 13 mo back from 2026-05-08, excluded
-      ev("Old Venue", "2025-06-01", 500),  // 11 mo back, kept
+      ev("Old Venue", "2024-01-01", 1000),
+      ev("Old Venue", "2025-04-01", 800),
+      ev("Old Venue", "2025-06-01", 500),
     ];
     const medians = computeVenueMediansForTierInference(events, TODAY);
-    // Only the 2025-06-01 event survives the 12-month window from 2026-05-08
-    expect(medians.get("old venue")).toBe(500);
+    expect(medians.get("old venue")).toBe(800); // median of 500/800/1000
+  });
+
+  it("excludes events after asOfDate (forward-looking guard)", () => {
+    const events = [
+      ev("Venue", "2026-04-01", 100),
+      ev("Venue", "2026-09-01", 9000), // future relative to TODAY (2026-05-08)
+    ];
+    const medians = computeVenueMediansForTierInference(events, TODAY);
+    expect(medians.get("venue")).toBe(100);
   });
 
   it("uses invoice_revenue for catering events", () => {
@@ -203,7 +214,9 @@ describe("computeVenueMediansForTierInference", () => {
 
   it("returns empty map when no eligible events", () => {
     const events = [
-      ev("Venue", "2024-01-01", 500), // too old
+      ev("Venue", "2027-01-01", 500), // future relative to TODAY
+      { ...ev("Disrupted", "2026-04-01", 500), anomaly_flag: "disrupted" as const },
+      ev("ZeroRev", "2026-04-01", 0),
     ];
     const medians = computeVenueMediansForTierInference(events, TODAY);
     expect(medians.size).toBe(0);
