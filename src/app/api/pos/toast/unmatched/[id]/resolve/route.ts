@@ -120,20 +120,79 @@ export async function POST(
     return NextResponse.json({ error: "Event not found" }, { status: 404 });
   }
 
+  // pos-13: refuse the assignment when event_mode is NULL. Pre-fix, the
+  // ?? "food_truck" fallback silently routed catering payments to
+  // net_sales — invisible misclassification that broke catering revenue
+  // forecasting. Fail loud so the operator sets the mode explicitly
+  // before assigning.
+  if (target.event_mode === null || target.event_mode === undefined) {
+    return NextResponse.json(
+      {
+        error: "Event mode not set",
+        detail:
+          `Set the event mode (food truck / catering) on "${target.event_name}" before assigning a Toast payment to it. ` +
+          `Without that, we can't tell whether the payment is sales (net_sales) or invoice revenue.`,
+        code: "event_mode_missing",
+      },
+      { status: 422 }
+    );
+  }
+
   // For catering events the payment represents invoice revenue (deposit
   // or remainder). For food_truck / vending events, it's sales. Both
   // add on top of whatever's already there so multiple partial payments
   // stack correctly.
-  const isCatering = (target.event_mode ?? "food_truck") === "catering";
+  const isCatering = target.event_mode === "catering";
   const columnToBump = isCatering ? "invoice_revenue" : "net_sales";
   const priorValue = Number(
     (isCatering ? target.invoice_revenue : target.net_sales) ?? 0
   );
   const newValue = priorValue + Number(payment.net_sales);
 
-  // Two writes — keep them sequential, fail loud on either. No
-  // transaction primitive available through supabase-js directly; the
-  // follow-up consistency check is the UI showing what happened.
+  // race-5/pos-4: claim the payment row FIRST with a conditional update
+  // (resolved_at IS NULL), then bump the event. Pre-fix order was
+  // bump-then-claim, which let two concurrent requests both pass the
+  // resolved-check at line 80, both bump (potentially different) events,
+  // and both win the claim race — same payment routed to two events,
+  // permanent double-count.
+  //
+  // Post-fix: only one request can claim because PostgreSQL row-locks
+  // the UPDATE; the loser sees rowcount=0 and 409s. The bump-then-
+  // rollback path below handles the failure-mode where we claim but
+  // then fail to bump (best-effort rollback + loud log).
+  const { data: claimedRows, error: claimError } = await supabase
+    .from("unmatched_toast_payments")
+    .update({
+      resolved_at: new Date().toISOString(),
+      resolved_action: "assigned_to_event",
+      resolved_event_id: target.id,
+      resolved_by_user_id: user.id,
+    })
+    .eq("id", id)
+    .eq("user_id", user.id)
+    .is("resolved_at", null)
+    .select("id");
+
+  if (claimError) {
+    console.error("[toast/unmatched/resolve] claim failed:", claimError);
+    return NextResponse.json({ error: "Failed to claim payment" }, { status: 500 });
+  }
+
+  if (!claimedRows || claimedRows.length === 0) {
+    // Another concurrent request claimed this payment first — could be
+    // a double-click on the same event, or the operator clicking
+    // assign-to-different-event in two tabs. Either way, surface the
+    // conflict so the operator can refresh.
+    return NextResponse.json(
+      {
+        error: "Already resolved",
+        detail: "This payment was just resolved by another request. Refresh the inbox to see the current state.",
+      },
+      { status: 409 }
+    );
+  }
+
+  // We hold the claim. Bump the event.
   const { error: eventUpdateError } = await supabase
     .from("events")
     .update({
@@ -144,35 +203,28 @@ export async function POST(
     .eq("user_id", user.id);
 
   if (eventUpdateError) {
+    // Bump failed after claim succeeded — best-effort rollback. If the
+    // rollback itself fails, we end up with payment marked resolved
+    // but event not bumped — same risk surface as the prior code's
+    // CRITICAL log path, just on the other side of the ordering.
     console.error("[toast/unmatched/resolve] event update failed:", eventUpdateError);
+    const { error: rollbackError } = await supabase
+      .from("unmatched_toast_payments")
+      .update({
+        resolved_at: null,
+        resolved_action: null,
+        resolved_event_id: null,
+        resolved_by_user_id: null,
+      })
+      .eq("id", id)
+      .eq("user_id", user.id);
+    if (rollbackError) {
+      console.error(
+        "[toast/unmatched/resolve] CRITICAL: bump failed AND rollback failed — payment is marked resolved but event was not updated. Manual cleanup required.",
+        { paymentId: id, eventId: target.id, priorValue, newValue, rollbackError }
+      );
+    }
     return NextResponse.json({ error: "Failed to update event" }, { status: 500 });
-  }
-
-  const { error: resolveError } = await supabase
-    .from("unmatched_toast_payments")
-    .update({
-      resolved_at: new Date().toISOString(),
-      resolved_action: "assigned_to_event",
-      resolved_event_id: target.id,
-      resolved_by_user_id: user.id,
-    })
-    .eq("id", id)
-    .eq("user_id", user.id);
-
-  if (resolveError) {
-    // Inconsistent state: event got bumped but the payment row didn't
-    // flip to resolved. Operator would see this as a still-pending
-    // inbox item and could re-assign it, double-counting. Log loud.
-    console.error(
-      "[toast/unmatched/resolve] CRITICAL: event updated but payment row not resolved. Manual cleanup may be required.",
-      { paymentId: id, eventId: target.id, priorValue, newValue, resolveError }
-    );
-    return NextResponse.json(
-      {
-        error: "Event updated but payment marking failed. Please refresh and check the inbox.",
-      },
-      { status: 500 }
-    );
   }
 
   // Recompute forecasts since event sales changed.
