@@ -46,8 +46,12 @@ interface ChatWidgetProps {
 const MAX_HISTORY = 20;
 
 export function ChatWidget({ isPro, isPremium, enabled }: ChatWidgetProps) {
-  if (!enabled) return null;
-
+  // All hooks MUST be called before any conditional return — React's
+  // rules-of-hooks. The earlier `if (!enabled) return null` here ran
+  // before the hooks below, meaning the hook order changed depending
+  // on the `enabled` prop. If a parent ever toggled `enabled` after
+  // mount, React's hook-tracking would mismatch and crash. Moving the
+  // `enabled` guard down to the JSX boundary is the correct shape.
   const [open, setOpen] = useState(false);
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
@@ -214,6 +218,11 @@ export function ChatWidget({ isPro, isPremium, enabled }: ChatWidgetProps) {
         "How did last month compare to the month before?",
         "Which upcoming events have the highest forecasts?",
       ];
+
+  // Feature gate evaluated AFTER hooks so hook count is stable across
+  // toggles of the `enabled` prop. Render nothing when the widget is
+  // turned off — but the hook subscriptions remain valid above.
+  if (!enabled) return null;
 
   return (
     <>
