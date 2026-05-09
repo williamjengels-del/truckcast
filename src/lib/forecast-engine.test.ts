@@ -180,14 +180,33 @@ describe("calculateForecast", () => {
     expect(result!.confidence).not.toBe("HIGH");
   });
 
-  // 2026-05-06 retune — Sunset Hills Maker's Market over-forecast
-  // ($1,752 produced against a single $1,058 actual when platform
-  // median was high). Retune raised the platform-blend gate from
-  // 2 to 3 operators and capped n=1 platform weight at 25%.
-  describe("platform blend (retuned 2026-05-06)", () => {
-    it("does NOT blend when platform_operator_count < 3", () => {
+  // 2026-05-06 retune — Sunset Hills Maker's Market over-forecast.
+  // 2026-05-09 update — gate dropped from >=3 to >=2 to unlock the
+  // value-prop during seed-operator phase. The 25% platform-weight
+  // cap remains the noise-tolerance backstop.
+  describe("platform blend (gate >=2 on 2026-05-09)", () => {
+    it("does NOT blend when platform_operator_count < 2 (single-op publication is impossible per privacy floor)", () => {
       const singleHistory = [
         makeEvent({ event_name: "Sunset Market", net_sales: 1000, event_date: "2024-06-15" }),
+      ];
+      const result = calculateForecast(
+        { event_name: "Sunset Market", event_date: "2026-06-15", event_weather: "Clear" },
+        singleHistory,
+        {
+          platformEvent: {
+            event_name_normalized: "sunset market",
+            median_sales: 2500,
+            operator_count: 1,
+            total_instances: 2,
+          } as NonNullable<ForecastOptions["platformEvent"]>,
+        }
+      );
+      expect(result!.platformBlendApplied).toBe(false);
+    });
+
+    it("DOES blend at platform_operator_count == 2 (new seed-phase floor)", () => {
+      const singleHistory = [
+        makeEvent({ event_name: "Sunset Market", net_sales: 1000, event_date: "2024-06-15", event_weather: "Clear" }),
       ];
       const result = calculateForecast(
         { event_name: "Sunset Market", event_date: "2026-06-15", event_weather: "Clear" },
@@ -201,7 +220,12 @@ describe("calculateForecast", () => {
           } as NonNullable<ForecastOptions["platformEvent"]>,
         }
       );
-      expect(result!.platformBlendApplied).toBe(false);
+      expect(result!.platformBlendApplied).toBe(true);
+      // 75% × 1000 + 25% × 2500 = 1375. The 25% cap prevents a noisy
+      // 2-op platform median from yanking the forecast around even
+      // though the gate is now permissive at 2.
+      expect(result!.forecast).toBeGreaterThan(1300);
+      expect(result!.forecast).toBeLessThan(1500);
     });
 
     it("caps platform weight at 25% for n=1 personal data when platform_count >= 3", () => {

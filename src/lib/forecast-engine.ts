@@ -440,17 +440,20 @@ function calculateConfidenceScore(
   // for this event → 0.10; 3–7 → 0.05; < 3 → 0. Rewards the user for running
   // events where independent operators are producing similar numbers.
   //
-  // Threshold semantics LOCKED 2026-05-02: counts OTHER operators only, not
-  // total. Since the Q2 self-filter fix (2026-04-28) the engine reads
-  // platformOperatorCount via getPlatformEventsExcludingUser() which strips
-  // the requesting user. At small platform scale this means: ≥3 peers
-  // (i.e. 4+ total operators booking this event, you + 3 others) before
-  // the 0.05 boost kicks in. Privacy floor at the publication side
-  // (platform-registry.ts) is 2+ peers — so the boost intentionally
-  // requires more density than mere publication.
+  // Threshold semantics: counts OTHER operators only, not total. Since
+  // the Q2 self-filter fix (2026-04-28) the engine reads
+  // platformOperatorCount via getPlatformEventsExcludingUser() which
+  // strips the requesting user.
+  //
+  // **Lowered to ≥2 on 2026-05-09** to match the platform-prior firing
+  // gate in calculateForecast (which dropped 3 → 2 same day for the
+  // seed-operator phase). When the platform median is actually being
+  // used in the blend, the operator should get the small confidence
+  // bonus that says "your forecast has community signal too." High-
+  // density bonus stays at ≥8.
   const communityScore =
     platformOperatorCount >= 8 ? 0.1 :
-    platformOperatorCount >= 3 ? 0.05 : 0;
+    platformOperatorCount >= 2 ? 0.05 : 0;
 
   return Math.min(
     1,
@@ -581,26 +584,30 @@ export function calculateForecast(
   // Level 1: Direct Event History
   result = tryLevel1(target, validEvents, historicalEvents);
 
-  if (result && platformMedian > 0 && platformOpCount >= 3) {
+  if (result && platformMedian > 0 && platformOpCount >= 2) {
     // Blend personal history with platform aggregate.
     //
-    // Calibration retune 2026-05-06 after Sunset Hills Maker's Market
-    // surfaced as a real over-forecast: operator had 1 personal data
-    // point ($1,058 actual) and the engine produced $1,752 — the old
-    // 55%-personal / 45%-platform blend at n=1 was pulling forecasts
-    // too aggressively toward platform median when the operator's own
-    // data was thin AND the platform sample was itself thin (n_op=2).
+    // **Threshold lowered 3 → 2 on 2026-05-09** for the seed-operator
+    // phase. Reason: with only one full operator (Wok-O), the platform
+    // prior fires 0% of the time — the entire cross-operator value-prop
+    // is dormant until 2+ operators share an event. Lowering the floor
+    // unlocks the demo as soon as a second operator (Nick Baur / Best
+    // Wurst) is onboarded with overlapping venues. Privacy floor at the
+    // PUBLICATION layer (platform-registry.ts:88) is also 2+ — so this
+    // change just brings the firing gate in line with what the data
+    // layer already publishes.
     //
-    // Two changes here:
-    //   1. Raise the gate: platform_operator_count must be >= 3 (was
-    //      >= 2). Two-operator samples are too noisy to reliably
-    //      adjust against; require a third signal before blending.
-    //   2. Cap platform weight at 25% — personal_weight never drops
-    //      below 0.75 regardless of how thin the operator's data is.
-    //      Mature personal data (5+ points) still keeps the existing
-    //      0.85 weight (15% platform) — those operators have proven
-    //      consistency and shouldn't be pulled around by community
-    //      median.
+    // Two-operator samples are noisier than three. The 25% platform
+    // weight cap (below) is the noise tolerance: even a noisy 2-op
+    // platform median can't pull a thin-personal-history forecast more
+    // than 25% off-axis.
+    //
+    // Calibration retune 2026-05-06 after Sunset Hills Maker's Market:
+    // operator had 1 personal data point ($1,058 actual) and the engine
+    // produced $1,752. Cap platform weight at 25% — personal_weight
+    // never drops below 0.75 regardless of how thin the operator's data
+    // is. Mature personal data (5+ points) still keeps the existing
+    // 0.85 weight (15% platform).
     //
     // Glide path for future operator-count milestones (not yet
     // implemented — when we hit them we revisit):
@@ -626,8 +633,9 @@ export function calculateForecast(
 
   if (result) return markInsufficientDataIfBelowFloor(applyAdjustments(result, target, validEvents, calibrated, venueHistory), validEvents);
 
-  // Level 0: Platform registry — no personal history but platform has enough operators
-  if (platformMedian > 0 && platformOpCount >= 3) {
+  // Level 0: Platform registry — no personal history but platform has enough operators.
+  // Threshold matches the Level 1 blend gate above (lowered 3 → 2 on 2026-05-09).
+  if (platformMedian > 0 && platformOpCount >= 2) {
     const platformResult: ForecastResult = {
       level: 0,
       levelName: "Platform Registry",

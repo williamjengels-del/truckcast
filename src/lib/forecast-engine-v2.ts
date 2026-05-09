@@ -645,7 +645,10 @@ function buildPrior(
   const alpha0 = 2;
   const beta0 = PRIOR_LOG_VARIANCE;
 
-  if (platformMedianRevenue > 0 && platformOperatorCount >= 3) {
+  // Threshold lowered 3 → 2 on 2026-05-09 to match v1 engine + unlock
+  // the cross-operator value-prop during seed-operator phase. See
+  // forecast-engine.ts:584 for the full reasoning.
+  if (platformMedianRevenue > 0 && platformOperatorCount >= 2) {
     return {
       mu0: Math.log(platformMedianRevenue),
       kappa0: options?.priorStrengthOverride ?? PRIOR_STRENGTH.platform,
