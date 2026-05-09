@@ -95,6 +95,20 @@ export async function POST(req: NextRequest) {
   if (!csvText || typeof csvText !== "string") {
     return NextResponse.json({ error: "csvText required" }, { status: 400 });
   }
+  // Size cap. Without this, a 100MB CSV pasted into the admin route
+  // blocks the Node event loop for seconds and consumes >2x the file
+  // size in RAM (string + Papa output). 10 MB ≈ ~50,000 typical event
+  // rows — comfortable headroom for any realistic import. Surfaced
+  // 2026-05-08 deep-dive CSV agent.
+  const MAX_CSV_BYTES = 10 * 1024 * 1024;
+  if (csvText.length > MAX_CSV_BYTES) {
+    return NextResponse.json(
+      {
+        error: `csvText too large (${csvText.length} bytes; max ${MAX_CSV_BYTES}). Split the file or contact support.`,
+      },
+      { status: 413 }
+    );
+  }
   if (!Array.isArray(columnMappings)) {
     return NextResponse.json({ error: "columnMappings required" }, { status: 400 });
   }

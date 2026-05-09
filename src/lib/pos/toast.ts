@@ -54,6 +54,24 @@ export function parseToastEmail(rawText: string): ToastParseResult {
       const yearPart = subjectMatch[2] ?? String(new Date().getFullYear());
       const parsed = new Date(`${datePart}, ${yearPart}`);
       if (!isNaN(parsed.getTime())) {
+        // Defensive: detect day-rollover bugs. `new Date("April 31, 2025")`
+        // silently rolls to "May 1" — would attribute Toast revenue to
+        // the wrong day with no warning. Re-parse the input month name
+        // and compare against the parsed Date's month; mismatch means
+        // we just rolled and the input is malformed.
+        const inputMonth = datePart.split(/\s+/)[0].toLowerCase();
+        const months = [
+          "january", "february", "march", "april", "may", "june",
+          "july", "august", "september", "october", "november", "december",
+        ];
+        const inputMonthIdx = months.findIndex((m) =>
+          inputMonth.startsWith(m.slice(0, 3))
+        );
+        if (inputMonthIdx >= 0 && parsed.getMonth() !== inputMonthIdx) {
+          // Rolled over (e.g. Apr 31 → May 1). Skip this match and let
+          // the loop try the next candidate or fall through to error.
+          continue;
+        }
         // Format as YYYY-MM-DD in local time
         const y = parsed.getFullYear();
         const m = String(parsed.getMonth() + 1).padStart(2, "0");
