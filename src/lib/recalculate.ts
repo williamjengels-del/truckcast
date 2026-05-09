@@ -22,7 +22,7 @@ import {
 } from "@/lib/weather";
 import {
   inferTier,
-  computeVenueMediansForTierInference,
+  computeLooVenueMediansPerEvent,
   type EventSizeTier,
 } from "@/lib/event-size-tier";
 import type { Event, WeatherType } from "@/lib/database.types";
@@ -269,7 +269,12 @@ export async function recalculateForUser(
   // propagate without requiring a separate one-shot script.
   let tiersInferred = 0;
   if (tierColumnsAvailable) {
-    const venueMedians = computeVenueMediansForTierInference(allEvents, today);
+    // Leave-one-out medians per event — the event being tiered must
+    // not contribute to its own venue baseline. Using the population
+    // median (the previous algorithm) systematically under-classified
+    // extremes because a flagship night pulled its own baseline up.
+    // See computeLooVenueMediansPerEvent for the math example.
+    const looMedians = computeLooVenueMediansPerEvent(allEvents, today);
     const pastEventsForTier = allEvents.filter(
       (e) =>
         e.event_date < today &&
@@ -285,7 +290,10 @@ export async function recalculateForUser(
         event.event_mode === "catering"
           ? event.invoice_revenue ?? 0
           : event.net_sales ?? 0;
-      const venueMedian = venueMedians.get(event.event_name.toLowerCase().trim());
+      // null venueMedian = n=1 (no peer at this venue) → inferTier
+      // returns null → effective tier defaults to NORMAL at read time.
+      // Honest: untiered rather than self-classified.
+      const venueMedian = looMedians.get(event.id);
       const tier: EventSizeTier | null = inferTier(revenue, venueMedian);
       // Only update when the inferred value would change. Avoids
       // pointless writes (and updated_at churn) on stable rows.
