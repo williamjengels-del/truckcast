@@ -180,7 +180,7 @@ export async function matchAndUpdateSales(
  */
 export async function updateSyncStatus(
   connectionId: string,
-  status: "success" | "error",
+  status: "success" | "error" | "auth_expired",
   error?: string,
   eventsUpdated?: number,
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -193,7 +193,10 @@ export async function updateSyncStatus(
     .update({
       last_sync_at: new Date().toISOString(),
       last_sync_status: status,
-      last_sync_error: status === "error" ? (error ?? "Unknown error") : null,
+      last_sync_error:
+        status === "error" || status === "auth_expired"
+          ? (error ?? "Unknown error")
+          : null,
       ...(eventsUpdated !== undefined ? { last_sync_events_updated: eventsUpdated } : {}),
     })
     .eq("id", connectionId);

@@ -438,12 +438,15 @@ function PosProviderCard({
                   className={
                     connection.last_sync_status === "success"
                       ? "text-green-600"
-                      : connection.last_sync_status === "error"
+                      : connection.last_sync_status === "error" ||
+                          connection.last_sync_status === "auth_expired"
                         ? "text-red-600"
                         : ""
                   }
                 >
-                  {connection.last_sync_status}
+                  {connection.last_sync_status === "auth_expired"
+                    ? "token expired — reconnect needed"
+                    : connection.last_sync_status}
                 </span>
               </div>
               {connection.last_sync_events_updated != null && (
@@ -976,12 +979,15 @@ function ToastCard({
                   className={
                     connection.last_sync_status === "success"
                       ? "text-green-600"
-                      : connection.last_sync_status === "error"
+                      : connection.last_sync_status === "error" ||
+                          connection.last_sync_status === "auth_expired"
                         ? "text-red-600"
                         : ""
                   }
                 >
-                  {connection.last_sync_status}
+                  {connection.last_sync_status === "auth_expired"
+                    ? "token expired — reconnect needed"
+                    : connection.last_sync_status}
                 </span>
               </div>
             </div>

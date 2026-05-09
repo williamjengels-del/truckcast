@@ -52,7 +52,14 @@ export async function GET(request: NextRequest) {
           user_id: user.id,
           provider: "clover",
           access_token: tokenData.access_token,
-          refresh_token: null, // Clover tokens don't expire in the same way
+          // Clover access tokens DO expire (~13 months from issue). We
+          // don't have a refresh_token because Clover's third-party app
+          // OAuth flow doesn't return one — the recovery path is a
+          // full reconnect via this callback. The 401-detect in
+          // src/lib/pos/clover.ts surfaces the expiry as
+          // last_sync_status=auth_expired so the operator sees a
+          // "Reconnect Clover" affordance in /dashboard/integrations.
+          refresh_token: null,
           token_expires_at: null,
           merchant_id: merchantId,
           location_ids: [merchantId], // Clover uses merchant_id as the location

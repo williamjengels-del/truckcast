@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { hasAccess } from "@/lib/subscription";
-import { fetchCloverOrders } from "@/lib/pos/clover";
+import { fetchCloverOrders, CloverAuthExpiredError } from "@/lib/pos/clover";
 import {
   aggregateByDate,
   matchAndUpdateSales,
@@ -117,8 +117,12 @@ export async function POST(request: Request) {
       dateRange: { startDate, endDate },
     });
   } catch (err) {
+    const isAuthExpired = err instanceof CloverAuthExpiredError;
     const message = err instanceof Error ? err.message : "Sync failed";
-    // Try to update sync status
+
+    // Try to update sync status. Auth-expired gets its own status so
+    // the integrations UI can render a "Reconnect Clover" affordance
+    // instead of a generic red error.
     try {
       const supabase = await createClient();
       const {
@@ -132,13 +136,25 @@ export async function POST(request: Request) {
           .eq("provider", "clover")
           .single();
         if (conn) {
-          await updateSyncStatus(conn.id, "error", message);
+          await updateSyncStatus(
+            conn.id,
+            isAuthExpired ? "auth_expired" : "error",
+            message
+          );
         }
       }
     } catch {
       // Best-effort status update
     }
 
-    return NextResponse.json({ error: message }, { status: 500 });
+    return NextResponse.json(
+      {
+        error: message,
+        ...(isAuthExpired
+          ? { code: "clover_auth_expired", needsReconnect: true }
+          : {}),
+      },
+      { status: isAuthExpired ? 401 : 500 }
+    );
   }
 }
