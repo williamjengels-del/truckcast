@@ -3,6 +3,7 @@ import {
   inferTier,
   effectiveTier,
   computeVenueMediansForTierInference,
+  computeLooVenueMediansPerEvent,
   TIER_THRESHOLDS,
 } from "./event-size-tier";
 
@@ -229,5 +230,120 @@ describe("computeVenueMediansForTierInference", () => {
     ];
     const medians = computeVenueMediansForTierInference(events, TODAY);
     expect(medians.get("music park")).toBe(600);
+  });
+});
+
+describe("computeLooVenueMediansPerEvent", () => {
+  function ev(id: string, name: string, date: string, sales: number, mode: "food_truck" | "catering" = "food_truck") {
+    return {
+      id,
+      event_name: name,
+      event_date: date,
+      net_sales: mode === "food_truck" ? sales : null,
+      invoice_revenue: mode === "catering" ? sales : 0,
+      event_mode: mode,
+      anomaly_flag: null,
+    } as unknown as Parameters<typeof computeLooVenueMediansPerEvent>[0][number];
+  }
+
+  const TODAY = "2026-05-08";
+
+  it("excludes the event being inferred from its own venue baseline", () => {
+    // The Zach Bryan example from the bug report.
+    const events = [
+      ev("a", "Music Park", "2026-04-01", 500),
+      ev("b", "Music Park", "2026-03-15", 600),
+      ev("c", "Music Park", "2026-03-01", 800),
+      ev("d", "Music Park", "2026-02-15", 1000),
+      ev("zach", "Music Park", "2026-02-01", 2836),
+    ];
+    const looMedians = computeLooVenueMediansPerEvent(events, TODAY);
+    // Population median of all 5 = 800. LOO for Zach: median of
+    // [500, 600, 800, 1000] = 700. Confirms the under-classification fix.
+    expect(looMedians.get("zach")).toBe(700);
+    // For event "c" ($800, the population median): LOO of [500,600,1000,2836]
+    // = (600 + 1000) / 2 = 800. Different math but happens to land on the
+    // same value at this specific datapoint.
+    expect(looMedians.get("c")).toBe(800);
+  });
+
+  it("returns null for n=1 (no peer)", () => {
+    const events = [ev("solo", "Lone Venue", "2026-04-01", 500)];
+    const looMedians = computeLooVenueMediansPerEvent(events, TODAY);
+    expect(looMedians.get("solo")).toBeNull();
+  });
+
+  it("handles n=2 (LOO leaves the other one)", () => {
+    const events = [
+      ev("a", "Pair Venue", "2026-04-01", 100),
+      ev("b", "Pair Venue", "2026-03-01", 900),
+    ];
+    const looMedians = computeLooVenueMediansPerEvent(events, TODAY);
+    expect(looMedians.get("a")).toBe(900); // median of [900]
+    expect(looMedians.get("b")).toBe(100); // median of [100]
+  });
+
+  it("returns even-count median when LOO leaves an odd-count remainder of 4", () => {
+    // 5 events → remove one → 4 events → median = avg of two middles.
+    const events = [
+      ev("a", "Venue", "2026-04-01", 100),
+      ev("b", "Venue", "2026-03-15", 200),
+      ev("c", "Venue", "2026-03-01", 300),
+      ev("d", "Venue", "2026-02-15", 400),
+      ev("e", "Venue", "2026-02-01", 500),
+    ];
+    const looMedians = computeLooVenueMediansPerEvent(events, TODAY);
+    // Removing $300 (the middle) leaves [100,200,400,500]. Median = (200+400)/2 = 300.
+    expect(looMedians.get("c")).toBe(300);
+    // Removing $100 leaves [200,300,400,500]. Median = (300+400)/2 = 350.
+    expect(looMedians.get("a")).toBe(350);
+  });
+
+  it("excludes disrupted/boosted/no-revenue events from baseline AND from result", () => {
+    const events = [
+      ev("good1", "Venue", "2026-04-01", 500),
+      ev("good2", "Venue", "2026-03-01", 700),
+      { ...ev("bad-disrupted", "Venue", "2026-02-15", 2000), anomaly_flag: "disrupted" as const },
+      { ...ev("bad-boosted", "Venue", "2026-02-01", 5000), anomaly_flag: "boosted" as const },
+      ev("bad-zero", "Venue", "2026-01-15", 0),
+    ];
+    const looMedians = computeLooVenueMediansPerEvent(events, TODAY);
+    expect(looMedians.has("bad-disrupted")).toBe(false);
+    expect(looMedians.has("bad-boosted")).toBe(false);
+    expect(looMedians.has("bad-zero")).toBe(false);
+    // good1 LOO sees only good2 → median = 700
+    expect(looMedians.get("good1")).toBe(700);
+    expect(looMedians.get("good2")).toBe(500);
+  });
+
+  it("excludes future events (asOfDate forward guard)", () => {
+    const events = [
+      ev("past1", "Venue", "2026-04-01", 100),
+      ev("past2", "Venue", "2026-03-01", 200),
+      ev("future", "Venue", "2027-01-01", 9999), // future
+    ];
+    const looMedians = computeLooVenueMediansPerEvent(events, TODAY);
+    expect(looMedians.has("future")).toBe(false);
+    expect(looMedians.get("past1")).toBe(200);
+  });
+
+  it("uses invoice_revenue for catering events", () => {
+    const events = [
+      ev("a", "Wedding", "2026-04-01", 1500, "catering"),
+      ev("b", "Wedding", "2026-03-01", 2500, "catering"),
+      ev("c", "Wedding", "2026-02-01", 3500, "catering"),
+    ];
+    const looMedians = computeLooVenueMediansPerEvent(events, TODAY);
+    expect(looMedians.get("b")).toBe(2500); // median of [1500, 3500]
+  });
+
+  it("normalizes event_name to lowercase + trim", () => {
+    const events = [
+      ev("a", "  Music Park  ", "2026-04-01", 500),
+      ev("b", "MUSIC PARK", "2026-03-01", 700),
+    ];
+    const looMedians = computeLooVenueMediansPerEvent(events, TODAY);
+    expect(looMedians.get("a")).toBe(700);
+    expect(looMedians.get("b")).toBe(500);
   });
 });
