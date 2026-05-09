@@ -26,6 +26,23 @@ export interface CloverTokenResponse {
   access_token: string;
 }
 
+/**
+ * Thrown when Clover returns 401 from a Bearer-token call. Surfaces the
+ * "token expired, operator must reconnect" path distinctly from other
+ * sync errors. Clover access tokens DO expire (~13 months from issue);
+ * the prior comment in callback/route.ts that they "don't expire in
+ * the same way" was wrong and is corrected by this PR.
+ *
+ * Caller should catch this and set last_sync_status = "auth_expired".
+ */
+export class CloverAuthExpiredError extends Error {
+  readonly code = "clover_auth_expired";
+  constructor(detail?: string) {
+    super(`Clover token expired or invalid${detail ? `: ${detail}` : ""}`);
+    this.name = "CloverAuthExpiredError";
+  }
+}
+
 export async function exchangeCloverCode(
   code: string
 ): Promise<CloverTokenResponse> {
@@ -66,6 +83,9 @@ export async function getCloverMerchant(
     }
   );
 
+  if (res.status === 401) {
+    throw new CloverAuthExpiredError(`merchants/${merchantId}`);
+  }
   if (!res.ok) {
     throw new Error(`Failed to get Clover merchant: ${res.statusText}`);
   }
@@ -126,6 +146,11 @@ export async function fetchCloverOrders(
       }
     );
 
+    if (res.status === 401) {
+      // pos-7: token expired or revoked. Surface distinctly so the
+      // sync route can flag the connection as needing reconnect.
+      throw new CloverAuthExpiredError(`orders pagination at offset ${offset}`);
+    }
     if (!res.ok) {
       throw new Error(`Failed to fetch Clover orders: ${res.statusText}`);
     }
