@@ -47,7 +47,7 @@ export async function sendWelcomeEmail(to: string, businessName: string) {
 
     <!-- Body -->
     <div style="padding:40px;">
-      <h1 style="margin:0 0 16px;font-size:22px;font-weight:700;color:#111827;">Welcome, ${displayName}! 👋</h1>
+      <h1 style="margin:0 0 16px;font-size:22px;font-weight:700;color:#111827;">Welcome, ${escapeHtml(displayName)}! 👋</h1>
       <p style="margin:0 0 20px;font-size:15px;line-height:1.6;color:#374151;">
         You've got <strong>14 days</strong> to explore VendCast — no credit card needed.
         Here's how to get the most out of it:
@@ -120,7 +120,10 @@ export async function sendManagerInviteEmail(
   await resend.emails.send({
     from: FROM,
     to,
-    subject: `You've been invited to manage ${ownerLabel} on VendCast`,
+    // Subject is plain-text — strip any HTML tags from operator-controlled
+    // ownerLabel rather than HTML-escape them (entities would render as
+    // visible &lt;...&gt; in mail clients). HTML-escape for body usages below.
+    subject: `You've been invited to manage ${ownerLabel.replace(/<[^>]*>/g, "")} on VendCast`,
     html: `
 <!DOCTYPE html>
 <html>
@@ -136,9 +139,9 @@ export async function sendManagerInviteEmail(
 
     <!-- Body -->
     <div style="padding:40px;">
-      <h1 style="margin:0 0 16px;font-size:22px;font-weight:700;color:#111827;">You've been invited to help manage ${ownerLabel}</h1>
+      <h1 style="margin:0 0 16px;font-size:22px;font-weight:700;color:#111827;">You've been invited to help manage ${escapeHtml(ownerLabel)}</h1>
       <p style="margin:0 0 20px;font-size:15px;line-height:1.6;color:#374151;">
-        ${ownerLabel} added you as a manager on VendCast — the event-ops platform they use to track bookings, log events, and respond to inquiries from organizers. As a manager, you can do all of that on their behalf without needing their password.
+        ${escapeHtml(ownerLabel)} added you as a manager on VendCast — the event-ops platform they use to track bookings, log events, and respond to inquiries from organizers. As a manager, you can do all of that on their behalf without needing their password.
       </p>
 
       <p style="margin:0 0 24px;font-size:15px;line-height:1.6;color:#374151;">
@@ -221,7 +224,7 @@ export async function sendSalesReminderEmail(
       <div style="color:white;font-size:28px;font-weight:800;letter-spacing:-1px;">VendCast</div>
     </div>
     <div style="padding:40px;">
-      <h1 style="margin:0 0 8px;font-size:22px;font-weight:700;color:#111827;">Log your sales, ${displayName} 📋</h1>
+      <h1 style="margin:0 0 8px;font-size:22px;font-weight:700;color:#111827;">Log your sales, ${escapeHtml(displayName)} 📋</h1>
       <p style="margin:0 0 24px;font-size:15px;line-height:1.6;color:#374151;">
         ${count === 1 ? "This past event is" : `These ${count} past events are`} missing sales data.
         Logging actuals keeps your forecasts sharp — it only takes a second.
@@ -350,7 +353,7 @@ export async function sendBookingInquiryEmail(
       <div style="color:white;font-size:28px;font-weight:800;letter-spacing:-1px;">VendCast</div>
     </div>
     <div style="padding:40px;">
-      <h1 style="margin:0 0 8px;font-size:22px;font-weight:700;color:#111827;">New booking inquiry, ${displayName} 📬</h1>
+      <h1 style="margin:0 0 8px;font-size:22px;font-weight:700;color:#111827;">New booking inquiry, ${escapeHtml(displayName)} 📬</h1>
       <p style="margin:0 0 24px;font-size:15px;line-height:1.6;color:#374151;">
         <strong>${escapeHtml(payload.requesterName)}</strong> wants to book you. Reply fast — inquiries that sit go cold.
       </p>
@@ -504,7 +507,7 @@ export async function sendInquiryNotificationEmail(
       <div style="color:white;font-size:28px;font-weight:800;letter-spacing:-1px;">VendCast</div>
     </div>
     <div style="padding:40px;">
-      <h1 style="margin:0 0 8px;font-size:22px;font-weight:700;color:#111827;">New event request, ${displayName} 🎯</h1>
+      <h1 style="margin:0 0 8px;font-size:22px;font-weight:700;color:#111827;">New event request, ${escapeHtml(displayName)} 🎯</h1>
       <p style="margin:0 0 8px;font-size:15px;line-height:1.6;color:#374151;">
         <strong>${escapeHtml(payload.organizerName)}</strong> is looking for a mobile vendor for an event in <strong>${escapeHtml(payload.city)}, ${escapeHtml(payload.state)}</strong>.
       </p>
@@ -638,7 +641,7 @@ export async function sendTrialExpiryEmail(
         ${isUrgent ? "Last chance" : `${daysLeft} days left`} on your free trial
       </h1>
       <p style="margin:0 0 24px;font-size:15px;line-height:1.6;color:#374151;">
-        Hey ${businessName || "there"} — your 14-day trial ${isUrgent ? "ends tomorrow" : `ends in ${daysLeft} days`}.
+        Hey ${escapeHtml(businessName || "there")} — your 14-day trial ${isUrgent ? "ends tomorrow" : `ends in ${daysLeft} days`}.
         Upgrade now to keep your event history, forecasts, and analytics.
       </p>
       <a href="${APP_URL}/dashboard/settings?upgrade=true" style="display:inline-block;background:${isUrgent ? "#dc2626" : "#f97316"};color:white;font-weight:600;font-size:15px;padding:12px 28px;border-radius:8px;text-decoration:none;">
@@ -674,8 +677,8 @@ export async function sendTrialExpiredEmail(
   const resend = getResend();
 
   const bodyText = gracePeriodActive
-    ? `Hey ${businessName || "there"} — your VendCast free trial has ended, but your access isn't going anywhere yet. You have full dashboard access until <strong>May 1, 2026</strong>. Use this time to add your events and run some forecasts — then decide if VendCast is worth keeping.`
-    : `Hey ${businessName || "there"} — your VendCast free trial has ended. Your data is safe and waiting for you. Upgrade to restore full access.`;
+    ? `Hey ${escapeHtml(businessName || "there")} — your VendCast free trial has ended, but your access isn't going anywhere yet. You have full dashboard access until <strong>May 1, 2026</strong>. Use this time to add your events and run some forecasts — then decide if VendCast is worth keeping.`
+    : `Hey ${escapeHtml(businessName || "there")} — your VendCast free trial has ended. Your data is safe and waiting for you. Upgrade to restore full access.`;
 
   const ctaText = gracePeriodActive ? "View upgrade options" : "Upgrade to continue →";
 
