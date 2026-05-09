@@ -30,6 +30,8 @@ function makeV2Result(overrides: Partial<BayesianForecastResult> = {}): Bayesian
     holidayCoefficient: 1.0,
     weatherSource: "none",
     insufficientData: false,
+    targetTier: "NORMAL",
+    tierPartitionApplied: false,
     ...overrides,
   };
 }
