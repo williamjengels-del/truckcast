@@ -102,15 +102,22 @@ export async function fetchCloverOrders(
   let hasMore = true;
 
   while (hasMore) {
-    const params = new URLSearchParams({
-      filter: `createdTime>=${startMs}&createdTime<=${endMs}`,
-      limit: String(limit),
-      offset: String(offset),
-      expand: "payments",
-    });
+    // Clover requires multiple `filter=` query params for compound
+    // filters (one per condition). Building the string via
+    // URLSearchParams URL-encodes the inner `&` as `%26`, collapsing
+    // both conditions into ONE param value — Clover then ignores the
+    // end-of-window filter and returns ALL orders since startMs.
+    // Pagination then breaks because the result set is unbounded.
+    // Build the query manually so each `filter=` stays separate.
+    const queryString =
+      `filter=${encodeURIComponent(`createdTime>=${startMs}`)}` +
+      `&filter=${encodeURIComponent(`createdTime<=${endMs}`)}` +
+      `&limit=${limit}` +
+      `&offset=${offset}` +
+      `&expand=payments`;
 
     const res = await fetch(
-      `${CLOVER_BASE_URL}/v3/merchants/${merchantId}/orders?${params}`,
+      `${CLOVER_BASE_URL}/v3/merchants/${merchantId}/orders?${queryString}`,
       {
         headers: {
           Authorization: `Bearer ${accessToken}`,

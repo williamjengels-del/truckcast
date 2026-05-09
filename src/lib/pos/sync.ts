@@ -101,12 +101,21 @@ export async function matchAndUpdateSales(
 
     if (!events || events.length === 0) continue;
 
-    // Optionally skip events that already have sales (cron mode)
-    const eligibleEvents = skipIfHasSales
-      ? events.filter(
-          (e: { net_sales: number | null }) => e.net_sales === null || e.net_sales === 0
-        )
-      : events;
+    // Two-layer eligibility filter:
+    //   1. Cron mode: skip events that already have non-zero sales
+    //      (preserves any prior sync's value).
+    //   2. ALWAYS: skip events whose pos_source is "manual" — operator
+    //      explicitly entered the value and the no-auto-fix-on-operator-
+    //      data memory rule says POS sync MUST NOT clobber it. Past Cowork
+    //      Airtable time destruction is the precedent. Without this check
+    //      every manual sync would silently overwrite operator edits.
+    const eligibleEvents = events.filter(
+      (e: { net_sales: number | null; pos_source: string | null }) => {
+        if (e.pos_source === "manual" && e.net_sales !== null) return false;
+        if (skipIfHasSales && e.net_sales !== null && e.net_sales !== 0) return false;
+        return true;
+      }
+    );
 
     if (eligibleEvents.length === 0) continue;
 
