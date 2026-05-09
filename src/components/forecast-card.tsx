@@ -66,15 +66,33 @@ export function ForecastCard({ event, forecast }: ForecastCardProps) {
     event.forecast_bayesian_low_80 != null &&
     event.forecast_bayesian_high_80 != null;
 
-  // Cold-start: v2 fired but with zero personal observations of this
-  // event_name. Posterior collapses to the operator-overall prior,
-  // which gives a wide interval that LOOKS like a forecast but
-  // isn't really informative — the model has no history to ground
-  // on. Show explicit "first time" copy instead of pretending the
-  // 50% interval is actionable. Operator request 2026-05-07 after
-  // seeing $339-$1,172 displayed for a brand-new event.
+  // Cold-start: v2 fired without enough information to ground the
+  // forecast on real history. Posterior collapses to the prior, which
+  // gives a wide interval that LOOKS like a forecast but isn't really
+  // informative — staffing/inventory decisions made off it are noise.
+  //
+  // Two qualifying cases (Tier 1 #5 — extends original n_obs=0 from
+  // PR #226 to also catch small-n with no platform support):
+  //
+  //   1. n_obs == 0 — never seen this event_name. Posterior is pure
+  //      prior. Always cold-start regardless of prior source.
+  //
+  //   2. n_obs < 3 AND prior_src !== "platform" — only 1-2 personal
+  //      observations AND no cross-operator data to fill the gap. The
+  //      Bayesian update barely moved the prior; the interval is
+  //      mostly the operator's overall log-variance, not real
+  //      event-specific signal.
+  //
+  //   When prior_src === "platform" with n_obs < 3, we DO show the
+  //   normal range — community signal narrows the interval enough to
+  //   be actionable even with thin personal data.
+  //
+  // Operator request 2026-05-07 (n_obs=0 case) + 2026-05-09 evening
+  // re-prioritization (small-n no-platform extension).
+  const nObs = event.forecast_bayesian_n_obs ?? 0;
+  const priorSrc = event.forecast_bayesian_prior_src ?? null;
   const isColdStart =
-    hasV2 && (event.forecast_bayesian_n_obs ?? 0) === 0;
+    hasV2 && (nObs === 0 || (nObs < 3 && priorSrc !== "platform"));
 
   const primary = hasV2
     ? event.forecast_bayesian_point!
@@ -135,15 +153,17 @@ export function ForecastCard({ event, forecast }: ForecastCardProps) {
         {formatDollars(primary)} <span className="text-sm font-normal text-muted-foreground">expected</span>
       </div>
 
-      {/* Cold-start treatment — n_obs = 0 means the engine has no
-          history for this event_name and the wide interval reflects
-          "I have no idea" rather than a calibrated guess. Tell the
-          operator that explicitly instead of dressing it up as a
-          50% interval they can act on. */}
+      {/* Cold-start treatment — engine couldn't ground on enough event-
+          specific history. Honest "not enough data yet" framing instead
+          of dressing up a wide prior as a 50% interval. Copy adapts:
+          n_obs=0 reads "first time at this event"; n_obs=1-2 reads
+          "first few times" so it doesn't lie about prior runs. */}
       {isColdStart ? (
         <>
           <p className="text-sm text-muted-foreground">
-            First time at this event — no history to ground a forecast yet.
+            {nObs === 0
+              ? "First time at this event — no history to ground a forecast yet."
+              : `Only ${nObs} prior ${nObs === 1 ? "run" : "runs"} of this event — not enough history yet for a tight forecast.`}
           </p>
           {outerLow !== null && outerHigh !== null && (
             <p className="text-xs text-muted-foreground">
