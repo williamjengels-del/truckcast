@@ -4,18 +4,79 @@ import { US_STATE_NAMES } from "./constants";
 /**
  * Normalize a city name before sending to Open-Meteo's geocoding API.
  *
- * Open-Meteo stores "St Louis, Missouri" but NOT "Saint Louis, Missouri".
- * Searching "saint louis" returns Saint Louis, Michigan (pop 7K) first.
- * Searching "st louis" returns St Louis, Missouri (pop 315K) first.
- *
- * This also strips trailing state abbreviations (", MO") so we're just
- * sending the city name.
+ * Strips trailing state abbreviations (", MO") and surrounding whitespace.
+ * Does NOT swap Saint↔St — that's handled by `cityGeocodeCandidates`
+ * because Open-Meteo's index inconsistently uses one or the other:
+ *   - "St Louis"     → St Louis MO pop 280K (best)
+ *   - "Saint Louis"  → Saint Louis MI pop 7K (wrong city)
+ *   - "Saint Ann"    → Saint Ann MO pop 13K (best)
+ *   - "St Ann"       → no US results at all
+ *   - "Saint Peters" → City of Saint Peters MO pop 53K (best)
+ *   - "St Peters"    → low/no US results
+ * Trying just one form was a 2026-05-08 audit failure: 33 Saint Ann +
+ * 2 Saint Peters events flagged GEOCODE_FAILED. Trying both forms in
+ * sequence in `geocodeCity` resolves all of them.
  */
 export function normalizeCityForGeocoding(city: string): string {
   return city
-    .replace(/\bsaint\b/gi, "St") // "Saint Louis" → "St Louis"
     .replace(/,\s*[A-Za-z]{2}$/, "") // strip ", MO" / ", IL" etc.
     .trim();
+}
+
+/**
+ * Hand-curated alias map for cases where the operator-typed city
+ * doesn't match an Open-Meteo entry, even with Saint↔St expansion.
+ * Matched case-insensitively after normalizeCityForGeocoding strips
+ * the state suffix.
+ *
+ * Use sparingly — every entry is a special case the operator can't
+ * fix by retyping. Common drift (Saint↔St, casing) is handled
+ * automatically; this is for genuine name mismatches:
+ *   - Military bases that aren't in GeoNames as cities
+ *   - Neighborhoods that should resolve to their parent city
+ */
+const CITY_GEOCODE_ALIASES: ReadonlyArray<{ pattern: RegExp; canonical: string }> = [
+  // Scott AFB sits in Belleville IL; not indexed as a populated place.
+  { pattern: /^scott\s+afb$/i, canonical: "Belleville" },
+  // Central West End is a Saint Louis neighborhood.
+  { pattern: /^central\s+west\s+end(\s+saint\s+louis)?$/i, canonical: "Saint Louis" },
+];
+
+/**
+ * Generate the ordered list of name candidates to try against
+ * Open-Meteo for a given city input. First match wins in `geocodeCity`.
+ * Order: alias > as-typed > Saint→St > St→Saint. Deduped.
+ */
+export function cityGeocodeCandidates(city: string): string[] {
+  const normalized = normalizeCityForGeocoding(city);
+  if (!normalized) return [];
+  // Two base names if there's an alias (alias + original), else one.
+  const bases: string[] = [];
+  for (const { pattern, canonical } of CITY_GEOCODE_ALIASES) {
+    if (pattern.test(normalized)) {
+      bases.push(canonical);
+      break;
+    }
+  }
+  bases.push(normalized);
+  // For each base: include as-typed, plus Saint↔St swap variants. The
+  // swap retry handles Open-Meteo's inconsistent indexing — "Saint
+  // Louis" returns Michigan but "St Louis" returns Missouri, while
+  // "Saint Ann" returns Missouri but "St Ann" returns nothing.
+  const variants: string[] = [];
+  for (const base of bases) {
+    variants.push(base);
+    variants.push(base.replace(/\bsaint\b/gi, "St"));
+    variants.push(base.replace(/\bSt\b\.?(?=\s)/gi, "Saint"));
+  }
+  // Dedupe preserving order.
+  const seen = new Set<string>();
+  return variants.filter((v) => {
+    const key = v.toLowerCase();
+    if (seen.has(key) || !v) return false;
+    seen.add(key);
+    return true;
+  });
 }
 
 /**
@@ -38,10 +99,26 @@ export async function geocodeCity(
   state?: string | null
 ): Promise<{ latitude: number; longitude: number } | null> {
   if (!city.trim()) return null;
+  // Try each candidate name in priority order. First one that resolves
+  // to a US match in the requested state wins. See cityGeocodeCandidates
+  // for the ordering rationale.
+  for (const candidate of cityGeocodeCandidates(city)) {
+    const result = await tryGeocodeOnce(candidate, state ?? null);
+    if (result) return result;
+  }
+  return null;
+}
+
+async function tryGeocodeOnce(
+  name: string,
+  state: string | null
+): Promise<{ latitude: number; longitude: number } | null> {
   try {
-    const normalized = normalizeCityForGeocoding(city);
+    // Note: country_code=us in the URL is NOT a server-side filter for
+    // Open-Meteo (verified 2026-05-08 — UK and Jamaica results still
+    // appeared in the response). We filter client-side.
     const res = await fetch(
-      `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(normalized)}&count=10&country_code=us&format=json`
+      `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(name)}&count=10&format=json`
     );
     if (!res.ok) return null;
     const data = await res.json();
@@ -52,26 +129,27 @@ export async function geocodeCity(
           population?: number;
           admin1?: string;
           feature_code?: string;
+          country_code?: string;
         }>
       | undefined;
     if (!allResults || allResults.length === 0) return null;
 
+    // US-only filter (Open-Meteo's `country_code=us` query param doesn't
+    // restrict; filter client-side).
+    let candidates = allResults.filter((r) => r.country_code === "US");
+    if (candidates.length === 0) return null;
+
     // State filter — HARD CONSTRAINT when a known US code is provided.
-    // Open-Meteo doesn't support server-side admin1 filtering, so we
-    // filter client-side. If the filter eliminates all candidates we
-    // return null — silent cross-state fallback (the prior behavior)
-    // produced incorrect coordinates when the operator's city input
-    // was a typo or didn't exist in the target state. Better to show
-    // "no weather" than to silently mis-populate with another state's
-    // data. See Issue 1 from Commit A smoke test for the bug this
-    // fixes: city="Bellville" + state=IL → Open-Meteo returns
-    // Bellville, Texas → old code silently picked Texas → weather
-    // for the wrong event.
-    let candidates = allResults;
+    // If the filter eliminates all candidates we return null — silent
+    // cross-state fallback (the prior behavior) produced incorrect
+    // coordinates when the operator's city input was a typo or didn't
+    // exist in the target state. Better to show "no weather" than to
+    // silently mis-populate with another state's data. See Issue 1
+    // from Commit A smoke test for the bug this fixes.
     if (state && state !== "OTHER") {
       const fullName = US_STATE_NAMES[state.toUpperCase()];
       if (fullName) {
-        candidates = allResults.filter(
+        candidates = candidates.filter(
           (r) => r.admin1?.toLowerCase() === fullName.toLowerCase()
         );
         if (candidates.length === 0) return null;
@@ -79,20 +157,14 @@ export async function geocodeCity(
     }
 
     // Prefer populated-place (PPL*) feature codes over airports,
-    // landmarks, etc. Open-Meteo's feature_code field uses GeoNames
-    // codes: PPL, PPLA, PPLA2..PPLA4, PPLC, PPLL, PPLS, PPLF all
-    // denote populated places; AIRP, PRK, HTL, etc. do not. A city
-    // with a small airport nearby sometimes returns the airport first
-    // on population. See Issue 1 smoke test: city="Saint Charles" +
-    // state=MO → returned "St Charles County Smartt Airport" instead
-    // of the city. Falling back to all state-matched candidates if no
-    // PPL match (airport is still state-correct — better than null).
+    // landmarks, etc. Falls back to all state-matched candidates if no
+    // PPL match. See Issue 1 smoke test for the airport-over-city bug.
     const pplMatches = candidates.filter((r) =>
       r.feature_code?.startsWith("PPL")
     );
     const ranked = pplMatches.length > 0 ? pplMatches : candidates;
 
-    // Pick highest-population match — avoids small towns over major cities
+    // Pick highest-population match — avoids small towns over major cities.
     const best = ranked.reduce((a, b) =>
       (b.population ?? 0) > (a.population ?? 0) ? b : a
     );

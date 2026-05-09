@@ -34,7 +34,7 @@ import {
 } from "@/lib/constants";
 import type { Event, WeatherType } from "@/lib/database.types";
 import type { EventFormData } from "@/app/dashboard/events/actions";
-import { classifyWeather, normalizeCityForGeocoding } from "@/lib/weather";
+import { classifyWeather, cityGeocodeCandidates } from "@/lib/weather";
 
 const WEATHER_OPTIONS: WeatherType[] = [
   "Clear",
@@ -166,47 +166,63 @@ export function EventForm({
     if (!city.trim() || !date) return;
     setWeatherFetching(true);
     try {
-      // Geocode
-      const geoRes = await fetch(
-        `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(normalizeCityForGeocoding(city))}&country_code=us&count=10`
-      );
-      if (!geoRes.ok) return;
-      const geoData = await geoRes.json();
-      const allResults: Array<{
+      // Geocode — try each name candidate (handles Saint↔St mismatch
+      // between operator input and Open-Meteo's index). First candidate
+      // that resolves to a US match in the requested state wins.
+      // Mirrors src/lib/weather.ts:geocodeCity but inline because we
+      // also want the matched result.name + admin1 for the badge.
+      let result: {
         latitude: number;
         longitude: number;
         name: string;
         admin1?: string;
         population?: number;
         feature_code?: string;
-      }> = geoData.results ?? [];
-      if (allResults.length === 0) return;
+      } | null = null;
+      for (const candidate of cityGeocodeCandidates(city)) {
+        const geoRes = await fetch(
+          `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(candidate)}&count=10`
+        );
+        if (!geoRes.ok) continue;
+        const geoData = await geoRes.json();
+        const allResults: Array<{
+          latitude: number;
+          longitude: number;
+          name: string;
+          admin1?: string;
+          population?: number;
+          feature_code?: string;
+          country_code?: string;
+        }> = geoData.results ?? [];
+        // US-only filter (Open-Meteo's country_code=us query param doesn't
+        // restrict server-side; verified 2026-05-08).
+        let matches = allResults.filter((r) => r.country_code === "US");
+        if (matches.length === 0) continue;
 
-      // State filter — HARD CONSTRAINT. Mirrors src/lib/weather.ts
-      // geocodeCity: if the filter eliminates everything, return
-      // silently (no weather suggestion) rather than falling back to
-      // a cross-state match. Typos and ambiguous city names must not
-      // silently produce weather data for the wrong state.
-      let candidates = allResults;
-      if (state && state !== OTHER_STATE) {
-        const fullName = US_STATE_NAMES[state];
-        if (fullName) {
-          candidates = allResults.filter(
-            (r) => r.admin1?.toLowerCase() === fullName.toLowerCase()
-          );
-          if (candidates.length === 0) return;
+        // State filter — HARD CONSTRAINT. If the filter eliminates
+        // everything, try the next candidate rather than falling back
+        // to a cross-state match. Typos and ambiguous city names must
+        // not silently produce weather data for the wrong state.
+        if (state && state !== OTHER_STATE) {
+          const fullName = US_STATE_NAMES[state];
+          if (fullName) {
+            matches = matches.filter(
+              (r) => r.admin1?.toLowerCase() === fullName.toLowerCase()
+            );
+            if (matches.length === 0) continue;
+          }
         }
+
+        // Prefer populated-place feature codes (PPL, PPLA*, PPLC, etc.)
+        // over airports / landmarks. See weather.ts for the full rationale.
+        const pplMatches = matches.filter((r) =>
+          r.feature_code?.startsWith("PPL")
+        );
+        const ranked = pplMatches.length > 0 ? pplMatches : matches;
+        result = ranked.reduce((a, b) => ((b.population ?? 0) > (a.population ?? 0) ? b : a));
+        break;
       }
-
-      // Prefer populated-place feature codes (PPL, PPLA*, PPLC, etc.)
-      // over airports / landmarks. See weather.ts for the full rationale.
-      const pplMatches = candidates.filter((r) =>
-        r.feature_code?.startsWith("PPL")
-      );
-      const ranked = pplMatches.length > 0 ? pplMatches : candidates;
-
-      // Pick highest-population match to prefer major cities over small towns
-      const result = ranked.reduce((a, b) => ((b.population ?? 0) > (a.population ?? 0) ? b : a));
+      if (!result) return;
 
       const lat: number = result.latitude;
       const lon: number = result.longitude;

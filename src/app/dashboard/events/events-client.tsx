@@ -66,7 +66,7 @@ import {
   dismissFlaggedEvent,
 } from "@/app/dashboard/events/actions";
 import { WEATHER_COEFFICIENTS, US_STATE_NAMES } from "@/lib/constants";
-import { normalizeCityForGeocoding } from "@/lib/weather";
+import { cityGeocodeCandidates } from "@/lib/weather";
 import type { Event } from "@/lib/database.types";
 import type { EventFormData } from "@/app/dashboard/events/actions";
 import { DataImportTrigger } from "@/components/data-import-guide";
@@ -1488,54 +1488,61 @@ export function EventsClient({ initialEvents, userId = "", businessName = "", us
       if (!cityName) continue;
 
       try {
-        // Geocode the city — fetch top 10 results with US filter, apply
-        // state hard-constraint + PPL preference, pick highest population.
-        // Mirrors the logic in lib/weather.ts:geocodeCity and
-        // components/event-form.tsx:fetchWeatherSuggestion — three sites
-        // share this rule: state wins always, PPL preferred, no silent
-        // cross-state fallback. See B-1 smoke test (Bellville IL → Texas
-        // weather) for the bug this fixes on the render path.
-        const geoRes = await fetch(
-          `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(normalizeCityForGeocoding(cityName))}&country_code=us&count=10&format=json`
-        );
-        if (!geoRes.ok) continue;
-        const geoData = await geoRes.json();
-        const allResults = geoData.results as
-          | Array<{
-              latitude: number;
-              longitude: number;
-              population?: number;
-              admin1?: string;
-              feature_code?: string;
-            }>
-          | undefined;
-        if (!allResults || allResults.length === 0) continue;
+        // Geocode the city — try each name candidate (handles Saint↔St
+        // mismatch between operator input and Open-Meteo's index). For
+        // each candidate, apply state hard-constraint + PPL preference,
+        // pick highest population. Mirrors lib/weather.ts:geocodeCity.
+        // See B-1 smoke test (Bellville IL → Texas weather) for the bug
+        // this fixes on the render path.
+        let best: { latitude: number; longitude: number } | null = null;
+        for (const candidate of cityGeocodeCandidates(cityName)) {
+          const geoRes = await fetch(
+            `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(candidate)}&count=10&format=json`
+          );
+          if (!geoRes.ok) continue;
+          const geoData = await geoRes.json();
+          const allResults = geoData.results as
+            | Array<{
+                latitude: number;
+                longitude: number;
+                population?: number;
+                admin1?: string;
+                feature_code?: string;
+                country_code?: string;
+              }>
+            | undefined;
+          if (!allResults || allResults.length === 0) continue;
+          // US-only filter (country_code=us URL param doesn't restrict
+          // server-side; verified 2026-05-08).
+          let candidates = allResults.filter((r) => r.country_code === "US");
+          if (candidates.length === 0) continue;
 
-        // HARD state constraint when a known US code is set on the event.
-        // If the filter eliminates all candidates, skip — better to show
-        // no weather than silently mis-populate with another state's data.
-        let candidates = allResults;
-        if (event.state && event.state !== "OTHER") {
-          const fullName = US_STATE_NAMES[event.state.toUpperCase()];
-          if (fullName) {
-            candidates = allResults.filter(
-              (r) => r.admin1?.toLowerCase() === fullName.toLowerCase()
-            );
-            if (candidates.length === 0) continue;
+          // HARD state constraint when a known US code is set on the event.
+          // If the filter eliminates all candidates, try the next candidate
+          // — never fall back to a cross-state match.
+          if (event.state && event.state !== "OTHER") {
+            const fullName = US_STATE_NAMES[event.state.toUpperCase()];
+            if (fullName) {
+              candidates = candidates.filter(
+                (r) => r.admin1?.toLowerCase() === fullName.toLowerCase()
+              );
+              if (candidates.length === 0) continue;
+            }
           }
+
+          // Prefer populated-place (PPL*) feature codes over airports,
+          // landmarks, etc. Falls back to state-matched candidates if no
+          // PPL match (airport is still state-correct — better than skip).
+          const pplMatches = candidates.filter((r) =>
+            r.feature_code?.startsWith("PPL")
+          );
+          const ranked = pplMatches.length > 0 ? pplMatches : candidates;
+          best = ranked.reduce((a, b) =>
+            (b.population ?? 0) > (a.population ?? 0) ? b : a
+          );
+          break;
         }
-
-        // Prefer populated-place (PPL*) feature codes over airports,
-        // landmarks, etc. Falls back to state-matched candidates if no
-        // PPL match (airport is still state-correct — better than skip).
-        const pplMatches = candidates.filter((r) =>
-          r.feature_code?.startsWith("PPL")
-        );
-        const ranked = pplMatches.length > 0 ? pplMatches : candidates;
-
-        const best = ranked.reduce((a, b) =>
-          (b.population ?? 0) > (a.population ?? 0) ? b : a
-        );
+        if (!best) continue;
         const { latitude, longitude } = best;
 
         // Fetch forecast
