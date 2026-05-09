@@ -4,9 +4,18 @@ import { sendPushToSubscriptions, type PushSubscriptionRow } from "@/lib/push";
 import { sendBookingInquiryEmail } from "@/lib/email";
 import { ATTENDANCE_RANGES } from "@/lib/database.types";
 import { EVENT_TYPES } from "@/lib/constants";
+import { checkRateLimit, clientIpFromRequest } from "@/lib/rate-limit";
 
 const EVENT_TYPE_SET = new Set<string>(EVENT_TYPES);
 const ATTENDANCE_RANGE_SET = new Set<string>(ATTENDANCE_RANGES);
+
+// IP-based rate limit. 5 booking requests per hour per IP is well above
+// any plausible legitimate use (one operator gets one or two booking
+// requests per day across an entire network) but caps the email-bomb
+// + push-notification storm an unauthenticated attacker could trigger.
+// In-memory bucket — see lib/rate-limit.ts for the per-instance caveat.
+const BOOK_RATE_LIMIT = 5;
+const BOOK_RATE_WINDOW_MS = 60 * 60 * 1000;
 
 // POST /api/book/submit
 //
@@ -35,6 +44,17 @@ export async function POST(req: Request) {
     estimated_attendance?: number | null;
     message?: string | null;
   };
+  // email-2: IP-based rate limit on this unauthenticated email-and-push
+  // trigger. Skip when we can't identify the IP (local dev / unusual
+  // edge configurations) rather than blanket-rejecting.
+  const ip = clientIpFromRequest(req);
+  if (ip !== "unknown" && !checkRateLimit(`book:${ip}`, BOOK_RATE_LIMIT, BOOK_RATE_WINDOW_MS)) {
+    return Response.json(
+      { error: "Too many booking requests in the last hour. Please try again later." },
+      { status: 429, headers: { "Retry-After": "3600" } }
+    );
+  }
+
   try {
     body = await req.json();
   } catch {
