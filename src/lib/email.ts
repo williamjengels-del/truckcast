@@ -1059,7 +1059,7 @@ export async function sendWeeklyDigestEmail(payload: WeeklyDigestPayload) {
 
       ${payload.forecastAccuracyPct !== null ? `
       <p style="margin:0 0 18px;font-size:14px;line-height:1.6;color:#374151;">
-        Forecast accuracy this week: <strong>${payload.forecastAccuracyPct}%</strong> in range.
+        In-range hit rate this week: <strong>${payload.forecastAccuracyPct}%</strong> of actuals landed inside their forecast range.
       </p>
       ` : ""}
 
