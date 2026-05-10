@@ -5,47 +5,25 @@ import { Button } from "@/components/ui/button";
 import { FindVendorLink } from "@/components/find-vendor-link";
 import { MarketingFooter } from "@/components/marketing-footer";
 import { CheckCircle2, AlertCircle, XCircle, HelpCircle } from "lucide-react";
+import { computeStatus, type SubsystemStatus } from "@/lib/status";
 
 export const metadata: Metadata = {
   title: "Status — VendCast",
   description: "Real-time operational status for VendCast subsystems — dashboard, database, billing, weather, email, and chatbot.",
 };
 
-// Forces fresh fetch on every page load so the displayed status reflects
-// real subsystem state, not a stale cache. The /api/status route itself
-// is edge-cached at 60s, so even a flood of /status visits won't flood
-// the underlying services.
+// Forces fresh computation on every page load so the displayed status
+// reflects real subsystem state, not a stale cache. The /api/status
+// route is edge-cached at 60s; this page bypasses that cache and calls
+// computeStatus() directly.
+//
+// Pre-2026-05-10 the page did `fetch("https://${VERCEL_URL}/api/status")`
+// which was per-deployment + behind Vercel's deployment-protection 401,
+// so the SSR fetch failed silently and the page showed "Status
+// unavailable" while /api/status itself worked. Direct call removes
+// the HTTP roundtrip + the URL-construction bug.
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
-
-interface SubsystemStatus {
-  name: string;
-  status: "operational" | "degraded" | "down" | "unknown";
-  detail?: string;
-}
-
-interface StatusPayload {
-  overall: SubsystemStatus["status"];
-  checked_at: string;
-  subsystems: SubsystemStatus[];
-}
-
-async function fetchStatus(): Promise<StatusPayload | null> {
-  try {
-    // Server-side fetch against our own /api/status. We construct an
-    // absolute URL because Next.js server components don't have a
-    // baseURL — VERCEL_URL is set on Vercel deployments, fall back to
-    // localhost for `npm run dev`.
-    const base = process.env.VERCEL_URL
-      ? `https://${process.env.VERCEL_URL}`
-      : process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
-    const res = await fetch(`${base}/api/status`, { cache: "no-store" });
-    if (!res.ok) return null;
-    return (await res.json()) as StatusPayload;
-  } catch {
-    return null;
-  }
-}
 
 const STATUS_DISPLAY: Record<
   SubsystemStatus["status"],
@@ -100,7 +78,15 @@ const OVERALL_BANNER: Record<
 };
 
 export default async function StatusPage() {
-  const data = await fetchStatus();
+  // Direct call into the shared computation — no HTTP roundtrip. If
+  // computeStatus throws for any reason (Supabase outage etc.), we
+  // catch + render the unknown banner so the page itself doesn't 500.
+  let data: Awaited<ReturnType<typeof computeStatus>> | null = null;
+  try {
+    data = await computeStatus();
+  } catch {
+    data = null;
+  }
   const overall = data?.overall ?? "unknown";
   const banner = OVERALL_BANNER[overall];
   const checkedAt = data?.checked_at
