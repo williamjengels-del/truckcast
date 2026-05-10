@@ -107,8 +107,18 @@ function StatsBar({
       value: bestEventRevenue > 0 ? formatCurrency(bestEventRevenue) : "—",
       sub: bestEventName || undefined,
     },
+    // "In-range hit rate" framing per durable rule (CLAUDE.md): never
+    // use "X% accuracy" — parses as "wrong (100-X)% of the time."
+    // What this stat measures: % of past events where actual landed
+    // inside the forecast's stated range.
     ...(forecastAccuracy
-      ? [{ label: "Forecast Accuracy", value: forecastAccuracy }]
+      ? [
+          {
+            label: "In-range hit rate",
+            value: forecastAccuracy,
+            sub: "Actuals inside forecast range",
+          },
+        ]
       : []),
   ];
 

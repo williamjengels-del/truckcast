@@ -317,13 +317,18 @@ export default async function DashboardPage() {
       description: "YTD + upcoming forecasts",
     },
     {
-      label: "Forecast Accuracy",
+      // "In-range hit rate" framing per durable rule (CLAUDE.md): never
+      // use "X% accuracy" — parses as "wrong (100-X)% of the time."
+      // What this stat actually measures: percentage of past events
+      // where the actual sales landed within the forecast's stated
+      // range. Description below explains the recalibrated band shape.
+      label: "In-range hit rate",
       value: forecastAccuracy,
       icon: BarChart3,
       description:
         eventsWithBoth.length >= 3
-          ? `Based on ${eventsWithBoth.length} events`
-          : "Need 3+ events with forecasts",
+          ? `Actuals landed inside the forecast range on ${eventsWithBoth.length} past events`
+          : "Need 3+ past events with forecasts to measure",
     },
     ...(showProfitKpi
       ? [
