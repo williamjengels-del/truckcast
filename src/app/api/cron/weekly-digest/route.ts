@@ -143,6 +143,10 @@ export async function GET(req: NextRequest) {
 
   let sent = 0;
   let skipped = 0;
+  // Track per-user outcomes so the cron's response payload is
+  // diagnostic instead of opaque. Vercel cron logs surface this on
+  // every run; admin can tail to confirm send behavior is correct.
+  const outcomes: Array<{ userId: string; email?: string; result: string }> = [];
   for (const profile of profiles as ProfileRow[]) {
     const userEvents = eventsByUser.get(profile.id) ?? [];
 
@@ -151,6 +155,7 @@ export async function GET(req: NextRequest) {
     const email = authUser?.user?.email;
     if (!email) {
       skipped += 1;
+      outcomes.push({ userId: profile.id, result: "skipped: no email on auth user" });
       continue;
     }
 
@@ -241,6 +246,11 @@ export async function GET(req: NextRequest) {
     // not a service signal. Skip them this week.
     if (eventsRun === 0 && upcomingNextWeek === 0 && unloggedCount === 0) {
       skipped += 1;
+      outcomes.push({
+        userId: profile.id,
+        email,
+        result: "skipped: empty week (no last-week activity, no upcoming, no unlogged)",
+      });
       continue;
     }
 
@@ -259,10 +269,31 @@ export async function GET(req: NextRequest) {
     try {
       await sendWeeklyDigestEmail(payload);
       sent += 1;
-    } catch {
+      outcomes.push({ userId: profile.id, email, result: "sent" });
+    } catch (err) {
       skipped += 1;
+      const message = err instanceof Error ? err.message : "unknown send error";
+      outcomes.push({
+        userId: profile.id,
+        email,
+        result: `skipped: send error — ${message}`,
+      });
+      // Log to console so Vercel logs surface the actual failure.
+      // Pre-fix the catch block silently swallowed errors — operators
+      // never received digests for unknown reasons (e.g. RESEND_API_KEY
+      // missing → silent no-op in sendWeeklyDigestEmail).
+      console.error(
+        `[weekly-digest] send failed for ${profile.id} (${email}):`,
+        message
+      );
     }
   }
+
+  // Single console.log summary at the end so Vercel logs always show
+  // the result even when the response body is rotated out.
+  console.log(
+    `[weekly-digest] week=${weekRangeLabel} eligible=${profiles.length} sent=${sent} skipped=${skipped}`
+  );
 
   return NextResponse.json({
     ok: true,
@@ -270,5 +301,6 @@ export async function GET(req: NextRequest) {
     skipped,
     eligible: profiles.length,
     week: weekRangeLabel,
+    outcomes,
   });
 }
