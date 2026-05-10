@@ -25,12 +25,35 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
     ? `${businessName} — Schedule | VendCast`
     : "Schedule | VendCast";
 
-  // When the operator has claimed a custom slug, that URL is the
-  // canonical surface — search engines should index `/<slug>` rather
-  // than the id-keyed URL.
-  return slug
-    ? { title, alternates: { canonical: `/${slug}` } }
-    : { title };
+  // Canonical URL resolution: prefer the slug-keyed URL when claimed,
+  // fall back to the id-keyed self-URL. Pre-fix (production audit
+  // 2026-05-10): when no slug existed, the page emitted no
+  // canonical/og:url override, so the root layout's default
+  // `canonical: "https://vendcast.co"` leaked through — every
+  // social-share preview rendered as generic "VendCast" instead of
+  // the operator's business name. Also missing OG metadata entirely.
+  const path = slug ? `/${slug}` : `/schedule/${userId}`;
+  const description = businessName
+    ? `Upcoming events for ${businessName}. See where they're booked, what events they're attending, and how to get in touch.`
+    : "Upcoming food-truck schedule on VendCast.";
+
+  return {
+    title,
+    description,
+    alternates: { canonical: path },
+    openGraph: {
+      title,
+      description,
+      url: path,
+      type: "website",
+      siteName: "VendCast",
+    },
+    twitter: {
+      card: "summary",
+      title,
+      description,
+    },
+  };
 }
 
 export default async function PublicSchedulePage({ params }: Props) {
