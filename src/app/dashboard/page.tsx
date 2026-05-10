@@ -253,6 +253,31 @@ export default async function DashboardPage() {
     forecastAccuracy = `${Math.round((1 - weightedError) * 100)}%`;
   }
 
+  // "Here's why" operator-action levers — count events with missing
+  // fields that could improve forecast quality. Operator decision
+  // 2026-05-10: surface these alongside the hit rate as actionable
+  // teaching moments rather than just a stat.
+  //
+  // Counts cover all events the operator could fix (booked, not
+  // cancelled, not anomaly-flagged disrupted). The chip system at
+  // /dashboard/events already has filters for missing-weather,
+  // missing-type, missing-sales — links use ?missing=X URL pattern
+  // (see lib/events-chips.ts legacyUrlMapping).
+  const actionableEvents = bookedEvents.filter(
+    (e) => !e.cancellation_reason && e.anomaly_flag !== "disrupted"
+  );
+  const missingWeatherCount = actionableEvents.filter((e) => !e.event_weather).length;
+  const missingTypeCount = actionableEvents.filter((e) => !e.event_type).length;
+  // Past events without sales — only count where sales is the right
+  // signal (food_truck/vending; catering uses invoice_revenue).
+  const missingSalesCount = actionableEvents.filter(
+    (e) =>
+      e.event_date < today &&
+      e.net_sales === null &&
+      !(e.event_mode === "catering" && (e.invoice_revenue ?? 0) > 0)
+  ).length;
+  const totalGaps = missingWeatherCount + missingTypeCount + missingSalesCount;
+
   // Monthly revenue data for chart
   const monthlyData: { month: string; actual: number; forecast: number }[] = [];
   for (let m = 0; m < 12; m++) {
@@ -321,14 +346,56 @@ export default async function DashboardPage() {
       // use "X% accuracy" — parses as "wrong (100-X)% of the time."
       // What this stat actually measures: percentage of past events
       // where the actual sales landed within the forecast's stated
-      // range. Description below explains the recalibrated band shape.
+      // range.
+      //
+      // The "here's why" operator-action levers (when there are gaps)
+      // turn the stat from a passive number into a teaching moment.
+      // Each link goes to the corresponding Needs Attention chip
+      // filter via lib/events-chips legacyUrlMapping.
       label: "In-range hit rate",
       value: forecastAccuracy,
       icon: BarChart3,
       description:
-        eventsWithBoth.length >= 3
-          ? `Actuals landed inside the forecast range on ${eventsWithBoth.length} past events`
-          : "Need 3+ past events with forecasts to measure",
+        eventsWithBoth.length < 3 ? (
+          "Need 3+ past events with forecasts to measure"
+        ) : totalGaps === 0 ? (
+          `Based on ${eventsWithBoth.length} past events. Forecast quality looks complete — every event has weather, type, and sales logged.`
+        ) : (
+          <>
+            Based on {eventsWithBoth.length} past events. Improve by filling in:{" "}
+            {missingWeatherCount > 0 && (
+              <>
+                <Link
+                  href="/dashboard/events?missing=weather"
+                  className="text-brand-teal hover:underline"
+                >
+                  {missingWeatherCount} missing weather
+                </Link>
+                {(missingTypeCount > 0 || missingSalesCount > 0) && ", "}
+              </>
+            )}
+            {missingTypeCount > 0 && (
+              <>
+                <Link
+                  href="/dashboard/events?missing=type"
+                  className="text-brand-teal hover:underline"
+                >
+                  {missingTypeCount} missing event type
+                </Link>
+                {missingSalesCount > 0 && ", "}
+              </>
+            )}
+            {missingSalesCount > 0 && (
+              <Link
+                href="/dashboard/events?missing=sales"
+                className="text-brand-teal hover:underline"
+              >
+                {missingSalesCount} past events without sales
+              </Link>
+            )}
+            .
+          </>
+        ),
     },
     ...(showProfitKpi
       ? [
