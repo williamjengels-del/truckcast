@@ -90,3 +90,52 @@ export function wallclockInZoneToUtcMs(
   const secondOffset = offsetForGuess(guess);
   return guess + secondOffset;
 }
+
+/**
+ * Date string (YYYY-MM-DD) for the calendar date as it currently
+ * appears in the target zone. Used by cron jobs to derive the
+ * operator's "today" / "yesterday" / "tomorrow" without UTC drift.
+ *
+ * event_date is stored as a plain DATE (no time, no tz) and semantically
+ * means "this date in the operator's local timezone." Comparing event_date
+ * strings against a UTC-derived todayStr produces off-by-one errors for
+ * non-UTC operators near midnight — sales-reminders for an event that
+ * ended last night East-coast-time gets fired today UTC, or two days
+ * later, depending on the cron schedule.
+ *
+ * Pass offsetDays to step forward/backward N days while staying in the
+ * operator's zone (e.g., yesterday = localDateInZone(zone, -1)).
+ *
+ * Falls back to UTC if the zone string is unrecognized — defensive, so
+ * a malformed profiles.timezone never crashes a cron. The fallback is
+ * the prior behavior, so existing CT operators are unaffected even if
+ * their profile is somehow missing a zone.
+ */
+export function localDateInZone(zone: string, offsetDays = 0): string {
+  const now = new Date();
+  let fmt: Intl.DateTimeFormat;
+  try {
+    fmt = new Intl.DateTimeFormat("en-CA", {
+      timeZone: zone,
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    });
+  } catch {
+    // Unrecognized zone — fall back to UTC. Same as if the operator
+    // never set a timezone; matches pre-this-helper behavior.
+    return new Date(now.getTime() + offsetDays * 86400000)
+      .toISOString()
+      .slice(0, 10);
+  }
+  // en-CA formats date as YYYY-MM-DD directly.
+  const base = fmt.format(now); // e.g. "2026-05-11"
+  if (offsetDays === 0) return base;
+
+  // Add days by parsing back to a UTC-noon anchor + offset + reformat.
+  // The noon anchor avoids DST-edge half-day issues (1am or 11pm in
+  // the target zone won't roll across a date boundary mid-shift).
+  const [y, m, d] = base.split("-").map(Number);
+  const shifted = new Date(Date.UTC(y, m - 1, d + offsetDays, 12, 0, 0));
+  return fmt.format(shifted);
+}

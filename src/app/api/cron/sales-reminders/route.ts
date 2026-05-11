@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient as createServiceClient } from "@supabase/supabase-js";
 import { sendSalesReminderEmail } from "@/lib/email";
 import { assertCronSecret } from "@/lib/cron-auth";
+import { localDateInZone } from "@/lib/wallclock-tz";
 
 /**
  * POST /api/cron/sales-reminders
@@ -36,24 +37,27 @@ export async function GET(req: NextRequest) {
     process.env.SUPABASE_SERVICE_ROLE_KEY!
   );
 
-  // Date window: 1-3 days ago (recent enough to remember the event)
-  const today = new Date();
-  const threeDaysAgo = new Date(today);
-  threeDaysAgo.setDate(today.getDate() - 3);
-  const yesterday = new Date(today);
-  yesterday.setDate(today.getDate() - 1);
+  // Widest plausible window — one extra day on each side covers any
+  // operator timezone offset from UTC. Per-operator filtering below
+  // narrows to that operator's local "1-3 days ago" using
+  // profiles.timezone so a Toledo operator's reminder fires on Toledo's
+  // yesterday, not UTC's yesterday.
+  const utcNow = new Date();
+  const utcFour = new Date(utcNow);
+  utcFour.setDate(utcNow.getDate() - 4);
+  const utcZero = new Date(utcNow);
+  utcZero.setDate(utcNow.getDate() + 1);
+  const wideFromDate = utcFour.toISOString().split("T")[0];
+  const wideToDate = utcZero.toISOString().split("T")[0];
 
-  const fromDate = threeDaysAgo.toISOString().split("T")[0];
-  const toDate = yesterday.toISOString().split("T")[0];
-
-  // Fetch unlogged events in the window
+  // Fetch unlogged events in the widest plausible window — narrow per-operator below.
   const { data: rawEvents, error } = await service
     .from("events")
     .select("id, user_id, event_name, event_date, event_mode, invoice_revenue")
     .eq("booked", true)
     .neq("fee_type", "pre_settled")
-    .gte("event_date", fromDate)
-    .lte("event_date", toDate)
+    .gte("event_date", wideFromDate)
+    .lte("event_date", wideToDate)
     .or("net_sales.is.null,net_sales.eq.0");
 
   if (error) {
@@ -70,7 +74,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ sent: 0, reason: "no_unlogged_events" });
   }
 
-  // Group events by user_id
+  // Group events by user_id — per-operator tz window applied below.
   const byUser = new Map<string, typeof events>();
   for (const ev of events) {
     const list = byUser.get(ev.user_id) ?? [];
@@ -86,22 +90,39 @@ export async function GET(req: NextRequest) {
     if (userIds.includes(u.id) && u.email) emailMap.set(u.id, u.email);
   }
 
-  // Fetch business names + email preferences for affected users
+  // Fetch business names + email preferences + timezone for affected users
   const { data: profiles } = await service
     .from("profiles")
-    .select("id, business_name, email_reminders_enabled")
+    .select("id, business_name, email_reminders_enabled, timezone")
     .in("id", userIds);
   const nameMap = new Map<string, string>();
   const remindersEnabledMap = new Map<string, boolean>();
+  const timezoneMap = new Map<string, string>();
   for (const p of profiles ?? []) {
     nameMap.set(p.id, p.business_name ?? "");
     // Treat null as true (default) — only skip if explicitly false
     remindersEnabledMap.set(p.id, p.email_reminders_enabled !== false);
+    timezoneMap.set(p.id, p.timezone ?? "UTC");
   }
 
   const results: { userId: string; status: string }[] = [];
 
   for (const [userId, userEvents] of byUser) {
+    // Narrow this user's events to THEIR local 1-3 days ago. The
+    // bulk fetch used a UTC-padded window; per-operator filtering
+    // here ensures a Toledo operator's "yesterday" doesn't bleed
+    // into a Toronto operator's "two days ago" and vice-versa.
+    const tz = timezoneMap.get(userId) ?? "UTC";
+    const userFromDate = localDateInZone(tz, -3);
+    const userToDate = localDateInZone(tz, -1);
+    const filteredUserEvents = userEvents.filter(
+      (e) => e.event_date >= userFromDate && e.event_date <= userToDate
+    );
+    if (filteredUserEvents.length === 0) {
+      results.push({ userId, status: "no_events_in_local_window" });
+      continue;
+    }
+
     const email = emailMap.get(userId);
     if (!email) {
       results.push({ userId, status: "no_email" });
@@ -115,8 +136,11 @@ export async function GET(req: NextRequest) {
     }
 
     const businessName = nameMap.get(userId) ?? "";
-    // Cap at 5 most recent events to keep email scannable
-    const topEvents = userEvents
+    // Cap at 5 most recent events to keep email scannable. Use the
+    // tz-filtered subset so a Toledo operator's reminder doesn't list
+    // an event that's "today" their time (caught by the wide-window
+    // bulk fetch but excluded by their local 1-3-days-ago window).
+    const topEvents = filteredUserEvents
       .sort((a, b) => b.event_date.localeCompare(a.event_date))
       .slice(0, 5)
       .map((e) => ({ event_name: e.event_name, event_date: e.event_date }));
