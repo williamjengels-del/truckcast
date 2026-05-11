@@ -7,9 +7,17 @@ export type ContactFormData = {
   name: string;
   email?: string;
   phone?: string;
+  /** Operator-facing label: "Company or event" — the affiliation. */
   organization?: string;
+  /** Added 2026-05-11 — parallel to events.city / events.location. */
+  city?: string;
+  location?: string;
   notes?: string;
+  /** Legacy soft-link kept for backward-compat during rollout. New form
+   *  writes prefer linked_event_ids below. */
   linked_event_names?: string[];
+  /** Real FK array to events.id. v1 — operator-curated. */
+  linked_event_ids?: string[];
 };
 
 /**
@@ -37,9 +45,10 @@ export async function deduplicateContacts(): Promise<{ merged: number }> {
   if (error) throw new Error(error.message);
   if (!contacts || contacts.length < 2) return { merged: 0 };
 
-  // Helper: count filled fields (non-null, non-empty)
+  // Helper: count filled fields (non-null, non-empty). Picks the
+  // primary contact for merging — most-populated wins.
   function richness(c: Record<string, unknown>): number {
-    return ["name", "email", "phone", "organization", "notes"].filter(
+    return ["name", "email", "phone", "organization", "city", "location", "notes"].filter(
       (k) => c[k] != null && c[k] !== ""
     ).length;
   }
@@ -49,6 +58,17 @@ export async function deduplicateContacts(): Promise<{ merged: number }> {
     const set = new Set<string>();
     for (const c of contacts) {
       for (const n of c.linked_event_names ?? []) set.add(n);
+    }
+    return [...set];
+  }
+
+  // Helper: merge linked_event_ids similarly. Different array so a
+  // contact migrated to the new schema doesn't lose either dataset
+  // during dedup.
+  function mergeLinkedIds(contacts: { linked_event_ids: string[] | null }[]): string[] {
+    const set = new Set<string>();
+    for (const c of contacts) {
+      for (const id of c.linked_event_ids ?? []) set.add(id);
     }
     return [...set];
   }
@@ -85,9 +105,12 @@ export async function deduplicateContacts(): Promise<{ merged: number }> {
       .from("contacts")
       .update({
         linked_event_names: mergeLinked([primary, ...duplicates]),
+        linked_event_ids: mergeLinkedIds([primary, ...duplicates]),
         notes: mergeNotes([primary, ...duplicates]),
         phone: primary.phone ?? duplicates.find((d) => d.phone)?.phone ?? null,
         organization: primary.organization ?? duplicates.find((d) => d.organization)?.organization ?? null,
+        city: primary.city ?? duplicates.find((d) => d.city)?.city ?? null,
+        location: primary.location ?? duplicates.find((d) => d.location)?.location ?? null,
       })
       .eq("id", primary.id)
       .eq("user_id", user.id);
@@ -119,10 +142,13 @@ export async function deduplicateContacts(): Promise<{ merged: number }> {
       .from("contacts")
       .update({
         linked_event_names: mergeLinked([primary, ...duplicates]),
+        linked_event_ids: mergeLinkedIds([primary, ...duplicates]),
         notes: mergeNotes([primary, ...duplicates]),
         email: primary.email ?? duplicates.find((d) => d.email)?.email ?? null,
         phone: primary.phone ?? duplicates.find((d) => d.phone)?.phone ?? null,
         organization: primary.organization ?? duplicates.find((d) => d.organization)?.organization ?? null,
+        city: primary.city ?? duplicates.find((d) => d.city)?.city ?? null,
+        location: primary.location ?? duplicates.find((d) => d.location)?.location ?? null,
       })
       .eq("id", primary.id)
       .eq("user_id", user.id);
@@ -157,12 +183,101 @@ export async function createContact(formData: ContactFormData) {
     email: formData.email || null,
     phone: formData.phone || null,
     organization: formData.organization || null,
+    city: formData.city || null,
+    location: formData.location || null,
     notes: formData.notes || null,
     linked_event_names: formData.linked_event_names ?? [],
+    linked_event_ids: formData.linked_event_ids ?? [],
   });
 
   if (error) throw new Error(error.message);
   revalidatePath("/dashboard/contacts");
+}
+
+/**
+ * Adds an event_id to a contact's linked_event_ids array, idempotently.
+ * Called from the event form's contact autosuggest path — when an
+ * operator picks a contact while creating/editing an event, the
+ * forward-direction link is captured here.
+ *
+ * Uses ARRAY_APPEND + NULLIF dance via a SELECT + UPDATE rather than
+ * a raw SQL function so the RLS policy can do its work (the operator
+ * must own the contact). Returns true on success.
+ */
+export async function linkContactToEvent(
+  contactId: string,
+  eventId: string
+): Promise<boolean> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) throw new Error("Not authenticated");
+
+  // Read current linked_event_ids
+  const { data: contact, error: readError } = await supabase
+    .from("contacts")
+    .select("linked_event_ids")
+    .eq("id", contactId)
+    .eq("user_id", user.id)
+    .maybeSingle();
+  if (readError || !contact) return false;
+
+  const current = (contact as { linked_event_ids: string[] | null })
+    .linked_event_ids ?? [];
+  if (current.includes(eventId)) return true; // already linked, idempotent
+
+  const next = [...current, eventId];
+  const { error: updateError } = await supabase
+    .from("contacts")
+    .update({ linked_event_ids: next })
+    .eq("id", contactId)
+    .eq("user_id", user.id);
+  if (updateError) return false;
+
+  revalidatePath("/dashboard/contacts");
+  revalidatePath("/dashboard/events");
+  return true;
+}
+
+/**
+ * Inverse of linkContactToEvent — removes an event_id from a contact's
+ * linked_event_ids. Used when the operator un-picks a contact on the
+ * event form.
+ */
+export async function unlinkContactFromEvent(
+  contactId: string,
+  eventId: string
+): Promise<boolean> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) throw new Error("Not authenticated");
+
+  const { data: contact } = await supabase
+    .from("contacts")
+    .select("linked_event_ids")
+    .eq("id", contactId)
+    .eq("user_id", user.id)
+    .maybeSingle();
+  if (!contact) return false;
+
+  const current = (contact as { linked_event_ids: string[] | null })
+    .linked_event_ids ?? [];
+  const next = current.filter((id) => id !== eventId);
+  if (next.length === current.length) return true; // already unlinked
+
+  const { error } = await supabase
+    .from("contacts")
+    .update({ linked_event_ids: next })
+    .eq("id", contactId)
+    .eq("user_id", user.id);
+  if (error) return false;
+
+  revalidatePath("/dashboard/contacts");
+  revalidatePath("/dashboard/events");
+  return true;
 }
 
 export async function updateContact(
