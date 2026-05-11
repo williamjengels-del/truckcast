@@ -1077,6 +1077,26 @@ function ListView({
                             <ForecastInline event={event} />
                           </div>
                         )}
+                        {/* Address-required prompt — future events with
+                            no forecast AND no address get a soft nudge
+                            instead of an empty space. Operator decision
+                            2026-05-11: "no forecast until address is
+                            put in" with option-b inline prompt. */}
+                        {event.event_date >= today &&
+                          !event.forecast_sales &&
+                          !event.location?.trim() &&
+                          !event.cancellation_reason && (
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setEditingEvent(event);
+                              }}
+                              className="mt-1 text-xs text-brand-teal hover:text-brand-orange transition-colors text-left"
+                            >
+                              Add an address to see forecasts →
+                            </button>
+                          )}
                       </div>
                     </div>
                     {(needsSales || isUnbookedFuture) && (
@@ -1438,6 +1458,24 @@ function ListView({
                       {event.event_date >= today && (
                         <WeatherForecastImpact event={event} today={today} />
                       )}
+                      {/* Address-required prompt — same gate as the
+                          mobile card branch above. Future event + no
+                          forecast + no address → soft nudge. */}
+                      {event.event_date >= today &&
+                        !event.forecast_sales &&
+                        !event.location?.trim() &&
+                        !event.cancellation_reason && (
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setEditingEvent(event);
+                            }}
+                            className="text-xs text-brand-teal hover:text-brand-orange transition-colors text-right block w-full"
+                          >
+                            Add address →
+                          </button>
+                        )}
                     </TableCell>
                     {/* Profit cell — Past + Booked only. */}
                     {showAnalysisColumns && (

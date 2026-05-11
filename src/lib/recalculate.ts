@@ -205,11 +205,55 @@ async function recalculateForUserUnlocked(
     userId
   ).catch(() => new Map<string, import("@/lib/database.types").PlatformEvent>());
 
-  // Recalculate forecasts for ALL future events — booked AND unbooked
+  // Recalculate forecasts for ALL future events — booked AND unbooked.
+  //
+  // Address-required gate (operator decision 2026-05-11): when an event
+  // has no `location` set, skip forecast generation entirely. Wipes
+  // any stale forecast columns so the event card can render the
+  // "Add an address to see forecasts" prompt cleanly instead of
+  // showing a forecast that was computed against incomplete info.
+  // Past events with existing forecasts are not affected — the past-
+  // event backfill below only writes when columns are null, so a
+  // past row's historical forecast stays.
   const futureEvents = allEvents.filter((e) => e.event_date >= today);
   let forecastsUpdated = 0;
   let bayesianShadowWritten = 0;
   for (const event of futureEvents) {
+    const hasAddress = !!(event.location && event.location.trim());
+    if (!hasAddress) {
+      // Wipe any stale forecast cells so the UI gate fires consistently.
+      // Don't count this row toward forecastsUpdated — the operator
+      // hasn't seen a forecast generated yet.
+      const wipe: Record<string, null> = {
+        forecast_sales: null,
+        forecast_low: null,
+        forecast_high: null,
+        forecast_confidence: null,
+      };
+      if (v2Available) {
+        wipe.forecast_bayesian_point = null;
+        wipe.forecast_bayesian_low_80 = null;
+        wipe.forecast_bayesian_high_80 = null;
+        wipe.forecast_bayesian_low_50 = null;
+        wipe.forecast_bayesian_high_50 = null;
+        wipe.forecast_bayesian_n_obs = null;
+        wipe.forecast_bayesian_prior_src = null;
+        wipe.forecast_bayesian_insufficient = null;
+        wipe.forecast_bayesian_computed_at = null;
+      }
+      // Only issue the UPDATE when something is actually non-null —
+      // avoids a noisy write on every recalc for events that already
+      // have no forecast.
+      const needsWipe =
+        event.forecast_sales !== null ||
+        event.forecast_low !== null ||
+        event.forecast_high !== null ||
+        event.forecast_bayesian_point != null;
+      if (needsWipe) {
+        await supabase.from("events").update(wipe).eq("id", event.id);
+      }
+      continue;
+    }
     const platformEvent = event.booked
       ? (platformMap.get(event.event_name.toLowerCase().trim()) ?? null)
       : null;
