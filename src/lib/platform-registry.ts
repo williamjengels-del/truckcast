@@ -280,10 +280,19 @@ export async function updatePlatformRegistry(eventNames: string[]): Promise<void
   if (eventNames.length === 0) return;
   const client = getServiceClient();
 
+  // Top-level operators only — managers (owner_user_id NOT NULL) are
+  // employees of an existing operator, not a second business. Including
+  // their rows here inflates operator_count and double-counts the same
+  // booking when both owner + manager log it (typical pattern: same
+  // event_name + event_date + net_sales). Surfaced 2026-05-11 by the
+  // cross-op diagnostic — Wok-O's Shutterfest aggregate had
+  // operator_count=3 from (Wok-O + Best Wurst + Wok-O's manager Rohini)
+  // when the real cross-op count is 2.
   const { data: sharingUsers } = await client
     .from("profiles")
     .select("id")
-    .eq("data_sharing_enabled", true);
+    .eq("data_sharing_enabled", true)
+    .is("owner_user_id", null);
 
   const sharingUserIds = new Set((sharingUsers ?? []).map((u: { id: string }) => u.id));
   if (sharingUserIds.size === 0) return;
@@ -528,11 +537,16 @@ export async function getPlatformEventsExcludingUser(
   const resolveMap = await resolveAliases(client, inputNormalized);
 
   // Sharing list — same gate as the cached aggregator. We don't need
-  // to recompute this per event; one fetch covers all.
+  // to recompute this per event; one fetch covers all. Top-level
+  // operators only (owner_user_id IS NULL): managers don't count as a
+  // second operator — they're employees of an existing operator, and
+  // their rows typically duplicate the owner's bookings. See
+  // updatePlatformRegistry above for the full rationale.
   const { data: sharingUsers } = await client
     .from("profiles")
     .select("id")
-    .eq("data_sharing_enabled", true);
+    .eq("data_sharing_enabled", true)
+    .is("owner_user_id", null);
   const sharingUserIds = new Set(
     (sharingUsers ?? []).map((u: { id: string }) => u.id)
   );
