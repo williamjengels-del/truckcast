@@ -65,6 +65,7 @@ import {
 } from "@/components/ui/select";
 import {
   createEvent,
+  createMultiDayEvents,
   updateEvent,
   deleteEvent,
   deleteAllEvents,
@@ -2258,7 +2259,15 @@ export function EventsClient({ initialEvents, userId = "", businessName = "", us
   }
 
   async function handleCreate(data: EventFormData) {
-    await createEvent(data);
+    // Multi-day branch — when the form set multi_day_dates (i.e., the
+    // "Multi-Day Event" toggle was on with a valid end date), call the
+    // bulk-insert action so the server loops one INSERT per date. Each
+    // row gets a unique event_date but shares every other field.
+    if (data.multi_day_dates && data.multi_day_dates.length > 1) {
+      await createMultiDayEvents(data, data.multi_day_dates);
+    } else {
+      await createEvent(data);
+    }
     router.refresh();
   }
 
