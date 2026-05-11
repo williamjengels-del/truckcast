@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient as createServiceClient } from "@supabase/supabase-js";
 import { sendWeeklyDigestEmail, type WeeklyDigestPayload } from "@/lib/email";
 import { assertCronSecret } from "@/lib/cron-auth";
+import { localDateInZone } from "@/lib/wallclock-tz";
 
 /**
  * GET /api/cron/weekly-digest
@@ -37,6 +38,7 @@ interface ProfileRow {
   business_name: string | null;
   subscription_tier: "starter" | "pro" | "premium";
   email_reminders_enabled: boolean | null;
+  timezone: string | null;
 }
 
 interface EventRow {
@@ -100,10 +102,14 @@ export async function GET(req: NextRequest) {
   const lastSundayStr = lastSunday.toISOString().slice(0, 10);
   const weekRangeLabel = `${dateLabel(lastMonday)} – ${dateLabel(lastSunday)}`;
 
-  // Eligible profiles: Pro or Premium with reminders on.
+  // Eligible profiles: Pro or Premium with reminders on. Pull
+  // `timezone` so the per-profile loop below can derive each operator's
+  // local "today" for the unlogged-backlog cutoff. UTC's today drifts
+  // up to 24 hours from a Honolulu operator's today, which silently
+  // mis-classifies same-day events as backlog (or vice-versa).
   const { data: profiles } = await service
     .from("profiles")
-    .select("id, business_name, subscription_tier, email_reminders_enabled")
+    .select("id, business_name, subscription_tier, email_reminders_enabled, timezone")
     .in("subscription_tier", ["pro", "premium"])
     .or("email_reminders_enabled.is.null,email_reminders_enabled.eq.true");
 
@@ -118,7 +124,10 @@ export async function GET(req: NextRequest) {
   const baselineStartStr = baselineStart.toISOString().slice(0, 10);
 
   const userIds = (profiles as ProfileRow[]).map((p) => p.id);
-  const todayStr = now.toISOString().slice(0, 10);
+  // Note: per-profile localTodayStr is computed inside the loop below
+  // using `profile.timezone` — UTC's today drifts up to 24h from a non-
+  // CT operator's today, which mis-classifies same-day events as
+  // backlog. Buzzy Bites (Toledo) was the surfacing case.
   const nextSunday = new Date(thisMonday);
   nextSunday.setUTCDate(nextSunday.getUTCDate() + 6);
   const nextSundayStr = nextSunday.toISOString().slice(0, 10);
@@ -149,6 +158,13 @@ export async function GET(req: NextRequest) {
   const outcomes: Array<{ userId: string; email?: string; result: string }> = [];
   for (const profile of profiles as ProfileRow[]) {
     const userEvents = eventsByUser.get(profile.id) ?? [];
+
+    // Operator's local today — for the unlogged-backlog cutoff below.
+    // Falls back to UTC when timezone is missing or unrecognized (same
+    // semantics as before the per-tz fix). CT operators get the same
+    // result either way for most of the day; PT/ET operators get the
+    // off-by-one corrected.
+    const todayStr = localDateInZone(profile.timezone ?? "UTC");
 
     // Resolve email from auth — RLS doesn't matter, we're service role.
     const { data: authUser } = await service.auth.admin.getUserById(profile.id);

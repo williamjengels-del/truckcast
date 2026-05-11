@@ -1,5 +1,5 @@
-import { describe, it, expect } from "vitest";
-import { wallclockInZoneToUtcMs } from "./wallclock-tz";
+import { describe, it, expect, beforeAll, afterAll, vi } from "vitest";
+import { wallclockInZoneToUtcMs, localDateInZone } from "./wallclock-tz";
 
 describe("wallclockInZoneToUtcMs", () => {
   it("returns the correct UTC ms for CDT (summer, UTC-5)", () => {
@@ -67,5 +67,79 @@ describe("wallclockInZoneToUtcMs", () => {
     //  produce 03:00 UTC on 2026-03-08, not drift the date.)
     const got = wallclockInZoneToUtcMs("2026-03-07", "21:00", "America/Chicago");
     expect(got).toBe(Date.UTC(2026, 2, 8, 3, 0, 0));
+  });
+});
+
+describe("localDateInZone", () => {
+  // These tests use vi.setSystemTime to pin "now" at a specific UTC
+  // instant, then assert what the date string looks like in each zone.
+  // Pattern: pick a UTC instant near a date boundary so the zone
+  // comparison is meaningful (UTC midnight = late-evening US-east).
+
+  beforeAll(() => {
+    vi.useFakeTimers();
+  });
+  afterAll(() => {
+    vi.useRealTimers();
+  });
+
+  it("returns operator-local YYYY-MM-DD (CDT summer)", () => {
+    // 2026-05-11 18:00 UTC = 1:00 PM CDT same day.
+    vi.setSystemTime(new Date(Date.UTC(2026, 4, 11, 18, 0, 0)));
+    expect(localDateInZone("America/Chicago")).toBe("2026-05-11");
+    expect(localDateInZone("America/New_York")).toBe("2026-05-11");
+    expect(localDateInZone("UTC")).toBe("2026-05-11");
+  });
+
+  it("crosses a date boundary correctly (UTC vs Eastern late-night)", () => {
+    // 2026-05-12 02:00 UTC = 10:00 PM EDT on 2026-05-11.
+    // UTC's today is the 12th; Eastern's today is still the 11th.
+    vi.setSystemTime(new Date(Date.UTC(2026, 4, 12, 2, 0, 0)));
+    expect(localDateInZone("UTC")).toBe("2026-05-12");
+    expect(localDateInZone("America/New_York")).toBe("2026-05-11");
+    expect(localDateInZone("America/Los_Angeles")).toBe("2026-05-11");
+  });
+
+  it("offsetDays steps backward / forward within the zone", () => {
+    vi.setSystemTime(new Date(Date.UTC(2026, 4, 11, 18, 0, 0)));
+    expect(localDateInZone("America/Chicago", -1)).toBe("2026-05-10");
+    expect(localDateInZone("America/Chicago", -3)).toBe("2026-05-08");
+    expect(localDateInZone("America/Chicago", 1)).toBe("2026-05-12");
+  });
+
+  it("survives DST spring-forward (offsetDays of -1 stays on the prior day)", () => {
+    // 2026-03-09 12:00 UTC = 7:00 AM CDT on 2026-03-09 (DST just started).
+    // Going back one day should land on 2026-03-08, even though that day
+    // was only 23 hours long in Central.
+    vi.setSystemTime(new Date(Date.UTC(2026, 2, 9, 12, 0, 0)));
+    expect(localDateInZone("America/Chicago")).toBe("2026-03-09");
+    expect(localDateInZone("America/Chicago", -1)).toBe("2026-03-08");
+  });
+
+  it("survives DST fall-back (offsetDays of -1 stays on the prior day)", () => {
+    // 2026-11-02 12:00 UTC = 6:00 AM CST on 2026-11-02 (DST just ended,
+    // back to CST). Going back one day should land on 2026-11-01.
+    vi.setSystemTime(new Date(Date.UTC(2026, 10, 2, 12, 0, 0)));
+    expect(localDateInZone("America/Chicago")).toBe("2026-11-02");
+    expect(localDateInZone("America/Chicago", -1)).toBe("2026-11-01");
+  });
+
+  it("falls back to UTC when zone is unrecognized", () => {
+    vi.setSystemTime(new Date(Date.UTC(2026, 4, 11, 18, 0, 0)));
+    expect(localDateInZone("Mars/Olympus_Mons")).toBe("2026-05-11");
+  });
+
+  it("Toledo (Eastern) and STL (Central) agree mid-day, disagree at UTC midnight", () => {
+    // Mid-day UTC: all US zones on the same date.
+    vi.setSystemTime(new Date(Date.UTC(2026, 4, 11, 18, 0, 0)));
+    expect(localDateInZone("America/Detroit")).toBe("2026-05-11");
+    expect(localDateInZone("America/Chicago")).toBe("2026-05-11");
+
+    // UTC midnight = 7pm EST / 6pm CST the day before. Both still on
+    // the prior date.
+    vi.setSystemTime(new Date(Date.UTC(2026, 4, 12, 0, 0, 0)));
+    expect(localDateInZone("UTC")).toBe("2026-05-12");
+    expect(localDateInZone("America/Detroit")).toBe("2026-05-11");
+    expect(localDateInZone("America/Chicago")).toBe("2026-05-11");
   });
 });
