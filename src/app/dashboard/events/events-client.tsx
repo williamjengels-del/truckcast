@@ -1924,16 +1924,53 @@ export function EventsClient({ initialEvents, userId = "", businessName = "", us
   }
 
   function handleDuplicate(event: Event) {
-    // Build a clean template — copy structure but clear sales, dates, and derived fields
+    // Carry over event_name, location, time, type, etc. — everything
+    // that identifies the venue/booking shape. Clear everything that's
+    // outcome-specific to the source event so the duplicate is a
+    // genuine new booking, not a ghost of the original.
     const template: Event = {
       ...event,
       id: "duplicate", // placeholder; EventForm ignores this on create
       event_date: "",
+      // Financials — per-event outcomes never carry forward.
       net_sales: null,
       invoice_revenue: 0,
       net_after_fees: null,
+      food_cost: null,
+      labor_cost: null,
+      other_costs: null,
+      // Forecast columns — engine regenerates on save.
       forecast_sales: null,
+      forecast_low: null,
+      forecast_high: null,
+      forecast_confidence: null,
+      forecast_bayesian_point: null,
+      forecast_bayesian_low_80: null,
+      forecast_bayesian_high_80: null,
+      forecast_bayesian_low_50: null,
+      forecast_bayesian_high_50: null,
+      forecast_bayesian_n_obs: null,
+      forecast_bayesian_prior_src: null,
+      forecast_bayesian_insufficient: null,
+      forecast_bayesian_computed_at: null,
+      // Don't carry forward a cancellation. Operator is duplicating
+      // because the venue+shape is reusable; the new occurrence is a
+      // fresh booking that isn't pre-cancelled.
+      cancellation_reason: null,
+      caused_by_event_id: null,
       anomaly_flag: "normal",
+      // Per-event narrative — operator-specific to the source row.
+      in_service_notes: [],
+      content_capture_notes: null,
+      after_event_summary: null,
+      // POS source — the duplicate is operator-entered, not POS-synced
+      // (even if the source was). Otherwise the duplicate appears in
+      // POS-sync analytics as if it came from Toast/Square.
+      pos_source: "manual",
+      // Note: events.source_inquiry_id (from PR #134) carries forward
+      // via spread. Not cleared here because the column is absent from
+      // the Event type. If type regen surfaces it, add to the clear
+      // list — duplicate shouldn't be tied to the source's inquiry.
     };
     setDuplicatingEvent(template);
   }
