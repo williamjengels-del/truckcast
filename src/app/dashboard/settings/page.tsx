@@ -20,6 +20,7 @@ import type { Profile } from "@/lib/database.types";
 import { PRICING_PLANS } from "@/lib/pricing-plans";
 import { PublicSlugPicker } from "@/components/public-slug-picker";
 import { TwoFactorCard } from "@/components/two-factor-card";
+import { ChangePasswordCard } from "@/components/change-password-card";
 import { canonicalizeCity } from "@/lib/city-normalize";
 import Link from "next/link";
 
@@ -466,6 +467,7 @@ function SettingsContent() {
 
         {/* SECURITY & PRIVACY — auth, data sharing, install/PWA, destructive */}
         <TabsContent value="security" className="space-y-6">
+          <ChangePasswordCard />
           <TwoFactorCard />
           <DataPrivacyCard
             profile={profile}
