@@ -5,7 +5,7 @@ import { Suspense } from "react";
 import { resolveScopedSupabase, canSeeFinancials } from "@/lib/dashboard-scope";
 import { EventsClient } from "./events-client";
 import { stripFinancialFields } from "@/lib/event-financials";
-import type { Event, Profile } from "@/lib/database.types";
+import type { Event, Profile, Contact } from "@/lib/database.types";
 
 async function EventsContent() {
   // resolveScopedSupabase handles the manager/owner redirect (and
@@ -18,17 +18,25 @@ async function EventsContent() {
   let profile: Profile | null = null;
   let realUserId = "";
   let financialsVisible = true;
+  let contacts: Contact[] = [];
 
   if (scope.kind !== "unauthorized") {
     realUserId = scope.realUserId;
     financialsVisible = canSeeFinancials(scope);
-    const [eventsResult, profileResult] = await Promise.all([
+    const [eventsResult, profileResult, contactsResult] = await Promise.all([
       scope.client
         .from("events")
         .select("*")
         .eq("user_id", scope.userId)
         .order("event_date", { ascending: false }),
       scope.client.from("profiles").select("*").eq("id", scope.userId).single(),
+      // Contacts surface for the inline event-card contact display.
+      // One fetch up front, passed to client; the client builds an
+      // event_id → contact map so per-row lookup is O(1) without N+1.
+      scope.client
+        .from("contacts")
+        .select("id, name, email, phone, organization, city, location, linked_event_ids")
+        .eq("user_id", scope.userId),
     ]);
     const rawEvents = (eventsResult.data ?? []) as Event[];
     // Manager without Financials access: strip dollar columns so the
@@ -38,6 +46,7 @@ async function EventsContent() {
     // sales-entry CTAs that would otherwise render for null values.
     events = financialsVisible ? rawEvents : rawEvents.map(stripFinancialFields);
     profile = (profileResult.data ?? null) as Profile | null;
+    contacts = (contactsResult.data ?? []) as Contact[];
   }
 
   return (
@@ -48,6 +57,7 @@ async function EventsContent() {
       userCity={profile?.city ?? ""}
       userState={profile?.state ?? ""}
       canSeeFinancials={financialsVisible}
+      contacts={contacts}
     />
   );
 }

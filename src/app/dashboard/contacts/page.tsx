@@ -32,7 +32,11 @@ export default async function ContactsPage({ searchParams }: ContactsPageProps) 
 
   let contacts: Contact[] = [];
   let isPremium = false;
-  let eventNames: string[] = [];
+  // Events surface for the contact form's multi-select picker — needs
+  // id + name + date so operators can disambiguate same-name events.
+  // Pulled from the events table directly (not event_performance) so
+  // newly-created events show up immediately, not after first recalc.
+  let availableEvents: { id: string; name: string; date: string }[] = [];
 
   if (scope.kind !== "unauthorized") {
     const [{ data: contactsData }, { data: profile }, { data: eventsData }] =
@@ -44,15 +48,19 @@ export default async function ContactsPage({ searchParams }: ContactsPageProps) 
           .order("name", { ascending: true }),
         scope.client.from("profiles").select("subscription_tier").eq("id", scope.userId).single(),
         scope.client
-          .from("event_performance")
-          .select("event_name")
+          .from("events")
+          .select("id, event_name, event_date")
           .eq("user_id", scope.userId)
-          .order("event_name"),
+          .order("event_date", { ascending: false }),
       ]);
 
     contacts = (contactsData ?? []) as Contact[];
     isPremium = hasAccess((profile as Profile)?.subscription_tier ?? "starter", "organizer_scoring");
-    eventNames = (eventsData ?? []).map((e) => e.event_name as string);
+    availableEvents = (eventsData ?? []).map((e) => ({
+      id: e.id as string,
+      name: e.event_name as string,
+      date: e.event_date as string,
+    }));
   }
 
   return (
@@ -71,7 +79,7 @@ export default async function ContactsPage({ searchParams }: ContactsPageProps) 
           <ContactsClient
             initialContacts={contacts}
             isPremium={isPremium}
-            availableEventNames={eventNames}
+            availableEvents={availableEvents}
           />
         )}
         {tab === "followers" && <FollowersTab />}

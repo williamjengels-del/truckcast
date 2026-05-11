@@ -49,6 +49,9 @@ import {
   BookCheck,
   RefreshCw,
   X,
+  Phone,
+  Mail,
+  MessageSquare,
 } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
 import { EventForm } from "@/components/event-form";
@@ -70,7 +73,7 @@ import {
 import { WEATHER_COEFFICIENTS, US_STATE_NAMES } from "@/lib/constants";
 import { cityGeocodeCandidates } from "@/lib/weather";
 import { csvSafeDocument } from "@/lib/csv-safe";
-import type { Event } from "@/lib/database.types";
+import type { Event, Contact } from "@/lib/database.types";
 import type { EventFormData } from "@/app/dashboard/events/actions";
 import { DataImportTrigger } from "@/components/data-import-guide";
 import { ForecastInline } from "@/components/forecast-card";
@@ -127,6 +130,10 @@ interface EventsClientProps {
    *  side, so headline numbers and forecast inlines collapse on their
    *  own). */
   canSeeFinancials?: boolean;
+  /** All operator-owned contacts. The client builds an event_id →
+   *  contact map to render inline contact pills on each event card
+   *  without N+1 fetches. May be empty for new operators. */
+  contacts?: Contact[];
 }
 
 // WMO weather code to icon/label
@@ -447,6 +454,72 @@ const BULK_FIELD_OPTIONS: Record<
   ],
 };
 
+// Inline contact pill row for an event card / row. Mirrors the
+// day-of card's button-styled actions (Call / Text / Email) so the
+// affordance reads the same across both surfaces. Click handlers
+// stopPropagation so the wrapping card/row's onClick (which opens
+// the edit dialog) doesn't fire when the operator taps the action.
+//
+// Phone normalization: tel:/sms: hrefs strip non-digits because some
+// operator-entered phone formats include spaces or dashes that
+// confuse certain dialer apps.
+function onlyContactDigits(s: string): string {
+  return s.replace(/[^0-9+]/g, "");
+}
+
+function EventInlineContact({ contact }: { contact: Contact }) {
+  const phone = contact.phone?.trim();
+  const email = contact.email?.trim();
+  if (!phone && !email) return null;
+  return (
+    <div
+      className="mt-2 pt-2 border-t border-border/50"
+      onClick={(e) => e.stopPropagation()}
+    >
+      {contact.name && (
+        <p className="text-xs font-medium text-muted-foreground mb-1.5 truncate">
+          {contact.name}
+          {contact.organization && (
+            <span className="font-normal"> · {contact.organization}</span>
+          )}
+        </p>
+      )}
+      <div className="flex flex-wrap gap-1.5">
+        {phone && (
+          <>
+            <a
+              href={`tel:${onlyContactDigits(phone)}`}
+              className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md border border-primary/30 bg-primary/5 text-primary text-[11px] font-medium hover:bg-primary/10 hover:border-primary/50 transition-colors active:bg-primary/15"
+              aria-label={`Call ${contact.name ?? "contact"}`}
+            >
+              <Phone className="h-3 w-3" />
+              Call
+            </a>
+            <a
+              href={`sms:${onlyContactDigits(phone)}`}
+              className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md border border-primary/30 bg-primary/5 text-primary text-[11px] font-medium hover:bg-primary/10 hover:border-primary/50 transition-colors active:bg-primary/15"
+              aria-label={`Text ${contact.name ?? "contact"}`}
+            >
+              <MessageSquare className="h-3 w-3" />
+              Text
+            </a>
+          </>
+        )}
+        {email && (
+          <a
+            href={`mailto:${email}`}
+            className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md border border-primary/30 bg-primary/5 text-primary text-[11px] font-medium hover:bg-primary/10 hover:border-primary/50 transition-colors active:bg-primary/15"
+            aria-label={`Email ${contact.name ?? "contact"}`}
+          >
+            <Mail className="h-3 w-3" />
+            Email
+          </a>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // Chip strip — renders below the tab nav. Categories visible per tab:
 //   - Status (Booked / Unbooked / Cancelled): every tab
 //   - Field (Missing type / weather / location / sales): Needs attention only
@@ -546,6 +619,11 @@ interface ListViewProps {
   // caused_by_event_id can render "Carry-over from <name>" without
   // an extra fetch. Built in EventsClient.
   eventNameById: Map<string, string>;
+  /** event_id → contact map for inline contact pill rendering. Built
+   *  in the parent from the contacts prop so per-row render is O(1)
+   *  without N+1 queries. Empty map when the operator has no contacts
+   *  yet — components fall through to no-contact-row gracefully. */
+  contactByEventId: Map<string, Contact>;
   // Handlers
   handleTabChange: (tab: TabMode) => void;
   handleSort: (field: SortField) => void;
@@ -592,6 +670,7 @@ function ListView({
   weatherMap,
   today,
   eventNameById,
+  contactByEventId,
   handleTabChange,
   handleSort,
   handleDuplicate,
@@ -1029,6 +1108,16 @@ function ListView({
                         )}
                       </div>
                     )}
+                    {/* Inline linked-contact pills — Call / Text / Email
+                        for the contact associated with this event via
+                        Contact.linked_event_ids. Click handlers
+                        stopPropagation so they fire without opening
+                        the edit dialog. */}
+                    {contactByEventId.get(event.id) && (
+                      <EventInlineContact
+                        contact={contactByEventId.get(event.id)!}
+                      />
+                    )}
                   </button>
                   </div>
                 );
@@ -1282,6 +1371,16 @@ function ListView({
                       )}
                       {/* Forecast vs Actual for past events */}
                       <ForecastVsActual event={event} today={today} />
+                      {/* Inline linked-contact pills under the event
+                          name in the desktop table. Same component as
+                          mobile; stopPropagation in EventInlineContact
+                          keeps the row's onClick (edit-dialog) from
+                          firing when operator taps Call/Text/Email. */}
+                      {contactByEventId.get(event.id) && (
+                        <EventInlineContact
+                          contact={contactByEventId.get(event.id)!}
+                        />
+                      )}
                     </TableCell>
                     {/* Type cell — Past + Booked analysis only. */}
                     {showAnalysisColumns && (
@@ -1573,7 +1672,7 @@ function ListView({
   );
 }
 
-export function EventsClient({ initialEvents, userId = "", businessName = "", userCity = "", userState = "", canSeeFinancials: financialsVisible = true }: EventsClientProps) {
+export function EventsClient({ initialEvents, userId = "", businessName = "", userCity = "", userState = "", canSeeFinancials: financialsVisible = true, contacts = [] }: EventsClientProps) {
   // Distinct state codes used by this operator's events — floats to
   // top of EventForm's state dropdown after the profile state.
   const recentStates = useMemo(() => {
@@ -1915,6 +2014,27 @@ export function EventsClient({ initialEvents, userId = "", businessName = "", us
     for (const e of initialEvents) m.set(e.id, e.event_name);
     return m;
   }, [initialEvents]);
+
+  // event_id → contact map. Each event can have at most one displayed
+  // contact (the first one that links to it, ordered by contact name).
+  // Multi-contact events still show the first inline; "+N more" pattern
+  // can come later — for now the operator already navigates to /contacts
+  // for the full list. Built once per render rather than per-row to
+  // avoid N×M lookup cost on large event lists.
+  const contactByEventId = useMemo(() => {
+    const m = new Map<string, Contact>();
+    // Sort by name so the "primary" contact for a multi-contact event
+    // is deterministic.
+    const sorted = [...contacts].sort((a, b) =>
+      (a.name ?? "").localeCompare(b.name ?? "")
+    );
+    for (const c of sorted) {
+      for (const eventId of c.linked_event_ids ?? []) {
+        if (!m.has(eventId)) m.set(eventId, c);
+      }
+    }
+    return m;
+  }, [contacts]);
 
   // Split into all / upcoming (booked) / unbooked (future) / past / past_unbooked / flagged / cancelled.
   //
@@ -3042,6 +3162,7 @@ export function EventsClient({ initialEvents, userId = "", businessName = "", us
             weatherMap={weatherMap}
             today={today}
             eventNameById={eventNameById}
+            contactByEventId={contactByEventId}
             handleTabChange={handleTabChange}
             handleSort={handleSort}
             handleDuplicate={handleDuplicate}

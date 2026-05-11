@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useCallback } from "react";
+import { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -173,13 +173,13 @@ function parseCSV(text: string): CsvImportRow[] {
 interface ContactsClientProps {
   initialContacts: Contact[];
   isPremium: boolean;
-  availableEventNames: string[];
+  availableEvents: { id: string; name: string; date: string }[];
 }
 
 export function ContactsClient({
   initialContacts,
   isPremium,
-  availableEventNames,
+  availableEvents,
 }: ContactsClientProps) {
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState<Contact | null>(null);
@@ -511,7 +511,7 @@ export function ContactsClient({
         initialData={editing}
         title={editing ? "Edit Contact" : "Add Contact"}
         isPremium={isPremium}
-        availableEventNames={availableEventNames}
+        availableEvents={availableEvents}
       />
     </div>
   );
@@ -890,8 +890,7 @@ function ContactFormDialog({
   onSubmit,
   initialData,
   title,
-  isPremium,
-  availableEventNames,
+  availableEvents,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -899,23 +898,52 @@ function ContactFormDialog({
   initialData?: Contact | null;
   title: string;
   isPremium: boolean;
-  availableEventNames: string[];
+  availableEvents: { id: string; name: string; date: string }[];
 }) {
   const [loading, setLoading] = useState(false);
-  const [linkedEvents, setLinkedEvents] = useState<string[]>(
-    initialData?.linked_event_names ?? []
+  const [linkedEventIds, setLinkedEventIds] = useState<string[]>(
+    initialData?.linked_event_ids ?? []
   );
+  const [eventSearch, setEventSearch] = useState("");
 
-  // Reset linked events when dialog opens with different contact
-  useState(() => {
-    setLinkedEvents(initialData?.linked_event_names ?? []);
-  });
+  // Reset linked events when dialog opens with different contact.
+  // (The previous useState-with-callback pattern here was a bug — that
+  // hook is for lazy state init, not effects. Replacing with useEffect.)
+  useEffect(() => {
+    setLinkedEventIds(initialData?.linked_event_ids ?? []);
+    setEventSearch("");
+  }, [initialData]);
 
-  function toggleEvent(name: string) {
-    setLinkedEvents((prev) =>
-      prev.includes(name) ? prev.filter((n) => n !== name) : [...prev, name]
+  function toggleEventId(id: string) {
+    setLinkedEventIds((prev) =>
+      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
     );
   }
+
+  // Search filter — case-insensitive, matches event name or date prefix
+  // ("2026-05" → all May 2026 events). Pre-sort by date desc so most-
+  // recent shows first; selected items pin to the top regardless of
+  // filter so operators don't lose them when typing a new search.
+  const filteredEvents = useMemo(() => {
+    const q = eventSearch.trim().toLowerCase();
+    const selectedSet = new Set(linkedEventIds);
+    const matches = availableEvents.filter((e) => {
+      if (q === "") return true;
+      return (
+        e.name.toLowerCase().includes(q) || e.date.toLowerCase().includes(q)
+      );
+    });
+    // Selected events always appear, even when filter would exclude them.
+    const selected = availableEvents.filter((e) => selectedSet.has(e.id));
+    const seen = new Set<string>();
+    const out: typeof availableEvents = [];
+    for (const e of [...selected, ...matches]) {
+      if (seen.has(e.id)) continue;
+      seen.add(e.id);
+      out.push(e);
+    }
+    return out.slice(0, 50); // cap render — operator with 1000 events shouldn't lock the browser
+  }, [availableEvents, eventSearch, linkedEventIds]);
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -926,8 +954,16 @@ function ContactFormDialog({
       email: (form.get("email") as string) || undefined,
       phone: (form.get("phone") as string) || undefined,
       organization: (form.get("organization") as string) || undefined,
+      city: (form.get("city") as string) || undefined,
+      location: (form.get("location") as string) || undefined,
       notes: (form.get("notes") as string) || undefined,
-      linked_event_names: linkedEvents,
+      // Keep legacy linked_event_names in sync with new linked_event_ids
+      // so older read paths (admin tools, exports) still work during
+      // the rollout window.
+      linked_event_names: availableEvents
+        .filter((e) => linkedEventIds.includes(e.id))
+        .map((e) => e.name),
+      linked_event_ids: linkedEventIds,
     });
     setLoading(false);
   }
@@ -949,10 +985,11 @@ function ContactFormDialog({
             />
           </div>
           <div className="space-y-2">
-            <Label htmlFor="organization">Organization</Label>
+            <Label htmlFor="organization">Company or event</Label>
             <Input
               id="organization"
               name="organization"
+              placeholder="Hidden Gems Bar — or — 40th Birthday Party"
               defaultValue={initialData?.organization ?? ""}
             />
           </div>
@@ -975,6 +1012,26 @@ function ContactFormDialog({
               />
             </div>
           </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label htmlFor="city">City</Label>
+              <Input
+                id="city"
+                name="city"
+                placeholder="St. Louis"
+                defaultValue={initialData?.city ?? ""}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="location">Location</Label>
+              <Input
+                id="location"
+                name="location"
+                placeholder="Venue / address"
+                defaultValue={initialData?.location ?? ""}
+              />
+            </div>
+          </div>
           <div className="space-y-2">
             <Label htmlFor="notes">Notes</Label>
             <Textarea
@@ -985,30 +1042,57 @@ function ContactFormDialog({
             />
           </div>
 
-          {isPremium && availableEventNames.length > 0 && (
+          {availableEvents.length > 0 && (
             <div className="space-y-2">
-              <Label>
-                Linked Events{" "}
-                <span className="text-xs text-muted-foreground font-normal">
-                  (used for quality scoring)
+              <div className="flex items-center justify-between gap-2">
+                <Label>Linked events</Label>
+                <span className="text-xs text-muted-foreground">
+                  {linkedEventIds.length} selected
                 </span>
-              </Label>
-              <div className="border rounded-md max-h-40 overflow-y-auto p-2 space-y-1">
-                {availableEventNames.map((name) => (
-                  <label
-                    key={name}
-                    className="flex items-center gap-2 text-sm cursor-pointer hover:bg-muted px-1 py-0.5 rounded"
-                  >
-                    <input
-                      type="checkbox"
-                      checked={linkedEvents.includes(name)}
-                      onChange={() => toggleEvent(name)}
-                      className="rounded"
-                    />
-                    {name}
-                  </label>
-                ))}
               </div>
+              <Input
+                type="search"
+                value={eventSearch}
+                onChange={(e) => setEventSearch(e.target.value)}
+                placeholder="Search by event name or date (e.g., 2026-05)"
+              />
+              <div className="border rounded-md max-h-56 overflow-y-auto p-2 space-y-1">
+                {filteredEvents.length === 0 ? (
+                  <p className="text-xs text-muted-foreground py-2 text-center">
+                    No matches.
+                  </p>
+                ) : (
+                  filteredEvents.map((ev) => {
+                    const checked = linkedEventIds.includes(ev.id);
+                    return (
+                      <label
+                        key={ev.id}
+                        className={`flex items-center gap-2 text-sm cursor-pointer px-1.5 py-1 rounded ${
+                          checked ? "bg-primary/10" : "hover:bg-muted"
+                        }`}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={checked}
+                          onChange={() => toggleEventId(ev.id)}
+                          className="rounded"
+                        />
+                        <span className="flex-1 min-w-0 truncate">
+                          {ev.name}
+                        </span>
+                        <span className="text-xs text-muted-foreground shrink-0">
+                          {ev.date}
+                        </span>
+                      </label>
+                    );
+                  })
+                )}
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Pick the events this contact organized or hosted. Only the
+                events you select count toward this contact — keeps the list
+                meaningful instead of bloated.
+              </p>
             </div>
           )}
 

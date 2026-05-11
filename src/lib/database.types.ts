@@ -213,9 +213,26 @@ export interface Contact {
   email: string | null;
   phone: string | null;
   organization: string | null;
+  /** City + location: added 2026-05-11 to parallel events.city /
+   *  events.location. Operator-facing copy treats them the same way the
+   *  events table does — city is the postal city; location is the
+   *  venue/address free-text. */
+  city: string | null;
+  location: string | null;
   notes: string | null;
+  /** Reserved for the deferred contact-scoring workstream. NOT being
+   *  used today; populate manually if desired but no read-path depends
+   *  on it. */
   quality_score: number | null;
+  /** Legacy soft-link by event name. Kept in place for one rollout
+   *  cycle; new writes prefer linked_event_ids below. Reads should
+   *  prefer ids and fall back to names. */
   linked_event_names: string[];
+  /** Real FK array to events.id. v1 implementation (migration
+   *  20260512000001) — operator-curated, no auto-linking. If/when
+   *  scoring ships, this gets promoted to a contact_events junction
+   *  table via a 15-line follow-up migration. */
+  linked_event_ids: string[];
   created_at: string;
   updated_at: string;
 }
