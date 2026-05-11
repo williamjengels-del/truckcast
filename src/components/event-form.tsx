@@ -154,6 +154,41 @@ export function EventForm({
     initialData?.state ?? profileState ?? ""
   );
   const [dateValue, setDateValue] = useState<string>(initialData?.event_date ?? "");
+  // Multi-day event toggle — operator picks a date range and the form
+  // creates one row per day on save (sharing all other fields). Per-day
+  // rows are the existing convention in the codebase (Best of Missouri
+  // Festival, Brentwood Days); the engine's series-day filter already
+  // compares Day 1s to Day 1s, so no engine change is needed.
+  //
+  // Edit mode: hidden. Editing a multi-day cluster row-by-row is the
+  // current behavior and stays — bulk-editing N rows at once is the
+  // bulk-edit Needs Attention workflow, not the event form.
+  const [isMultiDay, setIsMultiDay] = useState<boolean>(false);
+  const [endDateValue, setEndDateValue] = useState<string>("");
+
+  // Helpers for the multi-day date range. UTC-noon anchoring sidesteps
+  // DST-edge half-days (1 AM transitions) when iterating. en-CA locale
+  // is a stable shortcut to YYYY-MM-DD without timezone offset surprise.
+  function generateDateRange(startISO: string, endISO: string): string[] {
+    if (!startISO || !endISO || endISO < startISO) return [];
+    const [sy, sm, sd] = startISO.split("-").map(Number);
+    const [ey, em, ed] = endISO.split("-").map(Number);
+    const startMs = Date.UTC(sy, sm - 1, sd, 12, 0, 0);
+    const endMs = Date.UTC(ey, em - 1, ed, 12, 0, 0);
+    const out: string[] = [];
+    for (let t = startMs; t <= endMs; t += 86400000) {
+      const d = new Date(t);
+      const y = d.getUTCFullYear();
+      const m = String(d.getUTCMonth() + 1).padStart(2, "0");
+      const day = String(d.getUTCDate()).padStart(2, "0");
+      out.push(`${y}-${m}-${day}`);
+    }
+    return out;
+  }
+  function daysBetweenInclusive(startISO: string, endISO: string): string {
+    const n = generateDateRange(startISO, endISO).length;
+    return n === 1 ? "1 day" : `${n} days`;
+  }
   const [weatherValue, setWeatherValue] = useState<string>(initialData?.event_weather ?? "");
   const [weatherSuggested, setWeatherSuggested] = useState<boolean>(false);
   const [weatherBadge, setWeatherBadge] = useState<string | null>(null);
@@ -531,6 +566,14 @@ export function EventForm({
         cancellationReason === "sold_out" && causedByEventId
           ? causedByEventId
           : null,
+      // Multi-day flag — populated only when isMultiDay is on AND an
+      // end date is set. handleCreate in events-client branches on
+      // this to call createMultiDayEvents instead of createEvent.
+      // Hidden from updateEvent path (isEditing gates the UI).
+      multi_day_dates:
+        !isEditing && isMultiDay && endDateValue && endDateValue >= dateValue
+          ? generateDateRange(dateValue, endDateValue)
+          : undefined,
     };
 
     try {
@@ -643,6 +686,48 @@ export function EventForm({
                     </p>
                   );
                 })()}
+                {/* Multi-Day Event toggle — create-only. When on, the
+                    end-date input below appears and save creates one
+                    row per day from start through end. Hidden in edit
+                    mode (the cluster's already split into per-day rows
+                    in the events table; editing one at a time is the
+                    existing pattern). */}
+                {!isEditing && (
+                  <div className="mt-1.5">
+                    <label className="flex items-center gap-2 text-sm cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={isMultiDay}
+                        onChange={(e) => {
+                          setIsMultiDay(e.target.checked);
+                          if (!e.target.checked) setEndDateValue("");
+                        }}
+                        className="rounded"
+                      />
+                      Multi-Day Event
+                    </label>
+                    {isMultiDay && (
+                      <div className="mt-2 space-y-1">
+                        <Label htmlFor="event_end_date" className="text-xs">
+                          End date *
+                        </Label>
+                        <Input
+                          id="event_end_date"
+                          type="date"
+                          required={isMultiDay}
+                          value={endDateValue}
+                          min={dateValue || undefined}
+                          onChange={(e) => setEndDateValue(e.target.value)}
+                        />
+                        {dateValue && endDateValue && endDateValue >= dateValue && (
+                          <p className="text-xs text-muted-foreground">
+                            Creates {daysBetweenInclusive(dateValue, endDateValue)} per-day rows sharing this event&apos;s name, venue, type, and times.
+                          </p>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
               <div className="space-y-2">
                 <Label htmlFor="booked">Status</Label>

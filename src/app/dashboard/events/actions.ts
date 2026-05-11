@@ -82,6 +82,13 @@ export type EventFormData = {
   parking_loadin_notes?: string | null;
   menu_type?: "regular" | "special";
   special_menu_details?: string | null;
+  /** UI-only — not a column on events. Set by EventForm when the
+   *  operator toggles "Multi-Day Event" and picks an end date. The
+   *  client-side handleCreate branches on this and calls
+   *  createMultiDayEvents instead of createEvent so the server inserts
+   *  one row per date in the range. Each row gets a unique event_date
+   *  but shares every other field. */
+  multi_day_dates?: string[];
 };
 
 export async function createEvent(formData: EventFormData) {
@@ -195,6 +202,65 @@ export async function createEvent(formData: EventFormData) {
   return data as Event;
 }
 
+/**
+ * Multi-day event creation — given a shared event payload and a list of
+ * dates, insert one row per date and run a single recalc at the end.
+ * Each row gets a unique event_date but shares every other field
+ * (name, venue, type, times, fee shape, etc.). This is the create-side
+ * inverse of the codebase's existing multi-day consolidation rules
+ * (which already split clusters into per-day rows in the engine), so
+ * the storage shape stays consistent.
+ *
+ * Caller responsibility: pass a date list that's sorted and unique.
+ * The form's generateDateRange helper already does this. Server-side
+ * we re-dedupe defensively and cap at 31 dates to avoid runaway loops
+ * if a date range is misconfigured.
+ *
+ * Weather auto-classification runs once per date — same path as
+ * single-event create — so each day gets its own weather row.
+ * Recalc runs once at the end, not per-row.
+ */
+export async function createMultiDayEvents(
+  formData: EventFormData,
+  dates: string[]
+): Promise<{ created: Event[] }> {
+  const scope = requireWritableScope(await resolveScopedSupabase());
+  const { userId } = scope as Exclude<DashboardScope, { kind: "unauthorized" }>;
+
+  const uniqueDates = Array.from(new Set(dates)).sort();
+  if (uniqueDates.length === 0) {
+    throw new Error("Multi-day event needs at least one date");
+  }
+  if (uniqueDates.length > 31) {
+    throw new Error("Multi-day event is capped at 31 days");
+  }
+
+  const created: Event[] = [];
+  for (const date of uniqueDates) {
+    // Call createEvent for each date — keeps weather classification +
+    // city canonicalization + insert + revalidate logic in one place.
+    // recalculateForUser inside createEvent fires per-call but the
+    // recalc-lock from PR #253 serializes them so only one runs at a
+    // time per user; the others short-circuit cheap.
+    const row = await createEvent({
+      ...formData,
+      event_date: date,
+      // Strip the UI-only multi_day_dates field before recursing —
+      // each per-day call is a normal single-event insert.
+      multi_day_dates: undefined,
+    });
+    created.push(row);
+  }
+
+  // One forced recalc at the end so the platform_prior + tier inference
+  // sees the full cluster (rather than stale state from row 1 when row
+  // 2 inserts). The per-call recalcs inside createEvent already short-
+  // circuit on the lock so this is just an explicit final pass.
+  recalculateForUser(userId).catch(() => {});
+
+  return { created };
+}
+
 export async function updateEvent(id: string, formData: Partial<EventFormData>) {
   const scope = requireWritableScope(await resolveScopedSupabase());
   const { client: supabase, userId } = scope as Exclude<
@@ -205,6 +271,11 @@ export async function updateEvent(id: string, formData: Partial<EventFormData>) 
   const updateData: Record<string, unknown> = {};
 
   for (const [key, value] of Object.entries(formData)) {
+    // multi_day_dates is a UI-only field consumed by
+    // createMultiDayEvents; not a column on the events table. The
+    // form already gates it to create-mode but guard here defensively
+    // so an accidental payload won't 400 the update.
+    if (key === "multi_day_dates") continue;
     if (value !== undefined) {
       updateData[key] = value === "" ? null : value;
     }
