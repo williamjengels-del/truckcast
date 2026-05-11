@@ -81,7 +81,24 @@ describe("CHIP_CATALOG", () => {
     expect(ids).toContain("missing-type");
     expect(ids).toContain("missing-weather");
     expect(ids).toContain("missing-location");
+    expect(ids).toContain("missing-address");
     expect(ids).toContain("missing-sales");
+  });
+
+  it("missing-address fires only on empty/missing location, ignoring city", () => {
+    const chip = CHIP_CATALOG.find((c) => c.id === "missing-address")!;
+    expect(chip).toBeDefined();
+    // Empty location → fires regardless of city
+    expect(chip.predicate(makeEvent({ id: "e1", location: null, city: "St. Louis" }), "2026-05-11")).toBe(true);
+    expect(chip.predicate(makeEvent({ id: "e1", location: "", city: "St. Louis" }), "2026-05-11")).toBe(true);
+    expect(chip.predicate(makeEvent({ id: "e1", location: "   ", city: "St. Louis" }), "2026-05-11")).toBe(true);
+    // Address present → does not fire
+    expect(chip.predicate(makeEvent({ id: "e1", location: "Forest Park" }), "2026-05-11")).toBe(false);
+    expect(chip.predicate(makeEvent({ id: "e1", location: "1234 Locust St" }), "2026-05-11")).toBe(false);
+    // Distinct from missing-location, which falls back to city presence
+    const missingLoc = CHIP_CATALOG.find((c) => c.id === "missing-location")!;
+    expect(missingLoc.predicate(makeEvent({ id: "e1", location: null, city: "St. Louis" }), "2026-05-11")).toBe(false);
+    expect(chip.predicate(makeEvent({ id: "e1", location: null, city: "St. Louis" }), "2026-05-11")).toBe(true);
   });
   it("status chips are radio-in-category, field chips are not", () => {
     for (const c of CHIP_CATALOG) {

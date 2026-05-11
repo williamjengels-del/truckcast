@@ -26,6 +26,13 @@ const isUnbookedInquiry = (e: Event) =>
 const isMissingType = (e: Event) => !e.event_type;
 const isMissingWeather = (e: Event) => !e.event_weather;
 const isMissingLocation = (e: Event) => !e.location && !e.city;
+// Address-required gate (operator decision 2026-05-11). Distinct from
+// missing-location above: address must be on `events.location`
+// specifically (a venue / street address), not city-as-fallback. The
+// forecast engine gates on this same field — events without it get no
+// forecast.
+const isMissingAddress = (e: Event) =>
+  !e.location || (typeof e.location === "string" && e.location.trim() === "");
 const isMissingSales = (e: Event, today: string) =>
   e.event_date < today &&
   e.booked &&
@@ -91,6 +98,13 @@ export const CHIP_CATALOG: EventChip[] = [
     category: "field",
     radioInCategory: false,
     predicate: isMissingLocation,
+  },
+  {
+    id: "missing-address",
+    label: "Missing address",
+    category: "field",
+    radioInCategory: false,
+    predicate: isMissingAddress,
   },
   {
     id: "missing-sales",

@@ -845,13 +845,23 @@ export function EventForm({
                 </h3>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div className="col-span-2 space-y-2">
-                    <Label htmlFor="location">Venue / Location</Label>
+                    <Label htmlFor="location">
+                      Venue / Address
+                      <span className="ml-2 text-xs font-normal text-muted-foreground">
+                        Required for forecasts
+                      </span>
+                    </Label>
                     <Input
                       id="location"
                       name="location"
                       defaultValue={initialData?.location ?? ""}
-                      placeholder="e.g. Kiener Plaza"
+                      placeholder="e.g. Kiener Plaza or 1234 Locust St"
                     />
+                    <p className="text-xs text-muted-foreground">
+                      We use this to forecast attendance + sales for this
+                      event. No address yet means no forecast — your data
+                      stays in your account either way.
+                    </p>
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="city_area">Area / Neighborhood</Label>
