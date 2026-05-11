@@ -1,5 +1,8 @@
 import { describe, it, expect } from "vitest";
-import { __computeAggregate } from "./platform-registry";
+import {
+  __computeAggregate,
+  __computeAggregateExcludingViewer,
+} from "./platform-registry";
 
 // Test rows omit Phase 1 fields by default — helper fills them as null.
 function row(overrides: {
@@ -237,5 +240,100 @@ describe("computeAggregate (platform-registry)", () => {
     const agg = __computeAggregate(rows);
     expect(agg).not.toBeNull();
     expect(agg?.modal_weather_by_month["4"]).toBeUndefined(); // 2 distinct ops, below floor
+  });
+});
+
+describe("computeAggregateExcludingViewer (seed-operator-phase fix)", () => {
+  // The 2-operator scenario the operator clarified 2026-05-11: with
+  // Wok-O (u1) + Nick (u2) sharing data, both should see a viewer-
+  // excluded aggregate computed from the other's rows. Privacy floor
+  // is checked on the FULL bucket (2 ops → passes); the returned
+  // aggregate's medians come from the excluded subset.
+  it("fires at 2 operators total — viewer sees the other operator's stats", () => {
+    const rows = [
+      row({ user_id: "u1", net_sales: 1000, event_type: "Festival", city: "STL" }),
+      row({ user_id: "u1", net_sales: 1500, event_type: "Festival", city: "STL" }),
+      row({ user_id: "u2", net_sales: 2000, event_type: "Festival", city: "STL" }),
+      row({ user_id: "u2", net_sales: 2500, event_type: "Festival", city: "STL" }),
+    ];
+    // u1 viewing — should see medians computed from u2's rows only.
+    const agg = __computeAggregateExcludingViewer(rows, "u1");
+    expect(agg).not.toBeNull();
+    if (!agg) return;
+    // operator_count reports FULL bucket (privacy-relevant number that
+    // the engine reads for its firing threshold).
+    expect(agg.operator_count).toBe(2);
+    // total_instances + medians reflect the excluded subset (u2's rows).
+    expect(agg.total_instances).toBe(2);
+    expect(agg.median_sales).toBe(2250); // (2000 + 2500) / 2
+    expect(agg.min_sales).toBe(2000);
+    expect(agg.max_sales).toBe(2500);
+  });
+
+  it("u2 viewer sees u1's stats — symmetric to the above", () => {
+    const rows = [
+      row({ user_id: "u1", net_sales: 1000, event_type: "Festival" }),
+      row({ user_id: "u1", net_sales: 1500, event_type: "Festival" }),
+      row({ user_id: "u2", net_sales: 2000, event_type: "Festival" }),
+      row({ user_id: "u2", net_sales: 2500, event_type: "Festival" }),
+    ];
+    const agg = __computeAggregateExcludingViewer(rows, "u2");
+    expect(agg).not.toBeNull();
+    if (!agg) return;
+    expect(agg.operator_count).toBe(2);
+    expect(agg.total_instances).toBe(2);
+    expect(agg.median_sales).toBe(1250); // (1000 + 1500) / 2
+  });
+
+  it("returns null when the full bucket has only 1 operator (privacy floor)", () => {
+    const rows = [
+      row({ user_id: "u1", net_sales: 1000 }),
+      row({ user_id: "u1", net_sales: 1500 }),
+    ];
+    // No matter who's viewing, this bucket can't publish — the
+    // privacy contract requires ≥2 distinct operators contributed.
+    expect(__computeAggregateExcludingViewer(rows, "u1")).toBeNull();
+    expect(__computeAggregateExcludingViewer(rows, "u2")).toBeNull();
+  });
+
+  it("returns null when the viewer was the sole contributor in a multi-op bucket", () => {
+    // Degenerate but possible: u1 has rows, u2 has none. Viewer = u2,
+    // who sees no rows. Privacy floor on full bucket fails (1 distinct
+    // op) — so this is just confirming the null path.
+    const rows = [
+      row({ user_id: "u1", net_sales: 1000 }),
+      row({ user_id: "u1", net_sales: 1500 }),
+    ];
+    expect(__computeAggregateExcludingViewer(rows, "u2")).toBeNull();
+  });
+
+  it("3 operators total — viewer sees 2-op aggregate (regression-toward-self avoided)", () => {
+    const rows = [
+      row({ user_id: "u1", net_sales: 1000 }), // viewer
+      row({ user_id: "u2", net_sales: 2000 }),
+      row({ user_id: "u3", net_sales: 3000 }),
+    ];
+    const agg = __computeAggregateExcludingViewer(rows, "u1");
+    expect(agg).not.toBeNull();
+    if (!agg) return;
+    // operator_count reports the FULL bucket — 3. Excluded medians from u2 + u3.
+    expect(agg.operator_count).toBe(3);
+    expect(agg.total_instances).toBe(2);
+    expect(agg.median_sales).toBe(2500); // (2000 + 3000) / 2 — NOT influenced by u1's 1000
+  });
+
+  it("does not re-apply the ≥2 floor on the excluded subset", () => {
+    // The bug fixed by this function: the prior shape called
+    // computeAggregate on the pre-excluded set, which re-applied the
+    // ≥2 floor and structurally required ≥3 total operators. Here we
+    // pin: 2 total ops, excluded subset has 1 op → still publishes.
+    const rows = [
+      row({ user_id: "u1", net_sales: 100 }), // viewer
+      row({ user_id: "u2", net_sales: 200 }),
+    ];
+    const agg = __computeAggregateExcludingViewer(rows, "u1");
+    expect(agg).not.toBeNull();
+    expect(agg?.total_instances).toBe(1);
+    expect(agg?.median_sales).toBe(200);
   });
 });

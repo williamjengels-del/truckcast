@@ -81,12 +81,64 @@ interface AggregateResult {
  *
  * Pure function on rows; callers do their own filtering (sharing
  * eligibility, self-exclusion, etc.) before passing rows in.
+ *
+ * For the runtime read path that excludes a viewer, use
+ * computeAggregateExcludingViewer below — it verifies the privacy floor
+ * on the FULL bucket and then computes the aggregate on the viewer-
+ * excluded subset. Calling computeAggregate directly on a pre-excluded
+ * row set re-applies the ≥2 floor after exclusion, which structurally
+ * requires 3+ total operators and breaks the seed-operator phase demo.
  */
 function computeAggregate(rows: AggregatableRow[]): AggregateResult | null {
   if (rows.length === 0) return null;
   const operatorCount = new Set(rows.map((r) => r.user_id)).size;
   if (operatorCount < 2) return null;
+  return computeAggregateBody(rows, operatorCount);
+}
 
+/**
+ * Viewer-aware platform aggregate. Privacy floor (≥2 distinct
+ * operators) is enforced on the FULL row set passed in — so the bucket
+ * itself must satisfy the contract regardless of who's viewing. The
+ * returned aggregate's medians + percentiles + modal stats are computed
+ * on rows EXCLUDING the viewer, so the viewer never sees their own data
+ * folded into the cross-op signal.
+ *
+ * Crucially: the post-exclusion subset is NOT subject to its own ≥2
+ * floor. In a 2-operator world (you + Nick), the full bucket has 2 ops
+ * → privacy passes → the excluded subset has 1 op (Nick) → that's the
+ * legitimate cross-op signal for you. The earlier shape of "computeAggregate
+ * on the pre-excluded set" implicitly required ≥3 total operators because
+ * it re-applied the ≥2 floor after stripping the viewer.
+ *
+ * `operator_count` in the returned object reports the FULL bucket's
+ * operator count (the privacy-relevant number, what the engine reads
+ * for its firing threshold). The viewer's own contribution is excluded
+ * from medians but the count tells the engine "this aggregate came from
+ * N distinct operators, you're one of them."
+ */
+function computeAggregateExcludingViewer(
+  rows: AggregatableRow[],
+  excludeUserId: string
+): AggregateResult | null {
+  if (rows.length === 0) return null;
+  const fullOps = new Set(rows.map((r) => r.user_id));
+  if (fullOps.size < 2) return null;
+  const excluded = rows.filter((r) => r.user_id !== excludeUserId);
+  if (excluded.length === 0) return null;
+  return computeAggregateBody(excluded, fullOps.size);
+}
+
+/**
+ * Shared body for computeAggregate + computeAggregateExcludingViewer.
+ * Takes the rows to aggregate AND the operator_count to report — the
+ * caller decides which (the same set as the rows, or the FULL bucket's
+ * count when computing a viewer-excluded aggregate).
+ */
+function computeAggregateBody(
+  rows: AggregatableRow[],
+  operatorCount: number
+): AggregateResult {
   const sales = rows.map((r) => r.net_sales).sort((a, b) => a - b);
   const n = sales.length;
   const avg = sales.reduce((a, b) => a + b, 0) / n;
@@ -260,6 +312,7 @@ function medianOfNonNull(values: (number | null | undefined)[]): number | null {
 
 // Exported for tests.
 export const __computeAggregate = computeAggregate;
+export const __computeAggregateExcludingViewer = computeAggregateExcludingViewer;
 
 import { resolveAliases, expandCanonicalsToAliases } from "@/lib/event-name-aliases";
 
@@ -536,12 +589,18 @@ export async function getPlatformEventsExcludingUser(
   // their canonical bucket — same shape as the cached writer.
   const resolveMap = await resolveAliases(client, inputNormalized);
 
-  // Sharing list — same gate as the cached aggregator. We don't need
-  // to recompute this per event; one fetch covers all. Top-level
-  // operators only (owner_user_id IS NULL): managers don't count as a
-  // second operator — they're employees of an existing operator, and
-  // their rows typically duplicate the owner's bookings. See
-  // updatePlatformRegistry above for the full rationale.
+  // Sharing list — same gate as the cached aggregator, top-level
+  // operators only (managers filtered via owner_user_id IS NULL).
+  // KEEP the viewer in the sharing set: the privacy floor is checked
+  // on the FULL bucket (including viewer) inside
+  // computeAggregateExcludingViewer; only the medians + percentiles
+  // are computed on the viewer-excluded subset. This is what makes a
+  // 2-operator world (viewer + 1 other) actually fire the platform
+  // prior — the bucket satisfies ≥2 with the viewer counted, and the
+  // viewer sees the other operator's aggregate stats. Removing the
+  // viewer from sharingUserIds before the privacy check (the prior
+  // shape) requires ≥3 total operators to fire, defeating the
+  // seed-operator-phase intent of PR #265.
   const { data: sharingUsers } = await client
     .from("profiles")
     .select("id")
@@ -550,10 +609,6 @@ export async function getPlatformEventsExcludingUser(
   const sharingUserIds = new Set(
     (sharingUsers ?? []).map((u: { id: string }) => u.id)
   );
-  // The requesting user is excluded regardless of their own
-  // data_sharing_enabled flag — the goal is to show "what others
-  // see," not "what the platform recorded."
-  sharingUserIds.delete(excludeUserId);
   if (sharingUserIds.size === 0) return new Map();
 
   // One batch fetch for all event names — IN filter on event_name
@@ -577,8 +632,10 @@ export async function getPlatformEventsExcludingUser(
   if (!rows) return new Map();
 
   type EventRowWithName = AggregatableRow & { event_name: string };
-  const eligible = (rows as EventRowWithName[]).filter(
-    (r) => r.user_id !== excludeUserId && sharingUserIds.has(r.user_id)
+  // Eligible = sharing-enabled (viewer included for privacy-floor count;
+  // computeAggregateExcludingViewer excludes them from medians below).
+  const eligible = (rows as EventRowWithName[]).filter((r) =>
+    sharingUserIds.has(r.user_id)
   );
 
   // Group by canonical normalized event name (resolve through aliases),
@@ -593,7 +650,7 @@ export async function getPlatformEventsExcludingUser(
 
   const byCanonical = new Map<string, PlatformEvent>();
   for (const [key, groupRows] of groups) {
-    const agg = computeAggregate(groupRows);
+    const agg = computeAggregateExcludingViewer(groupRows, excludeUserId);
     if (!agg) continue;
     // Synthesize a PlatformEvent shape so callers don't need to
     // branch. Fields the cached table tracks (event_name_normalized,
