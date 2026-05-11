@@ -40,16 +40,30 @@ function extractToken(to: string): string | null {
   return tag.length > 0 ? tag : null;
 }
 
-/** Find user by matching the first 8 chars of their UUID against the token. */
+/** Find user by matching the first 8 chars of their UUID against the token.
+ *  Refuses to choose on collision — two users whose UUIDs share the first 8
+ *  hex chars (≈1 in 4B per UUID space, but listUsers returns max 1000 here)
+ *  would silently route net_sales to the wrong operator. Better to drop on
+ *  collision than write to the wrong row. */
 async function findUserByToken(
   supabase: ReturnType<typeof createServiceRoleClient>,
   token: string
 ): Promise<string | null> {
   const { data: authData } = await supabase.auth.admin.listUsers({ perPage: 1000 });
-  const match = authData?.users?.find((u) =>
-    u.id.replace(/-/g, "").startsWith(token)
-  );
-  return match?.id ?? null;
+  const matches =
+    authData?.users?.filter((u) =>
+      u.id.replace(/-/g, "").startsWith(token)
+    ) ?? [];
+  if (matches.length === 0) return null;
+  if (matches.length > 1) {
+    console.error(
+      `[toast/inbound] Token "${token}" collision: ${matches.length} users match (${matches
+        .map((m) => m.id)
+        .join(", ")}). Refusing to choose.`
+    );
+    return null;
+  }
+  return matches[0].id;
 }
 
 /** Status values written to pos_connections.last_sync_status.
@@ -154,6 +168,32 @@ async function extractEmailContent(
 
 
 export async function POST(request: Request) {
+  // Shared-secret gate. The Cloudflare Email Worker forwards Toast
+  // emails to this route with no Supabase auth; without a shared
+  // secret, anyone with the URL could forge net_sales numbers against
+  // any operator (combined with the +token routing in findUserByToken).
+  // Closed by default: if the env var isn't set, refuse all requests.
+  const expectedSecret = process.env.TOAST_INBOUND_SECRET;
+  if (!expectedSecret) {
+    console.error(
+      "[toast/inbound] TOAST_INBOUND_SECRET not configured; refusing all requests"
+    );
+    return NextResponse.json(
+      { ok: false, reason: "server_misconfigured" },
+      { status: 503 }
+    );
+  }
+  const presented = request.headers.get("x-vendcast-cloudflare-secret");
+  if (presented !== expectedSecret) {
+    console.warn(
+      `[toast/inbound] Missing or invalid x-vendcast-cloudflare-secret (got: ${presented ? "wrong value" : "no header"})`
+    );
+    return NextResponse.json(
+      { ok: false, reason: "unauthorized" },
+      { status: 401 }
+    );
+  }
+
   // Hoisted so the catch block can record `internal_error` against
   // the right pos_connections row if we got far enough to identify
   // the user before throwing.
@@ -364,6 +404,91 @@ export async function POST(request: Request) {
 
     // Exactly one match — sync it
     const event = matchedEvents[0];
+
+    // Check for an existing net_sales value before overwriting.
+    // Toast sends 2 emails per event (parseable summary + AI-insight).
+    // If they parse to different amounts, the second blindly overwrote
+    // the first — silently losing the operator's true number. Same risk
+    // if the operator manually edited net_sales after a prior Toast sync.
+    // Fix: idempotent on same value, queue-for-review on conflict.
+    const { data: existing } = await supabase
+      .from("events")
+      .select("net_sales")
+      .eq("id", event.id)
+      .eq("user_id", userId)
+      .maybeSingle();
+
+    if (
+      existing?.net_sales != null &&
+      Number(existing.net_sales) !== parsed.netSales
+    ) {
+      console.log(
+        `[toast/inbound] Conflict: event ${event.id} (${event.event_name}) already has net_sales=${existing.net_sales}; new Toast value=${parsed.netSales}. Queuing for review.`
+      );
+      const { error: insertError } = await supabase
+        .from("unmatched_toast_payments")
+        .insert({
+          user_id: userId,
+          source: "toast",
+          reported_date: parsed.date,
+          net_sales: parsed.netSales,
+          raw_subject: `${rawSubject} [conflict: ${event.event_name} already has $${existing.net_sales}]`,
+        });
+      if (insertError) {
+        console.error(
+          `[toast/inbound] Conflict-queue insert failed for user ${userId}:`,
+          insertError
+        );
+        await recordSyncAttempt(
+          supabase,
+          userId,
+          "internal_error",
+          `Toast reported $${parsed.netSales.toFixed(2)} on ${parsed.date} but the event already has $${existing.net_sales} and the conflict-queue write failed: ${insertError.message ?? "unknown"}.`
+        );
+        return NextResponse.json(
+          { ok: false, reason: "conflict_queue_failed" },
+          { status: 200 }
+        );
+      }
+      await recordSyncAttempt(
+        supabase,
+        userId,
+        "ambiguous_match",
+        `Toast reported $${parsed.netSales.toFixed(2)} on ${parsed.date} but ${event.event_name} already has $${existing.net_sales}. Queued for review.`
+      );
+      return NextResponse.json(
+        {
+          ok: true,
+          reason: "duplicate_with_conflict",
+          existing: existing.net_sales,
+          new: parsed.netSales,
+        },
+        { status: 200 }
+      );
+    }
+
+    if (
+      existing?.net_sales != null &&
+      Number(existing.net_sales) === parsed.netSales
+    ) {
+      // Idempotent — same value already stored. Common case for the
+      // Toast double-email pattern. Skip the write + recalc to avoid
+      // unnecessary churn.
+      console.log(
+        `[toast/inbound] Idempotent: event ${event.id} already has net_sales=${parsed.netSales}; no write.`
+      );
+      await recordSyncAttempt(
+        supabase,
+        userId,
+        "success",
+        `Toast reported $${parsed.netSales.toFixed(2)} on ${parsed.date}; matches existing value. No update needed.`
+      );
+      return NextResponse.json(
+        { ok: true, reason: "idempotent", date: parsed.date },
+        { status: 200 }
+      );
+    }
+
     const { error: updateError } = await supabase
       .from("events")
       .update({ net_sales: parsed.netSales, pos_source: "toast" })
