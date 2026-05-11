@@ -552,25 +552,29 @@ export async function DayOfEventBlock({
           {isPaidTier && contact && (contact.phone || contact.email) && (
             <div className="flex items-start gap-2 text-sm min-w-0">
               <Phone className="h-4 w-4 text-muted-foreground shrink-0 mt-0.5" />
-              <div className="min-w-0">
+              <div className="min-w-0 flex-1">
                 {contact.name && (
                   <p className="font-medium truncate">{contact.name}</p>
                 )}
-                <div className="flex flex-wrap gap-x-3 gap-y-0.5 text-xs">
+                {/* Buttoned actions — operators were missing the tap
+                    affordance on the prior text-link version. Pills with
+                    icon + label + border read as obviously-tappable on
+                    mobile + desktop. Same hrefs (tel/sms/mailto). */}
+                <div className="flex flex-wrap gap-2 mt-1.5">
                   {contact.phone && (
                     <>
                       <a
                         href={`tel:${onlyDigits(contact.phone)}`}
-                        className="text-primary hover:underline inline-flex items-center gap-1"
+                        className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md border border-primary/30 bg-primary/5 text-primary text-xs font-medium hover:bg-primary/10 hover:border-primary/50 transition-colors active:bg-primary/15"
                       >
-                        <Phone className="h-3 w-3" />
-                        {contact.phone}
+                        <Phone className="h-3.5 w-3.5" />
+                        Call
                       </a>
                       <a
                         href={`sms:${onlyDigits(contact.phone)}`}
-                        className="text-primary hover:underline inline-flex items-center gap-1"
+                        className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md border border-primary/30 bg-primary/5 text-primary text-xs font-medium hover:bg-primary/10 hover:border-primary/50 transition-colors active:bg-primary/15"
                       >
-                        <MessageSquare className="h-3 w-3" />
+                        <MessageSquare className="h-3.5 w-3.5" />
                         Text
                       </a>
                     </>
@@ -578,22 +582,29 @@ export async function DayOfEventBlock({
                   {contact.email && (
                     <a
                       href={`mailto:${contact.email}`}
-                      className="text-primary hover:underline inline-flex items-center gap-1"
+                      className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md border border-primary/30 bg-primary/5 text-primary text-xs font-medium hover:bg-primary/10 hover:border-primary/50 transition-colors active:bg-primary/15"
                     >
-                      <Mail className="h-3 w-3" />
-                      {contact.email}
+                      <Mail className="h-3.5 w-3.5" />
+                      Email
                     </a>
                   )}
-                  {additionalContactCount > 0 && (
-                    <Link
-                      href={`/dashboard/contacts?event=${encodeURIComponent(event.event_name)}`}
-                      className="text-muted-foreground hover:text-primary hover:underline inline-flex items-center"
-                      data-testid="day-of-event-view-all-contacts"
-                    >
-                      +{additionalContactCount} more
-                    </Link>
-                  )}
                 </div>
+                {/* Phone/email values as plain text below the buttons so
+                    operators can still see + copy them. Smaller + muted —
+                    these are info, the buttons are the action. */}
+                <div className="mt-1.5 flex flex-wrap gap-x-3 text-[11px] text-muted-foreground">
+                  {contact.phone && <span>{contact.phone}</span>}
+                  {contact.email && <span className="truncate">{contact.email}</span>}
+                </div>
+                {additionalContactCount > 0 && (
+                  <Link
+                    href={`/dashboard/contacts?event=${encodeURIComponent(event.event_name)}`}
+                    className="mt-1 inline-block text-xs text-muted-foreground hover:text-primary hover:underline"
+                    data-testid="day-of-event-view-all-contacts"
+                  >
+                    +{additionalContactCount} more contact{additionalContactCount === 1 ? "" : "s"}
+                  </Link>
+                )}
               </div>
             </div>
           )}
