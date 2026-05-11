@@ -48,7 +48,9 @@ import {
   CopyPlus,
   BookCheck,
   RefreshCw,
+  X,
 } from "lucide-react";
+import { Checkbox } from "@/components/ui/checkbox";
 import { EventForm } from "@/components/event-form";
 import { SalesEntryDialog } from "@/components/sales-entry-dialog";
 import {
@@ -401,6 +403,50 @@ interface TabCounts {
   needs_attention: number;
 }
 
+// Bulk-edit field options. Server-side validation in
+// /api/events/bulk-update mirrors these — keep them in sync. Values
+// for each field are the same enum strings the rest of the app uses.
+// Legacy "Private/Catering" event_type is intentionally absent (matches
+// the new-event form's hidden behavior).
+const BULK_FIELD_OPTIONS: Record<
+  "event_type" | "event_mode" | "event_weather" | "event_size_tier_operator",
+  { value: string; label: string }[]
+> = {
+  event_type: [
+    { value: "Festival", label: "Festival" },
+    { value: "Concert", label: "Concert" },
+    { value: "Community/Neighborhood", label: "Community/Neighborhood" },
+    { value: "Corporate", label: "Corporate" },
+    { value: "Weekly Series", label: "Weekly Series" },
+    { value: "Private", label: "Private" },
+    { value: "Sports Event", label: "Sports Event" },
+    { value: "Fundraiser/Charity", label: "Fundraiser/Charity" },
+    { value: "Wedding", label: "Wedding" },
+    { value: "Private Party", label: "Private Party" },
+    { value: "Reception", label: "Reception" },
+  ],
+  event_mode: [
+    { value: "food_truck", label: "Food truck" },
+    { value: "catering", label: "Catering" },
+  ],
+  event_weather: [
+    { value: "Clear", label: "Clear" },
+    { value: "Overcast", label: "Overcast" },
+    { value: "Hot", label: "Hot" },
+    { value: "Cold", label: "Cold" },
+    { value: "Rain Before Event", label: "Rain Before Event" },
+    { value: "Rain During Event", label: "Rain During Event" },
+    { value: "Storms", label: "Storms" },
+    { value: "Snow", label: "Snow" },
+  ],
+  event_size_tier_operator: [
+    { value: "SMALL", label: "Small" },
+    { value: "NORMAL", label: "Normal" },
+    { value: "LARGE", label: "Large" },
+    { value: "FLAGSHIP", label: "Flagship" },
+  ],
+};
+
 // Chip strip — renders below the tab nav. Categories visible per tab:
 //   - Status (Booked / Unbooked / Cancelled): every tab
 //   - Field (Missing type / weather / location / sales): Needs attention only
@@ -573,6 +619,123 @@ function ListView({
     tableDensity === "advanced" &&
     activeTab === "past" &&
     selectedChips.has("booked");
+
+  // ── Bulk-edit state (Needs Attention tab only) ─────────────────────
+  // Multi-select + bulk-apply for enum-typed fields. Scoped to Needs
+  // Attention because that's where operators do batch cleanup; other
+  // tabs aren't the right surface for "select 30 rows and apply." API
+  // route validates the field allowlist + enum membership server-side.
+  const bulkEnabled = activeTab === "needs_attention";
+  const [bulkSelectedIds, setBulkSelectedIds] = useState<Set<string>>(
+    new Set()
+  );
+  const [bulkField, setBulkField] = useState<
+    "event_type" | "event_mode" | "event_weather" | "event_size_tier_operator" | ""
+  >("");
+  const [bulkValue, setBulkValue] = useState<string>("");
+  const [bulkApplying, setBulkApplying] = useState(false);
+  const [bulkMessage, setBulkMessage] = useState<string | null>(null);
+  const router = useRouter();
+
+  // Clear selection when leaving the Needs Attention tab or when the
+  // filtered set shifts under us. Selecting a row only to have it
+  // disappear from view is a paper cut — better to reset and let the
+  // operator re-select intentionally.
+  useEffect(() => {
+    if (!bulkEnabled) {
+      setBulkSelectedIds(new Set());
+      setBulkField("");
+      setBulkValue("");
+      setBulkMessage(null);
+    }
+  }, [bulkEnabled]);
+
+  // Prune selected ids that are no longer in the visible filtered set
+  // — chip toggles can hide previously-selected rows.
+  useEffect(() => {
+    if (!bulkEnabled || bulkSelectedIds.size === 0) return;
+    const visible = new Set(sorted.map((e) => e.id));
+    let needsPrune = false;
+    for (const id of bulkSelectedIds) {
+      if (!visible.has(id)) {
+        needsPrune = true;
+        break;
+      }
+    }
+    if (needsPrune) {
+      setBulkSelectedIds((prev) => {
+        const next = new Set<string>();
+        for (const id of prev) if (visible.has(id)) next.add(id);
+        return next;
+      });
+    }
+  }, [bulkEnabled, sorted, bulkSelectedIds]);
+
+  function toggleBulkSelect(id: string) {
+    setBulkSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+    setBulkMessage(null);
+  }
+
+  function bulkSelectAllVisible() {
+    setBulkSelectedIds(new Set(sorted.map((e) => e.id)));
+    setBulkMessage(null);
+  }
+
+  function bulkClearSelection() {
+    setBulkSelectedIds(new Set());
+    setBulkField("");
+    setBulkValue("");
+    setBulkMessage(null);
+  }
+
+  async function bulkApply() {
+    if (!bulkField || !bulkValue || bulkSelectedIds.size === 0) return;
+    setBulkApplying(true);
+    setBulkMessage(null);
+    try {
+      const res = await fetch("/api/events/bulk-update", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ids: Array.from(bulkSelectedIds),
+          field: bulkField,
+          value: bulkValue,
+        }),
+      });
+      const json = (await res.json().catch(() => ({}))) as {
+        success?: boolean;
+        updated?: number;
+        requested?: number;
+        error?: string;
+      };
+      if (!res.ok || !json.success) {
+        setBulkMessage(json.error ?? "Update failed");
+        setBulkApplying(false);
+        return;
+      }
+      const n = json.updated ?? 0;
+      const total = json.requested ?? bulkSelectedIds.size;
+      setBulkMessage(
+        n === total
+          ? `Updated ${n} event${n === 1 ? "" : "s"}`
+          : `Updated ${n} of ${total} (others outside your scope)`
+      );
+      setBulkSelectedIds(new Set());
+      setBulkField("");
+      setBulkValue("");
+      router.refresh();
+    } catch (err) {
+      setBulkMessage(err instanceof Error ? err.message : "Update failed");
+    } finally {
+      setBulkApplying(false);
+    }
+  }
+
   return (
     <>
       {/* 4-tab nav (chip-foundation refactor 2026-04-30):
@@ -754,12 +917,29 @@ function ListView({
                     : event.net_sales;
                 const needsSales = financialsVisible && event.event_date <= today && !event.net_sales && !event.cancellation_reason && !(isCatering && (event.invoice_revenue ?? 0) > 0);
                 const isUnbookedFuture = !event.booked && event.event_date >= today && !event.cancellation_reason;
+                const isBulkSelected = bulkSelectedIds.has(event.id);
                 return (
+                  <div key={event.id} className="relative">
+                    {bulkEnabled && (
+                      <div
+                        className="absolute left-2 top-3 z-10"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        <Checkbox
+                          checked={isBulkSelected}
+                          onCheckedChange={() => toggleBulkSelect(event.id)}
+                          aria-label={`Select ${event.event_name}`}
+                        />
+                      </div>
+                    )}
                   <button
-                    key={event.id}
                     type="button"
                     onClick={() => setEditingEvent(event)}
                     className={`w-full text-left rounded-lg border bg-card p-3 hover:bg-muted/50 transition-colors ${
+                      bulkEnabled ? "pl-10" : ""
+                    } ${
+                      isBulkSelected ? "ring-2 ring-primary" : ""
+                    } ${
                       isCatering ? "border-l-[3px] border-l-brand-teal" :
                       activeTab === "all" && event.booked ? "border-l-[3px] border-l-green-500" :
                       activeTab === "all" && !event.booked ? "border-l-[3px] border-l-slate-300 dark:border-l-slate-600" :
@@ -850,6 +1030,7 @@ function ListView({
                       </div>
                     )}
                   </button>
+                  </div>
                 );
               })}
             </div>
@@ -897,6 +1078,21 @@ function ListView({
             <Table>
               <TableHeader>
                 <TableRow>
+                  {bulkEnabled && (
+                    <TableHead className="w-8 pr-0">
+                      <Checkbox
+                        checked={
+                          sorted.length > 0 &&
+                          bulkSelectedIds.size === sorted.length
+                        }
+                        onCheckedChange={(checked) => {
+                          if (checked) bulkSelectAllVisible();
+                          else bulkClearSelection();
+                        }}
+                        aria-label="Select all visible"
+                      />
+                    </TableHead>
+                  )}
                   <TableHead
                     className="cursor-pointer select-none pr-6 whitespace-nowrap"
                     onClick={() => handleSort("event_date")}
@@ -992,13 +1188,19 @@ function ListView({
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {sorted.map((event) => (
+                {sorted.map((event) => {
+                  const isBulkSelected = bulkSelectedIds.has(event.id);
+                  return (
                   <TableRow
                     key={event.id}
                     data-event-id={event.id}
                     className={`cursor-pointer hover:bg-muted/50 transition-colors ${
                       highlightedEventId === event.id
                         ? "ring-2 ring-brand-orange ring-inset bg-brand-orange/10 "
+                        : ""
+                    }${
+                      isBulkSelected
+                        ? "bg-primary/10 "
                         : ""
                     }${
                       (event.event_mode ?? "food_truck") === "catering"
@@ -1011,6 +1213,18 @@ function ListView({
                     }`}
                     onClick={() => setEditingEvent(event)}
                   >
+                    {bulkEnabled && (
+                      <TableCell
+                        className="w-8 pr-0"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        <Checkbox
+                          checked={isBulkSelected}
+                          onCheckedChange={() => toggleBulkSelect(event.id)}
+                          aria-label={`Select ${event.event_name}`}
+                        />
+                      </TableCell>
+                    )}
                     <TableCell className="whitespace-nowrap text-sm pr-6">
                       {formatDate(event.event_date)}
                       {event.cancellation_reason && (
@@ -1262,11 +1476,96 @@ function ListView({
                       </div>
                     </TableCell>
                   </TableRow>
-                ))}
+                  );
+                })}
               </TableBody>
             </Table>
             </div>
             </>
+          )}
+
+          {/* Bulk-edit action bar — sticky bottom, only on Needs Attention tab
+              with at least one row selected. Sized + spaced for both mobile
+              and desktop. Pops in via a simple show/hide rather than a
+              portal so it stays inside the Events card's scroll context. */}
+          {bulkEnabled && bulkSelectedIds.size > 0 && (
+            <div className="sticky bottom-0 -mx-6 -mb-6 px-4 sm:px-6 py-3 border-t bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80 z-20">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="text-sm font-medium">
+                  {bulkSelectedIds.size} selected
+                </span>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={bulkClearSelection}
+                  className="text-xs h-7"
+                >
+                  <X className="h-3 w-3 mr-1" />
+                  Clear
+                </Button>
+
+                <div className="ml-auto flex flex-wrap items-center gap-2">
+                  <Select
+                    value={bulkField}
+                    onValueChange={(v) => {
+                      setBulkField(v as typeof bulkField);
+                      setBulkValue("");
+                      setBulkMessage(null);
+                    }}
+                  >
+                    <SelectTrigger className="h-8 w-[170px] text-xs">
+                      <SelectValue placeholder="Set field…" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="event_type">Event type</SelectItem>
+                      <SelectItem value="event_mode">Event mode</SelectItem>
+                      <SelectItem value="event_weather">Weather</SelectItem>
+                      <SelectItem value="event_size_tier_operator">
+                        Size tier
+                      </SelectItem>
+                    </SelectContent>
+                  </Select>
+
+                  {bulkField && (
+                    <Select
+                      value={bulkValue}
+                      onValueChange={(v) => setBulkValue(v ?? "")}
+                    >
+                      <SelectTrigger className="h-8 w-[180px] text-xs">
+                        <SelectValue placeholder="Pick a value…" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {BULK_FIELD_OPTIONS[bulkField].map((opt) => (
+                          <SelectItem key={opt.value} value={opt.value}>
+                            {opt.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  )}
+
+                  <Button
+                    type="button"
+                    size="sm"
+                    disabled={
+                      !bulkField || !bulkValue || bulkApplying
+                    }
+                    onClick={bulkApply}
+                    className="h-8"
+                  >
+                    {bulkApplying
+                      ? "Applying…"
+                      : `Apply to ${bulkSelectedIds.size}`}
+                  </Button>
+                </div>
+              </div>
+              {bulkMessage && (
+                <p className="mt-2 text-xs text-muted-foreground">
+                  {bulkMessage}
+                </p>
+              )}
+            </div>
           )}
         </CardContent>
       </Card>
