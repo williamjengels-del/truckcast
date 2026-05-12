@@ -132,35 +132,32 @@ export async function matchAndUpdateSales(
 
       updatedCount++;
     } else {
-      // Multiple events — split by forecast or equally
-      const totalForecast = eligibleEvents.reduce(
-        (sum: number, e: { forecast_sales: number | null }) => sum + (e.forecast_sales ?? 0),
-        0
+      // Multiple eligible events on the same date — skip with a warning.
+      //
+      // Previously this branch SPLIT the day's POS aggregate across
+      // siblings (weighted by forecast_sales, or evenly when forecasts
+      // were zero). That logic was wrong by construction: Wok-O's
+      // actual sales at each event are NOT a forecast-weighted share
+      // of the day's POS aggregate — they're the per-event reality
+      // recorded at the POS register. The "split by forecast" path was
+      // the active cause of Wok-O's 5/5/25 data corruption (Mac
+      // Properties + Hunter Engineering + Cinco De Mayo all got
+      // carved-up Square slices). See 2026-05-12 cleanup pass.
+      //
+      // New rule: when multiple eligible events sit on the same date,
+      // the system cannot safely attribute the aggregate. Skip the day
+      // entirely with a console warning. Operator enters per-event
+      // sales manually via UI (which now flips pos_source to "manual"
+      // and locks each row from future sync overwrites).
+      //
+      // Skipped events stay eligible on the next sync pass; once the
+      // operator has manually entered values on the same-day siblings,
+      // the eligibility filter narrows to 0 or 1 events and sync can
+      // resume normally on subsequent days.
+      console.warn(
+        `[pos/sync] Skipping ${provider} day ${date}: ${eligibleEvents.length} eligible same-day events; cannot safely attribute aggregate $${netSales}. Operator must enter per-event sales manually. Event ids: ${eligibleEvents.map((e: { id: string }) => e.id).join(", ")}`
       );
-      const useForecast = totalForecast > 0;
-
-      for (const event of eligibleEvents) {
-        let share: number;
-        if (useForecast && event.forecast_sales) {
-          share = (event.forecast_sales / totalForecast) * netSales;
-        } else {
-          share = netSales / eligibleEvents.length;
-        }
-
-        const existingSource = event.pos_source as PosSource;
-        const newSource: PosSource =
-          existingSource !== "manual" && existingSource !== provider ? "mixed" : provider;
-
-        await supabase
-          .from("events")
-          .update({
-            net_sales: Math.round(share * 100) / 100,
-            pos_source: newSource,
-          })
-          .eq("id", event.id);
-
-        updatedCount++;
-      }
+      // Don't increment updatedCount — nothing was written.
     }
   }
 
