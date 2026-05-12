@@ -326,6 +326,65 @@ function SettingsContent() {
             </CardContent>
           </Card>
 
+          {/* Public profile URL hint — surfaces the operator's public
+              URL (or a "claim your URL" prompt) on the Profile tab so
+              they discover it before navigating to Customers. The slug
+              picker itself lives on Customers; this is a teaser that
+              deep-links there. Hidden for starter tier (no public
+              schedule access). */}
+          {profile && profile.subscription_tier !== "starter" && (
+            <Card className="max-w-2xl">
+              <CardHeader>
+                <CardTitle>Your public URL</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-2">
+                {profile.public_slug ? (
+                  <>
+                    <p className="text-sm text-muted-foreground">
+                      Your public schedule lives at:
+                    </p>
+                    <div className="flex items-center gap-2">
+                      <code className="text-sm bg-muted px-2 py-1 rounded flex-1 break-all">
+                        {typeof window !== "undefined"
+                          ? `${window.location.origin}/${profile.public_slug}`
+                          : `/${profile.public_slug}`}
+                      </code>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handleTabChange("customers")}
+                      >
+                        Change
+                      </Button>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <p className="text-sm">
+                      Claim a custom URL like{" "}
+                      <code className="bg-muted px-1.5 py-0.5 rounded text-xs">
+                        vendcast.co/your-truck
+                      </code>{" "}
+                      to share your schedule and inquiry form anywhere.
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      Most operators don&apos;t have a booking form on
+                      their website. This is yours, free with your plan.
+                    </p>
+                    <Button
+                      type="button"
+                      onClick={() => handleTabChange("customers")}
+                      className="mt-1"
+                    >
+                      Claim your URL →
+                    </Button>
+                  </>
+                )}
+              </CardContent>
+            </Card>
+          )}
+
         </TabsContent>
 
         {/* TEAM — manager invites + read-only schedule share token.
