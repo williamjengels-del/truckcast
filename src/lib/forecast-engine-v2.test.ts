@@ -724,3 +724,270 @@ describe("calibration with v1 calibrateCoefficients", () => {
     expect(r!.weatherCoefficient).toBeGreaterThan(0);
   });
 });
+
+// ─── PR 3: tier partition (Tier 1 #4 — value-prop) ─────────────────────
+//
+// Music Park's $500 Tuesday and $2836 Zach Bryan night currently average
+// into one prior — direct cause of $157-$2668 ranges at mixed-traffic
+// venues. Partition by tier so a "normal Tuesday" forecast pulls only
+// normal-tier history.
+//
+// Conservative scope: tier-only filter ONLY when n_tier ≥ 3. Below that,
+// fall through to all-tier. Blend (n=1-2) and platform-tier-multiplier
+// (n=0) are PR 4 polish.
+
+describe("calculateBayesianForecast — tier partition (PR 3)", () => {
+  describe("partition fires at mixed-tier venue with n_tier >= 3", () => {
+    it("excludes FLAGSHIP events when forecasting a NORMAL target", () => {
+      // 4 NORMAL Tuesday nights + 1 FLAGSHIP. Target is NORMAL.
+      // Pre-PR3 behavior: all 5 events average. Post-PR3: only the
+      // 4 NORMAL events contribute, posterior centers around $800
+      // instead of being pulled toward $2836.
+      const history: Event[] = [
+        makeEvent({
+          event_name: "Music Park",
+          net_sales: 2836,
+          event_date: "2025-01-15",
+          event_size_tier_inferred: "FLAGSHIP",
+        }),
+        makeEvent({
+          event_name: "Music Park",
+          net_sales: 700,
+          event_date: "2025-02-15",
+          event_size_tier_inferred: "NORMAL",
+        }),
+        makeEvent({
+          event_name: "Music Park",
+          net_sales: 800,
+          event_date: "2025-03-15",
+          event_size_tier_inferred: "NORMAL",
+        }),
+        makeEvent({
+          event_name: "Music Park",
+          net_sales: 850,
+          event_date: "2025-04-15",
+          event_size_tier_inferred: "NORMAL",
+        }),
+        makeEvent({
+          event_name: "Music Park",
+          net_sales: 900,
+          event_date: "2025-05-15",
+          event_size_tier_inferred: "NORMAL",
+        }),
+      ];
+      // Target explicitly tagged NORMAL to isolate partition behavior
+      // from the most-recent-fallback heuristic (which is exercised
+      // separately below).
+      const r = calculateBayesianForecast(
+        {
+          event_name: "Music Park",
+          event_date: "2025-07-15",
+          event_size_tier_operator: "NORMAL",
+        },
+        history
+      );
+      expect(r).not.toBeNull();
+      expect(r!.tierPartitionApplied).toBe(true);
+      expect(r!.targetTier).toBe("NORMAL");
+      // Posterior reflects only the 4 NORMAL events.
+      expect(r!.personalObservations).toBe(4);
+      // Without partition the point estimate would be pulled toward
+      // the $2836 outlier. With partition it should be in NORMAL range
+      // (allowing for DOW + weather adjustments).
+      expect(r!.point).toBeLessThan(1300);
+    });
+
+    it("forecasts a FLAGSHIP target using only FLAGSHIP history", () => {
+      const history: Event[] = [
+        ...Array.from({ length: 4 }, (_, i) =>
+          makeEvent({
+            event_name: "Music Park",
+            net_sales: 800 + i * 50,
+            event_date: `2025-0${i + 1}-01`,
+            event_size_tier_inferred: "NORMAL",
+          })
+        ),
+        makeEvent({
+          event_name: "Music Park",
+          net_sales: 2500,
+          event_date: "2025-05-15",
+          event_size_tier_inferred: "FLAGSHIP",
+        }),
+        makeEvent({
+          event_name: "Music Park",
+          net_sales: 2800,
+          event_date: "2025-06-15",
+          event_size_tier_inferred: "FLAGSHIP",
+        }),
+        makeEvent({
+          event_name: "Music Park",
+          net_sales: 3100,
+          event_date: "2025-07-15",
+          event_size_tier_inferred: "FLAGSHIP",
+        }),
+      ];
+      const r = calculateBayesianForecast(
+        {
+          event_name: "Music Park",
+          event_date: "2025-08-15",
+          event_size_tier_operator: "FLAGSHIP",
+        },
+        history
+      );
+      expect(r).not.toBeNull();
+      expect(r!.tierPartitionApplied).toBe(true);
+      expect(r!.targetTier).toBe("FLAGSHIP");
+      expect(r!.personalObservations).toBe(3);
+      // FLAGSHIP-only posterior centers around the 3 flagship events.
+      // Without partition the 4 NORMAL events would pull this WAY down.
+      expect(r!.point).toBeGreaterThan(1500);
+    });
+  });
+
+  describe("partition does NOT fire at thin tier sample (n_tier < 3)", () => {
+    it("falls through to all-tier when only 2 same-tier events exist", () => {
+      // 2 FLAGSHIP + 3 NORMAL, target FLAGSHIP. n_tier=2 below the
+      // threshold; engine uses all 5 (conservative — don't narrow to
+      // a thin sample that produces wider, worse-calibrated
+      // posteriors).
+      const history: Event[] = [
+        ...Array.from({ length: 3 }, (_, i) =>
+          makeEvent({
+            event_name: "New Venue",
+            net_sales: 800,
+            event_date: `2025-0${i + 1}-01`,
+            event_size_tier_inferred: "NORMAL",
+          })
+        ),
+        makeEvent({
+          event_name: "New Venue",
+          net_sales: 2500,
+          event_date: "2025-05-15",
+          event_size_tier_inferred: "FLAGSHIP",
+        }),
+        makeEvent({
+          event_name: "New Venue",
+          net_sales: 2800,
+          event_date: "2025-06-15",
+          event_size_tier_inferred: "FLAGSHIP",
+        }),
+      ];
+      const r = calculateBayesianForecast(
+        {
+          event_name: "New Venue",
+          event_date: "2025-08-15",
+          event_size_tier_operator: "FLAGSHIP",
+        },
+        history
+      );
+      expect(r).not.toBeNull();
+      expect(r!.tierPartitionApplied).toBe(false);
+      expect(r!.personalObservations).toBe(5);
+      expect(r!.targetTier).toBe("FLAGSHIP");
+    });
+  });
+
+  describe("target tier resolution precedence", () => {
+    it("explicit operator override wins over inferred", () => {
+      const history: Event[] = Array.from({ length: 3 }, () =>
+        makeEvent({
+          event_name: "Test Venue",
+          net_sales: 2500,
+          event_date: "2025-01-15",
+          event_size_tier_inferred: "FLAGSHIP",
+        })
+      );
+      const r = calculateBayesianForecast(
+        {
+          event_name: "Test Venue",
+          event_date: "2025-08-15",
+          event_size_tier_operator: "FLAGSHIP",
+          event_size_tier_inferred: "NORMAL",
+        },
+        history
+      );
+      expect(r!.targetTier).toBe("FLAGSHIP");
+    });
+
+    it("most-recent same-name fallback when target has no tag", () => {
+      // 3 LARGE events, target has no tier. Inherit LARGE from history.
+      const history: Event[] = [
+        makeEvent({
+          event_name: "Festival",
+          net_sales: 1500,
+          event_date: "2024-09-15",
+          event_size_tier_inferred: "LARGE",
+        }),
+        makeEvent({
+          event_name: "Festival",
+          net_sales: 1600,
+          event_date: "2025-01-15",
+          event_size_tier_inferred: "LARGE",
+        }),
+        makeEvent({
+          event_name: "Festival",
+          net_sales: 1800,
+          event_date: "2025-04-15",
+          event_size_tier_inferred: "LARGE",
+        }),
+      ];
+      const r = calculateBayesianForecast(
+        { event_name: "Festival", event_date: "2025-08-15" },
+        history
+      );
+      expect(r!.targetTier).toBe("LARGE");
+      expect(r!.tierPartitionApplied).toBe(true);
+    });
+
+    it("NORMAL default when no tier tag exists anywhere", () => {
+      const history: Event[] = Array.from({ length: 3 }, (_, i) =>
+        makeEvent({
+          event_name: "Untagged Venue",
+          net_sales: 800 + i * 50,
+          event_date: `2025-0${i + 1}-01`,
+          event_size_tier_inferred: null,
+          event_size_tier_operator: null,
+        })
+      );
+      const r = calculateBayesianForecast(
+        { event_name: "Untagged Venue", event_date: "2025-08-15" },
+        history
+      );
+      expect(r!.targetTier).toBe("NORMAL");
+    });
+  });
+
+  describe("parity: untagged venue (pre-tier-data events) behaves like pre-PR-3", () => {
+    it("forecast point is unchanged when no event has a tier tag", () => {
+      // All events without tier columns — the pre-PR-#233 case.
+      // Engine sees every effectiveTier as NORMAL via the default,
+      // so n_tier == n_all and the observation set is identical to
+      // what it was before this PR. The only difference: result now
+      // carries targetTier="NORMAL" + tierPartitionApplied flag.
+      const baseHistory = Array.from({ length: 5 }, (_, i) =>
+        makeEvent({
+          event_name: "Plain Venue",
+          net_sales: 1000 + i * 30,
+          event_date: `2025-0${i + 1}-15`,
+          event_size_tier_inferred: null,
+          event_size_tier_operator: null,
+        })
+      );
+      const r = calculateBayesianForecast(
+        {
+          event_name: "Plain Venue",
+          event_date: "2025-09-15",
+          event_size_tier_inferred: null,
+          event_size_tier_operator: null,
+        },
+        baseHistory
+      );
+      expect(r).not.toBeNull();
+      expect(r!.personalObservations).toBe(5);
+      expect(r!.targetTier).toBe("NORMAL");
+      // Sanity: point estimate is in the NORMAL band of the input data.
+      expect(r!.point).toBeGreaterThan(700);
+      expect(r!.point).toBeLessThan(1500);
+    });
+  });
+});

@@ -51,6 +51,7 @@
 import { WEATHER_COEFFICIENTS, DAY_OF_WEEK_COEFFICIENTS } from "./constants";
 import type { Event } from "./database.types";
 import type { CalibratedCoefficients } from "./forecast-engine";
+import { effectiveTier, type EventSizeTier } from "./event-size-tier";
 
 // --- Types ---
 
@@ -82,11 +83,22 @@ export interface BayesianForecastResult {
    *  contributed to the posterior. */
   personalObservations: number;
   /** Source of the prior that was updated by the personal data:
-   *   "platform"  — informed by ≥3 other operators on the platform
+   *   "platform"  — informed by ≥2 other operators on the platform (PR #265)
    *   "operator"  — operator's overall historical median (no platform data)
    *   "default"   — global default (brand-new operator, no overall history)
    */
   priorSource: "platform" | "operator" | "default";
+  /** Diagnostic — which tier the engine used to partition the per-event-
+   *  name observation set. Always populated even when no partition
+   *  fired, so callers can compare "what tier did we infer" vs "did the
+   *  partition activate." */
+  targetTier: EventSizeTier;
+  /** True when at least 3 same-name same-tier observations existed and
+   *  the engine actually narrowed to tier-only history. False when the
+   *  observation set was the full all-tier same-name set — either
+   *  because tier data wasn't populated (pre-PR-#233 events) or because
+   *  the tier-matched sample was too thin to filter (n < 3). */
+  tierPartitionApplied: boolean;
   /** Posterior parameters in log-space. Useful for diagnostics and
    *  for computing alternative quantiles in callers. */
   posterior: {
@@ -776,6 +788,59 @@ function weatherCoefficient(
   return WEATHER_COEFFICIENTS[eventWeather] ?? 1;
 }
 
+// --- Tier partition (PR 3) ---
+
+/**
+ * Resolve the tier the engine should use to partition the per-event-
+ * name observation set when forecasting `target`.
+ *
+ * Precedence (per scoping doc):
+ *   1. Operator override on the target row (operator pre-tagged this
+ *      booking as flagship/large/etc.)
+ *   2. Inferred tier on the target row (set by recalc after actuals
+ *      land — only meaningful for past events being re-forecast)
+ *   3. Most-recent same-name event's effective tier — heuristic for
+ *      future bookings at venues with consistent past tiering
+ *   4. NORMAL default
+ *
+ * The most-recent-fallback intentionally only looks at past same-name
+ * events; future bookings without their own tag inherit the venue's
+ * recent character. If a venue oscillates (some flagship, some
+ * normal), this picks one — operator can override per-event when the
+ * heuristic gets it wrong.
+ */
+function resolveTargetTier(
+  target: BayesianForecastTarget,
+  sameNameEvents: Event[]
+): EventSizeTier {
+  // The Bayesian target uses Partial<Event> shape so we have to
+  // narrow the tier columns explicitly.
+  const direct = effectiveTier({
+    event_size_tier_operator: target.event_size_tier_operator ?? null,
+    event_size_tier_inferred: target.event_size_tier_inferred ?? null,
+  });
+
+  // effectiveTier defaults to NORMAL when neither column is set —
+  // distinguish "explicitly NORMAL" from "no signal" by checking
+  // the raw columns directly.
+  const explicit =
+    target.event_size_tier_operator || target.event_size_tier_inferred;
+  if (explicit) return direct;
+
+  // No explicit tag — fall back to the most-recent same-name past
+  // event's effective tier. Sort by event_date desc; first one with a
+  // tier signal wins.
+  const sortedRecent = [...sameNameEvents].sort((a, b) =>
+    (b.event_date ?? "").localeCompare(a.event_date ?? "")
+  );
+  for (const e of sortedRecent) {
+    if (e.event_size_tier_operator || e.event_size_tier_inferred) {
+      return effectiveTier(e);
+    }
+  }
+  return "NORMAL";
+}
+
 // --- Main entry point ---
 
 export type BayesianForecastTarget = Omit<
@@ -812,11 +877,44 @@ export function calculateBayesianForecast(
   const nameMatches = validEvents.filter(
     (e) => e.event_name.toLowerCase().trim() === nameNormalized
   );
-  const logObservations = nameMatches.map((e) => Math.log(eventRevenue(e)));
+
+  // ── Tier partition (PR 3 — Tier 1 #4) ────────────────────────────
+  // Filter the per-event-name observation set to events of the same
+  // tier as the target. The Music Park outlier ($592 forecast vs
+  // $2836 actual on Zach Bryan night) is the canonical case: averaging
+  // a venue's normal-Tuesday history with its flagship-concert history
+  // produces a forecast that's wrong for both.
+  //
+  // Conservative scope for v1 (per scoping doc):
+  //   * tier-matched n ≥ 3  → partition to tier-only (this PR)
+  //   * tier-matched n = 1-2 → fall through to all-tier (no blend yet)
+  //   * tier-matched n = 0   → fall through to all-tier (no
+  //                            tier-adjustment multiplier yet)
+  //
+  // The blend (n=1-2) and platform-wide tier-adjustment multiplier
+  // (n=0) are PR 4 refinements — both need calibration data we don't
+  // have at this scale. With only the n>=3 partition, NORMAL events at
+  // mixed-tier venues stop being polluted by FLAGSHIP siblings, which
+  // is the headline win.
+  //
+  // Target tier resolution: explicit override > inferred (set by
+  // recalc when actuals land) > most-recent same-name event's
+  // effective tier > NORMAL default. The most-recent fallback
+  // handles future events at venues where every past event was
+  // flagship — the next forecast inherits the venue's character
+  // without operator pre-tagging.
+  const targetTier = resolveTargetTier(target, nameMatches);
+  const tierMatched = nameMatches.filter(
+    (e) => effectiveTier(e) === targetTier
+  );
+  const usedTierPartition = tierMatched.length >= 3;
+  const observationSet = usedTierPartition ? tierMatched : nameMatches;
+
+  const logObservations = observationSet.map((e) => Math.log(eventRevenue(e)));
   // Recency weights — 2 for events in the last 6 months, 1 otherwise.
   // Mirrors v1's weightedAverage so v2 captures the same "recent
   // events are more predictive" signal.
-  const obsWeights = nameMatches.map((e) => recencyWeight(e.event_date));
+  const obsWeights = observationSet.map((e) => recencyWeight(e.event_date));
 
   // Build the prior.
   const opMedian = operatorOverallMedian(historicalEvents);
@@ -923,6 +1021,8 @@ export function calculateBayesianForecast(
     credible50High: Math.round(credible50High * 100) / 100,
     personalObservations: logObservations.length,
     priorSource: prior.source,
+    targetTier,
+    tierPartitionApplied: usedTierPartition,
     posterior: {
       muN: posterior.muN,
       kappaN: posterior.kappaN,
