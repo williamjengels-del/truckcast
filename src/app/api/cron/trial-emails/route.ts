@@ -5,6 +5,7 @@ import {
   sendTrialExpiredEmail,
 } from "@/lib/email";
 import { assertCronSecret } from "@/lib/cron-auth";
+import { localDateInZone } from "@/lib/wallclock-tz";
 
 // Vercel cron — runs daily at 10:00 AM UTC
 // Secured by CRON_SECRET header set in vercel.json
@@ -34,10 +35,15 @@ export async function GET(req: NextRequest) {
     process.env.SUPABASE_SERVICE_ROLE_KEY!
   );
 
-  // Fetch all starter-tier users who haven't upgraded (no stripe_subscription_id)
+  // Fetch all starter-tier users who haven't upgraded. `timezone` is
+  // pulled so the per-profile loop below derives daysLeft against the
+  // operator's local midnight, not UTC. For a PT operator the cron
+  // fires at 10 UTC = 2-3 AM their time; UTC's "today" is already
+  // their tomorrow, which shifts the trial-end boundary and silently
+  // pushes the warning/expired emails by a day.
   const { data: profiles, error } = await service
     .from("profiles")
-    .select("id, business_name, created_at, trial_extended_until")
+    .select("id, business_name, created_at, trial_extended_until, timezone")
     .eq("subscription_tier", "starter")
     .is("stripe_subscription_id", null);
 
@@ -55,9 +61,6 @@ export async function GET(req: NextRequest) {
     emailMap[u.id] = u.email ?? "";
   }
 
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-
   const results = {
     warnings: 0,
     expired: 0,
@@ -65,32 +68,74 @@ export async function GET(req: NextRequest) {
     errors: 0,
   };
 
-  for (const profile of profiles ?? []) {
+  // Parse a YYYY-MM-DD string to a UTC-midnight Date so daysBetween
+  // produces a stable integer regardless of process tz. Used to align
+  // both `today` (in operator's zone) and `trialEndDate` (derived from
+  // created_at in operator's zone) to a common axis for diffing.
+  function parseDateString(s: string): Date {
+    return new Date(s + "T00:00:00Z");
+  }
+
+  for (const profile of (profiles ?? []) as Array<{
+    id: string;
+    business_name: string | null;
+    created_at: string;
+    trial_extended_until: string | null;
+    timezone: string | null;
+  }>) {
     const email = emailMap[profile.id];
     if (!email) { results.skipped++; continue; }
 
-    // Determine effective trial end — use extended date if set and in future, otherwise created_at + TRIAL_DAYS
+    const tz = profile.timezone ?? "UTC";
+    const localToday = parseDateString(localDateInZone(tz));
+
+    // Determine effective trial end — extended date if set and still
+    // in the future (operator's local frame), otherwise created_at + 14
+    // days in the operator's zone. localDateInZone applied to the
+    // signup instant gives the calendar date the operator saw when
+    // they signed up, so signup_local + 14 days = expiration_local.
+    // Convert the signup UTC instant to the operator's local YYYY-MM-DD
+    // — that's the calendar date they saw when they signed up. Adding
+    // TRIAL_DAYS in millis preserves the local-date semantics across
+    // DST transitions (we never re-anchor to UTC midnight after).
+    const signupLocalFmt = new Intl.DateTimeFormat("en-CA", {
+      timeZone: tz,
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    });
+    const signupLocalDate = parseDateString(
+      signupLocalFmt.format(new Date(profile.created_at))
+    );
+
     let trialEndDate: Date;
-    if (
-      profile.trial_extended_until &&
-      new Date(profile.trial_extended_until) > today
-    ) {
-      trialEndDate = new Date(profile.trial_extended_until);
-      trialEndDate.setHours(0, 0, 0, 0);
+    if (profile.trial_extended_until) {
+      const extended = parseDateString(
+        profile.trial_extended_until.slice(0, 10)
+      );
+      trialEndDate =
+        extended > localToday
+          ? extended
+          : new Date(signupLocalDate.getTime() + TRIAL_DAYS * 24 * 60 * 60 * 1000);
     } else {
-      const signupDate = new Date(profile.created_at);
-      signupDate.setHours(0, 0, 0, 0);
-      trialEndDate = new Date(signupDate.getTime() + TRIAL_DAYS * 24 * 60 * 60 * 1000);
+      trialEndDate = new Date(
+        signupLocalDate.getTime() + TRIAL_DAYS * 24 * 60 * 60 * 1000
+      );
     }
 
-    const daysLeft = daysBetween(today, trialEndDate);
+    const daysLeft = daysBetween(localToday, trialEndDate);
     const daysSinceExpiry = daysLeft < 0 ? Math.abs(daysLeft) : 0;
 
     try {
       if (daysLeft < 0) {
         // Trial expired — only send on day 1 after expiry to avoid spam
         if (daysSinceExpiry === 1) {
-          const gracePeriodActive = today < HARD_GATE_DATE;
+          // Grace-period gate stays in absolute UTC time — the
+          // HARD_GATE_DATE is a platform-wide rollout boundary, not
+          // a per-operator deadline. Mixing tz here would let a HI
+          // operator escape the gate that an ET operator hit on the
+          // same wall-clock second.
+          const gracePeriodActive = new Date() < HARD_GATE_DATE;
           await sendTrialExpiredEmail(email, profile.business_name ?? "", gracePeriodActive);
           results.expired++;
         } else {
