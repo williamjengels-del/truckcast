@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useMemo, useCallback, useRef } from "react";
+import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -969,9 +970,20 @@ function ListView({
         </CardHeader>
         <CardContent>
           {filtered.length === 0 ? (
-            <div className="h-32 flex flex-col items-center justify-center gap-3 text-muted-foreground" data-testid="events-empty-state">
+            <div className="py-10 flex flex-col items-center justify-center gap-3 text-muted-foreground text-center" data-testid="events-empty-state">
               {initialEvents.length === 0 ? (
-                <p>No events yet. Add your first event to get started.</p>
+                <>
+                  <p className="max-w-md">
+                    No events yet. Add an upcoming booking or a past event to
+                    start building your forecast history.
+                  </p>
+                  <Link href="/dashboard/events?new=true">
+                    <Button className="gap-2" data-testid="events-empty-state-add">
+                      <Plus className="h-4 w-4" />
+                      Add your first event
+                    </Button>
+                  </Link>
+                </>
               ) : selectedChips.size > 0 ? (
                 <>
                   <p>No events match these filters.</p>
