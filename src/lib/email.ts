@@ -20,6 +20,46 @@ const FROM =
 
 const APP_URL = "https://vendcast.co";
 
+// ─── Marketing footer (CAN-SPAM compliance, email-4) ───────────────────────
+//
+// Marketing-grade emails (recurring scheduled sends: welcome, weekly digest,
+// trial-expiry warnings, trial-expired, onboarding nudge, sales-reminder)
+// MUST include sender identification, a clear unsubscribe mechanism, and a
+// physical mailing address per CAN-SPAM. Transactional emails (booking
+// inquiry confirmations, manager invites, login security alerts, MFA-disabled
+// notifications) are exempt and don't get the footer.
+//
+// The unsubscribe link deep-links to /dashboard/settings?tab=notifications
+// where the existing `email_reminders_enabled` toggle lives. Operators flip
+// it off; that boolean is read by cron senders to skip future emails.
+// CAN-SPAM requires unsubscribe to take effect within 10 business days;
+// instant-via-toggle exceeds that bar.
+//
+// Sender mailing address: VendCast is a personal LLC without a public office
+// address. We list the company name + support email, which satisfies sender
+// identification. If a public mailing address becomes available later, drop
+// it into ADDRESS_LINE.
+const SENDER_NAME = "VendCast";
+const SENDER_EMAIL = "support@vendcast.co";
+const ADDRESS_LINE = ""; // populate when a public mailing address exists
+
+function marketingEmailFooterHtml(): string {
+  const addressBlock = ADDRESS_LINE
+    ? `<div style="margin-bottom: 4px;">${ADDRESS_LINE}</div>`
+    : "";
+  return `
+    <div style="margin-top: 32px; padding-top: 16px; border-top: 1px solid #e2e8f0; color: #94a3b8; font-size: 11px; line-height: 1.5;">
+      <div style="margin-bottom: 4px;"><strong>${SENDER_NAME}</strong> &middot; <a href="mailto:${SENDER_EMAIL}" style="color: #94a3b8;">${SENDER_EMAIL}</a></div>
+      ${addressBlock}
+      <div style="margin-top: 6px;">
+        You&rsquo;re receiving this because you have a VendCast account.
+        <a href="${APP_URL}/dashboard/settings?tab=notifications" style="color: #0d4f5c;">Manage email preferences</a>
+        to opt out.
+      </div>
+    </div>
+  `;
+}
+
 // ─── Welcome Email ─────────────────────────────────────────────────────────
 
 export async function sendWelcomeEmail(to: string, businessName: string) {
@@ -87,13 +127,7 @@ export async function sendWelcomeEmail(to: string, businessName: string) {
       </p>
     </div>
 
-    <!-- Footer -->
-    <div style="padding:20px 40px;border-top:1px solid #f3f4f6;">
-      <p style="margin:0;font-size:12px;color:#9ca3af;">
-        VendCast · Built by Wok-O Taco, St. Louis MO ·
-        <a href="${APP_URL}/dashboard/settings" style="color:#9ca3af;">Manage preferences</a>
-      </p>
-    </div>
+    ${marketingEmailFooterHtml()}
   </div>
 </body>
 </html>
@@ -246,7 +280,7 @@ export async function sendSalesReminderEmail(
       </p>
     </div>
     <div style="padding:20px 40px;border-top:1px solid #f3f4f6;">
-      <p style="margin:0;font-size:12px;color:#9ca3af;">VendCast · <a href="${APP_URL}/dashboard/settings" style="color:#9ca3af;">Manage preferences</a></p>
+      ${marketingEmailFooterHtml()}
     </div>
   </div>
 </body>
@@ -372,7 +406,7 @@ export async function sendBookingInquiryEmail(
       </p>
     </div>
     <div style="padding:20px 40px;border-top:1px solid #f3f4f6;">
-      <p style="margin:0;font-size:12px;color:#9ca3af;">VendCast · <a href="${APP_URL}/dashboard/settings" style="color:#9ca3af;">Manage preferences</a></p>
+      ${marketingEmailFooterHtml()}
     </div>
   </div>
 </body>
@@ -551,7 +585,7 @@ export async function sendInquiryNotificationEmail(
       </p>
     </div>
     <div style="padding:20px 40px;border-top:1px solid #f3f4f6;">
-      <p style="margin:0;font-size:12px;color:#9ca3af;">VendCast · <a href="${APP_URL}/dashboard/settings" style="color:#9ca3af;">Manage preferences</a></p>
+      ${marketingEmailFooterHtml()}
     </div>
   </div>
 </body>
@@ -619,13 +653,7 @@ export async function sendOnboardingNudgeEmail(to: string) {
       </p>
     </div>
 
-    <!-- Footer -->
-    <div style="padding:20px 40px;border-top:1px solid #f3f4f6;">
-      <p style="margin:0;font-size:12px;color:#9ca3af;">
-        VendCast · Built by Wok-O Taco, St. Louis MO ·
-        <a href="${APP_URL}/dashboard/settings" style="color:#9ca3af;">Manage preferences</a>
-      </p>
-    </div>
+    ${marketingEmailFooterHtml()}
   </div>
 </body>
 </html>
@@ -677,7 +705,7 @@ export async function sendTrialExpiryEmail(
       </p>
     </div>
     <div style="padding:20px 40px;border-top:1px solid #f3f4f6;">
-      <p style="margin:0;font-size:12px;color:#9ca3af;">VendCast · <a href="${APP_URL}/dashboard/settings" style="color:#9ca3af;">Manage preferences</a></p>
+      ${marketingEmailFooterHtml()}
     </div>
   </div>
 </body>
@@ -729,7 +757,7 @@ export async function sendTrialExpiredEmail(
       <p style="margin:24px 0 0;font-size:13px;color:#9ca3af;">Plans start at $19/month. Cancel anytime.</p>
     </div>
     <div style="padding:20px 40px;border-top:1px solid #f3f4f6;">
-      <p style="margin:0;font-size:12px;color:#9ca3af;">VendCast · <a href="${APP_URL}/dashboard/settings" style="color:#9ca3af;">Manage preferences</a></p>
+      ${marketingEmailFooterHtml()}
     </div>
   </div>
 </body>
@@ -1079,17 +1107,9 @@ export async function sendWeeklyDigestEmail(payload: WeeklyDigestPayload) {
         Open dashboard →
       </a>
 
-      <p style="margin:32px 0 0;font-size:13px;color:#9ca3af;line-height:1.6;">
-        You're getting this because email reminders are on for your account. <a href="${APP_URL}/dashboard/settings" style="color:#9ca3af;">Manage preferences</a>.
-      </p>
     </div>
 
-    <!-- Footer -->
-    <div style="padding:20px 40px;border-top:1px solid #f3f4f6;">
-      <p style="margin:0;font-size:12px;color:#9ca3af;">
-        VendCast · Built by Wok-O Taco, St. Louis MO
-      </p>
-    </div>
+    ${marketingEmailFooterHtml()}
   </div>
 </body>
 </html>
@@ -1185,10 +1205,12 @@ export async function sendEventInquiryConfirmation(p: EventInquiryConfirmationPa
       </p>
     </div>
 
-    <!-- Footer -->
+    <!-- Footer (transactional — sender identity only, no opt-out
+         since the recipient hasn't opted in to anything; this is a
+         direct response to their /request-event form submission). -->
     <div style="padding:20px 40px;border-top:1px solid #f3f4f6;">
       <p style="margin:0;font-size:12px;color:#9ca3af;">
-        VendCast · Built by Wok-O Taco, St. Louis MO
+        VendCast &middot; <a href="mailto:support@vendcast.co" style="color:#9ca3af;">support@vendcast.co</a>
       </p>
     </div>
   </div>
