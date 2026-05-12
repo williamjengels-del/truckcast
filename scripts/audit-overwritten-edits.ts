@@ -43,6 +43,17 @@
 // Operator decides per row (per feedback_no_auto_fix_data). No apply
 // script — operator re-enters via the UI, which post-fix flips
 // pos_source to "manual" and protects the row going forward.
+//
+// Output shape: one row per event. Each flagged event AND every
+// same-day booked sibling gets its own row, so the operator can fix
+// paired Square-split events without alt-tabbing. Same-day siblings
+// that weren't independently flagged are marked CONTEXT_ONLY. Rows for
+// the same date stay adjacent in output; date groups are sorted by
+// their highest-priority flag (HIGH dates first), then by date asc.
+// Empty `corrected_value`, `done`, `notes` columns at the end of each
+// row for operator fill-as-you-go. `event_id` is the rightmost column
+// — kept for any future TSV-and-confirm apply script, but not needed
+// for UI-based re-entry.
 
 import { createClient } from "@supabase/supabase-js";
 
@@ -188,73 +199,105 @@ async function main() {
     }
   }
 
-  // Sort: HIGH_* first, then MED, then LOW; within category, date asc
+  // Build walkthrough-friendly output: each flagged row gets its own
+  // line, AND each same-day booked sibling also gets its own line
+  // (marked CONTEXT_ONLY when it wasn't independently flagged) so the
+  // operator can fix paired events without alt-tabbing. Rows for the
+  // same event_date stay adjacent in output.
+  //
+  // Sort: each date group gets ranked by its highest-priority flag
+  // (HIGH dates first), then date ascending. Within a group, flagged
+  // rows by tier, then CONTEXT_ONLY rows.
   const rank = (c: string) =>
-    c.startsWith("HIGH_") ? 0 : c.startsWith("MED_") ? 1 : 2;
-  flagged.sort((a, b) => {
-    const r = rank(a.category) - rank(b.category);
-    if (r !== 0) return r;
-    return a.event.event_date.localeCompare(b.event.event_date);
-  });
+    c.startsWith("HIGH_") ? 0 : c.startsWith("MED_") ? 1 : c.startsWith("LOW_") ? 2 : 3;
 
-  // TSV header
+  // Map event_id → category for flagged rows (lookup during expansion)
+  const flaggedById = new Map<string, string>();
+  for (const f of flagged) flaggedById.set(f.event.id, f.category);
+
+  // Unique flagged dates
+  const flaggedDates = [...new Set(flagged.map((f) => f.event.event_date))];
+
+  // For each flagged date, gather every booked non-disrupted event
+  type OutRow = { event: EventRow; category: string };
+  const dateGroups: Array<{ date: string; bestRank: number; rows: OutRow[] }> = [];
+  for (const d of flaggedDates) {
+    const rows: OutRow[] = (byDate.get(d) ?? [])
+      .filter((s) => s.booked && s.anomaly_flag !== "disrupted")
+      .map((s) => ({
+        event: s,
+        category: flaggedById.get(s.id) ?? "CONTEXT_ONLY",
+      }))
+      .sort((a, b) => rank(a.category) - rank(b.category));
+    const bestRank = Math.min(...rows.map((r) => rank(r.category)));
+    dateGroups.push({ date: d, bestRank, rows });
+  }
+  dateGroups.sort(
+    (a, b) => a.bestRank - b.bestRank || a.date.localeCompare(b.date)
+  );
+
+  // TSV header — operator-editable columns at the end (corrected_value,
+  // done, notes). event_id stays at the rightmost edge so it's
+  // available for any future TSV-and-confirm apply script but doesn't
+  // clutter the working columns.
   process.stdout.write(
     [
       "event_date",
       "event_name",
-      "net_sales",
+      "current_net_sales",
       "invoice_revenue",
       "pos_source",
       "fee_type",
       "sales_minimum",
       "location_or_city",
       "category",
-      "reason",
-      "same_day_siblings",
+      "corrected_value",
+      "done",
+      "notes",
       "event_id",
     ].join("\t") + "\n"
   );
 
-  for (const { event: e, category, reason } of flagged) {
-    // Same-day siblings (other booked events on the same date, with
-    // their current net_sales + pos_source). Operator uses this to see
-    // what shared the Square / Toast split — e.g., Music Park 4/25 +
-    // Shutterfest 4/25 both got divided from a single day's aggregate.
-    const siblings = (byDate.get(e.event_date) ?? [])
-      .filter((s) => s.id !== e.id && s.booked && s.anomaly_flag !== "disrupted")
-      .map(
-        (s) =>
-          `${s.event_name} ($${s.net_sales ?? 0}, ${s.pos_source ?? "—"})`
-      )
-      .join(" | ") || "—";
-
-    process.stdout.write(
-      [
-        e.event_date,
-        e.event_name,
-        e.net_sales ?? "",
-        e.invoice_revenue ?? "",
-        e.pos_source ?? "",
-        e.fee_type ?? "",
-        e.sales_minimum ?? "",
-        e.location ?? e.city ?? "",
-        category,
-        reason,
-        siblings,
-        e.id,
-      ]
-        .map((v) => String(v).replace(/\t/g, " ").replace(/\n/g, " "))
-        .join("\t") + "\n"
-    );
+  for (const group of dateGroups) {
+    for (const { event: e, category } of group.rows) {
+      process.stdout.write(
+        [
+          e.event_date,
+          e.event_name,
+          e.net_sales ?? "",
+          e.invoice_revenue ?? "",
+          e.pos_source ?? "",
+          e.fee_type ?? "",
+          e.sales_minimum ?? "",
+          e.location ?? e.city ?? "",
+          category,
+          "", // corrected_value — operator fills
+          "", // done — operator fills (e.g. "y")
+          "", // notes — operator fills
+          e.id,
+        ]
+          .map((v) => String(v).replace(/\t/g, " ").replace(/\n/g, " "))
+          .join("\t") + "\n"
+      );
+    }
   }
 
   // Footer summary to stderr so stdout is clean TSV
   const counts: Record<string, number> = {};
-  for (const f of flagged) counts[f.category] = (counts[f.category] ?? 0) + 1;
-  console.error(`\nFlagged ${flagged.length} rows:`);
+  let contextOnly = 0;
+  for (const group of dateGroups) {
+    for (const { category } of group.rows) {
+      if (category === "CONTEXT_ONLY") contextOnly++;
+      else counts[category] = (counts[category] ?? 0) + 1;
+    }
+  }
+  const totalOut = Object.values(counts).reduce((a, b) => a + b, 0) + contextOnly;
+  console.error(`\nFlagged ${flagged.length} rows + ${contextOnly} context rows = ${totalOut} total in output:`);
   for (const k of Object.keys(counts).sort()) {
     console.error(`  ${k}: ${counts[k]}`);
   }
+  console.error(`  CONTEXT_ONLY: ${contextOnly}  (same-day siblings included for context)`);
+  console.error(`\nDate groups: ${dateGroups.length}`);
 }
 
 main().catch((e) => {
