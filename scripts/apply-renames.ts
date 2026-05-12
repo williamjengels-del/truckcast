@@ -133,9 +133,15 @@ async function main() {
       );
       continue;
     }
+    // Also flip pos_source to "manual" alongside the rename. Operator
+    // renaming the row is them claiming it as canonical — their sales
+    // values shouldn't be re-overwritten by a future POS sync, even if
+    // the value wasn't touched here. Without this flip, the row gets
+    // re-flagged in subsequent audit runs as pos_source != "manual"
+    // with existing sales (LOW_POS_PAST). 2026-05-12 gap-closure.
     const { error: writeErr } = await supabase
       .from("events")
-      .update({ event_name: t.canonical })
+      .update({ event_name: t.canonical, pos_source: "manual" })
       .eq("id", t.event_id);
     if (writeErr) {
       errored++;
