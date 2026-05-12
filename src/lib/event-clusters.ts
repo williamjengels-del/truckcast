@@ -3,11 +3,24 @@ import type { Event } from "@/lib/database.types";
 /**
  * Multi-day cluster detection for the events list view.
  *
- * Groups events with the same event_name whose dates fall within
- * SERIES_MAX_GAP_DAYS of each other into a "cluster" (e.g., Best of
- * Missouri Festival 3-day, Brentwood Days 2-day). The engine's
- * series-day filter uses the same gap value, so what counts as a
- * cluster here matches what the forecast engine considers related.
+ * Groups events with the same event_name on TRULY CONSECUTIVE days
+ * (gap = 1 day) into a "cluster" (e.g., Best of Missouri Festival
+ * 3-day, Brentwood Days 2-day).
+ *
+ * NOTE: this is intentionally STRICTER than the forecast engine's
+ * series-day filter (`forecast-engine.ts:SERIES_MAX_GAP_DAYS = 5`).
+ * The engine uses a wide window because it benefits from a soft
+ * "events in a series" signal even for festivals that skip a day.
+ * The display clusterer is strict because anything wider chains
+ * weekly recurring same-name events (Lunchtime Live Tue + Thu → next
+ * Tue → next Thu all collapsed into one bogus "Day 1 of 4" cluster).
+ * Decoupling the two values was the v54+ fix.
+ *
+ * Trade-off accepted: a festival that legitimately skips a day
+ * (Fri + Sun, no Sat) splits into two clusters. Rare at Wok-O scale.
+ * If this case appears in practice, the right fix is to persist
+ * multi-day intent as a column populated by createMultiDayEvents,
+ * not to widen this gap.
  *
  * v1 use: visual grouping in the events list (per-day badges + a
  * single cluster header above the first day). Festival-total
@@ -18,7 +31,7 @@ import type { Event } from "@/lib/database.types";
  * Map<event_id, ClusterInfo> for O(1) per-row lookup during render.
  */
 
-const SERIES_MAX_GAP_DAYS = 5;
+const MULTI_DAY_MAX_GAP_DAYS = 1;
 
 export interface ClusterInfo {
   /** Stable id for the cluster — derived from the first event_id in
@@ -56,9 +69,9 @@ function daysBetween(a: string, b: string): number {
  * Algorithm:
  *   1. Group events by normalized event_name (lowercase + trim).
  *   2. Within each name group, sort by date ascending.
- *   3. Walk the sorted dates; consecutive dates within
- *      SERIES_MAX_GAP_DAYS form a cluster. A gap > 5 days starts a
- *      new cluster.
+ *   3. Walk the sorted dates; same-name events on truly consecutive
+ *      days (gap = 1) form a cluster. Any larger gap starts a new
+ *      cluster.
  *
  * Single-event "clusters" still appear in the map (totalDays=1) so
  * callers can simplify their lookup logic — render the cluster
@@ -91,7 +104,7 @@ export function detectMultiDayClusters(
         : daysBetween(sorted[i - 1].event_date, sorted[i].event_date);
 
       // Close the current cluster when we hit a gap or end of group.
-      if (gap > SERIES_MAX_GAP_DAYS) {
+      if (gap > MULTI_DAY_MAX_GAP_DAYS) {
         const cluster = sorted.slice(clusterStart, i);
         const clusterId = cluster[0].id;
         const totalDays = cluster.length;

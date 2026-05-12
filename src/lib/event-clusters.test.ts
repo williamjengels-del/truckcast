@@ -123,17 +123,34 @@ describe("detectMultiDayClusters", () => {
     expect(m.get("a")!.totalDays).toBe(2);
   });
 
-  it("5-day gap is the boundary (inclusive)", () => {
+  it("1-day gap is the boundary (consecutive days only)", () => {
     const events = [
       mkEvent({ id: "a", event_name: "Test", event_date: "2026-05-01" }),
-      // 5 days later → SAME cluster (gap === 5 is within bounds)
-      mkEvent({ id: "b", event_name: "Test", event_date: "2026-05-06" }),
-      // 6 days from b → NEW cluster
-      mkEvent({ id: "c", event_name: "Test", event_date: "2026-05-12" }),
+      // Next day → SAME cluster (gap === 1 is within bounds)
+      mkEvent({ id: "b", event_name: "Test", event_date: "2026-05-02" }),
+      // 2 days from b → NEW cluster
+      mkEvent({ id: "c", event_name: "Test", event_date: "2026-05-04" }),
     ];
     const m = detectMultiDayClusters(events);
     expect(m.get("a")!.clusterId).toBe(m.get("b")!.clusterId);
     expect(m.get("b")!.clusterId).not.toBe(m.get("c")!.clusterId);
+  });
+
+  it("does NOT chain weekly recurring same-name events (regression for v54 bug)", () => {
+    // Lunchtime Live runs Tue + Thu weekly. With the old 5-day gap,
+    // these chained across weeks into bogus "Day 1 of 4" clusters.
+    // With the consecutive-only rule, each event stands alone.
+    const events = [
+      mkEvent({ id: "tue1", event_name: "Lunchtime Live", event_date: "2026-05-05" }),
+      mkEvent({ id: "thu1", event_name: "Lunchtime Live", event_date: "2026-05-07" }),
+      mkEvent({ id: "tue2", event_name: "Lunchtime Live", event_date: "2026-05-12" }),
+      mkEvent({ id: "thu2", event_name: "Lunchtime Live", event_date: "2026-05-14" }),
+    ];
+    const m = detectMultiDayClusters(events);
+    expect(m.get("tue1")!.totalDays).toBe(1);
+    expect(m.get("thu1")!.totalDays).toBe(1);
+    expect(m.get("tue2")!.totalDays).toBe(1);
+    expect(m.get("thu2")!.totalDays).toBe(1);
   });
 });
 
