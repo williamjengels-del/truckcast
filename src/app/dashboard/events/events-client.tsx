@@ -522,98 +522,6 @@ function EventInlineContact({ contact }: { contact: Contact }) {
   );
 }
 
-// Multi-day cluster header — renders above the first day of any cluster
-// with totalDays >= 2. Shows the cluster name, date range, "N days"
-// pill, and (when forecasts exist on the cluster members) a festival-
-// total point estimate + range. The total approximates the sum of
-// per-day point estimates / 80% intervals; explicitly marked "~"
-// because sum-of-log-Normals isn't a log-Normal, the math is
-// directionally honest but the credible interval is approximate.
-function MultiDayClusterHeader({
-  cluster,
-  events,
-  today,
-}: {
-  cluster: ClusterInfo;
-  events: Event[]; // all events in the cluster, sorted
-  today: string;
-}) {
-  // Aggregate forecasts only across cluster members that have one.
-  // Skip the total entirely if every day is null — operator sees a
-  // plain header. Past events use net_sales (or invoice_revenue);
-  // future events use forecast_sales. Mixed clusters (some past +
-  // some future) fall through to the "no total" path because mixing
-  // actual + forecast in one number would mislead.
-  const allFuture = events.every((e) => e.event_date >= today);
-  const allPast = events.every((e) => e.event_date < today);
-
-  let totalLabel: string | null = null;
-  let rangeLabel: string | null = null;
-  let totalKind: "forecast" | "actual" | null = null;
-
-  if (allFuture) {
-    const haveForecast = events.filter(
-      (e) => e.forecast_sales !== null && e.forecast_sales > 0
-    );
-    if (haveForecast.length === events.length) {
-      const point = haveForecast.reduce(
-        (s, e) => s + (e.forecast_sales ?? 0),
-        0
-      );
-      const low = haveForecast.reduce(
-        (s, e) => s + (e.forecast_low ?? e.forecast_sales ?? 0),
-        0
-      );
-      const high = haveForecast.reduce(
-        (s, e) => s + (e.forecast_high ?? e.forecast_sales ?? 0),
-        0
-      );
-      totalLabel = `~$${Math.round(point).toLocaleString()}`;
-      rangeLabel =
-        low !== high
-          ? `$${Math.round(low).toLocaleString()}–$${Math.round(high).toLocaleString()}`
-          : null;
-      totalKind = "forecast";
-    }
-  } else if (allPast) {
-    // Past clusters: sum actual revenue across days that have sales.
-    // Show even if some days are null — operator can see the partial.
-    const totalActual = events.reduce((s, e) => {
-      const r =
-        (e.net_sales ?? 0) +
-        (e.event_mode === "catering" ? e.invoice_revenue ?? 0 : 0);
-      return s + r;
-    }, 0);
-    if (totalActual > 0) {
-      totalLabel = `$${Math.round(totalActual).toLocaleString()}`;
-      totalKind = "actual";
-    }
-  }
-
-  return (
-    <div className="px-3 py-2 rounded-md border border-primary/30 bg-primary/5 flex flex-wrap items-center gap-x-3 gap-y-1">
-      <span className="text-xs font-semibold uppercase tracking-wide text-primary">
-        Multi-day event
-      </span>
-      <span className="text-xs text-muted-foreground">
-        {formatClusterDateRange(cluster.startDate, cluster.endDate)} ·{" "}
-        {cluster.totalDays} days
-      </span>
-      {totalLabel && (
-        <span className="ml-auto text-xs flex items-center gap-1.5">
-          <span className="text-muted-foreground">
-            {totalKind === "forecast" ? "Expected total" : "Actual total"}
-          </span>
-          <span className="font-semibold tabular-nums">{totalLabel}</span>
-          {rangeLabel && (
-            <span className="text-muted-foreground">({rangeLabel})</span>
-          )}
-        </span>
-      )}
-    </div>
-  );
-}
-
 // Chip strip — renders below the tab nav. Categories visible per tab:
 //   - Status (Booked / Unbooked / Cancelled): every tab
 //   - Field (Missing type / weather / location / sales): Needs attention only
@@ -799,34 +707,12 @@ function ListView({
     activeTab === "past" &&
     selectedChips.has("booked");
 
-  // ── Multi-day cluster precompute ───────────────────────────────────
-  // For each cluster with totalDays >= 2, find which visible (sorted)
-  // event is its first day. That anchor renders the cluster header
-  // above it; later days of the same cluster just show a "Day N of M"
-  // badge.
-  //
-  // eventById is the full unfiltered lookup — the header sums forecasts
-  // across ALL cluster days regardless of whether they're in the
-  // current chip-filtered view. Otherwise toggling a chip would change
-  // the festival total, which would be confusing.
-  const eventById = useMemo(() => {
-    const m = new Map<string, Event>();
-    for (const e of initialEvents) m.set(e.id, e);
-    return m;
-  }, [initialEvents]);
-
-  const headerAnchorByClusterId = useMemo(() => {
-    const m = new Map<string, string>();
-    const seen = new Set<string>();
-    for (const e of sorted) {
-      const c = clusterByEventId.get(e.id);
-      if (c && c.totalDays >= 2 && !seen.has(c.clusterId)) {
-        m.set(c.clusterId, e.id);
-        seen.add(c.clusterId);
-      }
-    }
-    return m;
-  }, [sorted, clusterByEventId]);
+  // ── Multi-day cluster metadata ─────────────────────────────────────
+  // Each cluster member event renders an inline "Day N of M · date
+  // range" badge on its own row (see clusterByEventId lookup below).
+  // The separate floating cluster-header row was removed 2026-05-12
+  // after operator feedback: it visually competed with adjacent
+  // non-cluster events on the same date and made grouping unclear.
 
   // ── Bulk-edit state (Needs Attention tab only) ─────────────────────
   // Multi-select + bulk-apply for enum-typed fields. Scoped to Needs
@@ -1127,24 +1013,8 @@ function ListView({
                 const isUnbookedFuture = !event.booked && event.event_date >= today && !event.cancellation_reason;
                 const isBulkSelected = bulkSelectedIds.has(event.id);
                 const cluster = clusterByEventId.get(event.id);
-                const isClusterHeaderAnchor =
-                  cluster &&
-                  cluster.totalDays >= 2 &&
-                  headerAnchorByClusterId.get(cluster.clusterId) === event.id;
-                const clusterEvents = cluster
-                  ? cluster.allEventIds
-                      .map((id) => eventById.get(id))
-                      .filter((e): e is Event => !!e)
-                  : [];
                 return (
                   <React.Fragment key={event.id}>
-                    {isClusterHeaderAnchor && cluster && (
-                      <MultiDayClusterHeader
-                        cluster={cluster}
-                        events={clusterEvents}
-                        today={today}
-                      />
-                    )}
                   <div className="relative">
                     {bulkEnabled && (
                       <div
@@ -1198,7 +1068,7 @@ function ListView({
                               variant="outline"
                               className="text-[10px] border-primary/40 text-primary bg-primary/5"
                             >
-                              Day {cluster.dayIndex + 1} of {cluster.totalDays}
+                              Day {cluster.dayIndex + 1} of {cluster.totalDays} · {formatClusterDateRange(cluster.startDate, cluster.endDate)}
                             </Badge>
                           )}
                           {event.event_date >= today && weatherMap.has(event.id) && <WeatherBadge event={event} weatherMap={weatherMap} />}
@@ -1456,28 +1326,8 @@ function ListView({
                 {sorted.map((event) => {
                   const isBulkSelected = bulkSelectedIds.has(event.id);
                   const cluster = clusterByEventId.get(event.id);
-                  const isClusterHeaderAnchor =
-                    cluster &&
-                    cluster.totalDays >= 2 &&
-                    headerAnchorByClusterId.get(cluster.clusterId) === event.id;
-                  const clusterEvents = cluster
-                    ? cluster.allEventIds
-                        .map((id) => eventById.get(id))
-                        .filter((e): e is Event => !!e)
-                    : [];
                   return (
                   <React.Fragment key={event.id}>
-                  {isClusterHeaderAnchor && cluster && (
-                    <TableRow className="hover:bg-transparent">
-                      <TableCell colSpan={20} className="px-0 py-2">
-                        <MultiDayClusterHeader
-                          cluster={cluster}
-                          events={clusterEvents}
-                          today={today}
-                        />
-                      </TableCell>
-                    </TableRow>
-                  )}
                   <TableRow
                     data-event-id={event.id}
                     className={`cursor-pointer hover:bg-muted/50 transition-colors ${
@@ -1535,7 +1385,7 @@ function ListView({
                           variant="outline"
                           className="ml-2 text-xs border-primary/40 text-primary bg-primary/5"
                         >
-                          Day {cluster.dayIndex + 1} of {cluster.totalDays}
+                          Day {cluster.dayIndex + 1} of {cluster.totalDays} · {formatClusterDateRange(cluster.startDate, cluster.endDate)}
                         </Badge>
                       )}
                       {/* Weather badge for upcoming events within 14 days */}
