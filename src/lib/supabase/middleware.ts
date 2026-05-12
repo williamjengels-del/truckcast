@@ -17,11 +17,20 @@ const HARD_GATE_DATE = new Date("2026-05-01T00:00:00Z");
 /**
  * Dashboard routes that are always accessible even after trial expiry
  * so users can upgrade or change settings without being locked out.
+ *
+ * /dashboard/integrations is included for the om-11 case (operator
+ * starts a CSV import on day 13, trial expires mid-import on day 15,
+ * dashboard locks → dead-end UX during onboarding's hardest moment).
+ * Letting them reach the integrations surface means they can finish
+ * the import they started and see the success state. They still can't
+ * browse their data — /dashboard/events stays gated — so this isn't
+ * a loophole; it's a recovery path from a partial-onboarding state.
  */
 const TRIAL_GATE_EXEMPT = [
   "/dashboard/upgrade",
   "/dashboard/settings",
   "/dashboard/admin",
+  "/dashboard/integrations",
 ];
 
 /**
