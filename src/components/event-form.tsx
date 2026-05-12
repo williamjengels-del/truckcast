@@ -32,7 +32,7 @@ import {
   US_STATE_NAMES,
   OTHER_STATE,
 } from "@/lib/constants";
-import type { Event, WeatherType } from "@/lib/database.types";
+import type { Event, WeatherType, Contact } from "@/lib/database.types";
 import type { EventFormData } from "@/app/dashboard/events/actions";
 import { classifyWeather, cityGeocodeCandidates } from "@/lib/weather";
 
@@ -82,6 +82,10 @@ interface EventFormProps {
    *  manager can still edit operational fields (date, name, contact,
    *  notes) without touching money. */
   canSeeFinancials?: boolean;
+  /** All operator-owned contacts. Populates the "Link contact" picker
+   *  with autosuggest. Empty array is fine — the picker shows an
+   *  empty-state message with a deep-link to /dashboard/contacts. */
+  contacts?: Contact[];
 }
 
 export function EventForm({
@@ -94,6 +98,7 @@ export function EventForm({
   recentStates = [],
   recentEventsForLinkage = [],
   canSeeFinancials: financialsVisible = true,
+  contacts = [],
 }: EventFormProps) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -165,6 +170,33 @@ export function EventForm({
   // bulk-edit Needs Attention workflow, not the event form.
   const [isMultiDay, setIsMultiDay] = useState<boolean>(false);
   const [endDateValue, setEndDateValue] = useState<string>("");
+
+  // Contact picker state. Initialized from the contact whose
+  // linked_event_ids already includes this event (edit mode); null
+  // for new events. Operator picks one via autosuggest; the submit
+  // payload carries linked_contact_id to the server action which
+  // reconciles the link via reconcileEventContactLink.
+  //
+  // null  = explicitly cleared (server unlinks any prior)
+  // undef = no change (server preserves existing link, no contacts write)
+  // uuid  = link this contact (server unlinks any prior different one)
+  //
+  // We use the explicit sentinel `priorLinkedContactId` to track what
+  // was loaded so submit can distinguish "operator changed the link"
+  // from "operator didn't touch the field." When unchanged, we pass
+  // undefined and skip the reconcile entirely.
+  const priorLinkedContactId = useMemo(() => {
+    if (!initialData?.id) return null;
+    const found = contacts.find((c) =>
+      (c.linked_event_ids ?? []).includes(initialData.id)
+    );
+    return found?.id ?? null;
+  }, [contacts, initialData?.id]);
+  const [linkedContactId, setLinkedContactId] = useState<string | null>(
+    priorLinkedContactId
+  );
+  const [contactSearch, setContactSearch] = useState<string>("");
+  const [contactPickerOpen, setContactPickerOpen] = useState<boolean>(false);
 
   // Helpers for the multi-day date range. UTC-noon anchoring sidesteps
   // DST-edge half-days (1 AM transitions) when iterating. en-CA locale
@@ -337,6 +369,15 @@ export function EventForm({
     setWeatherBadge(null);
     setSuggestedLat(initialData?.latitude ?? null);
     setSuggestedLon(initialData?.longitude ?? null);
+    // Contact picker — reset to whatever's currently linked (prior)
+    // and clear the search-input + dropdown state.
+    setLinkedContactId(priorLinkedContactId);
+    setContactSearch("");
+    setContactPickerOpen(false);
+    // Multi-day toggle — fresh-open always starts off (create-only
+    // surface; the toggle is hidden in edit mode anyway).
+    setIsMultiDay(false);
+    setEndDateValue("");
     // Editing an existing event always defaults to advanced mode
     setAdvancedMode(!!initialData
       ? true
@@ -574,6 +615,14 @@ export function EventForm({
         !isEditing && isMultiDay && endDateValue && endDateValue >= dateValue
           ? generateDateRange(dateValue, endDateValue)
           : undefined,
+      // Contact link reconciliation: only ship a value when the
+      // operator actually changed something. Skipping when unchanged
+      // avoids a redundant contacts-table query on every event save.
+      // null = explicit clear; uuid = link this; undefined = no-op.
+      linked_contact_id:
+        linkedContactId === priorLinkedContactId
+          ? undefined
+          : linkedContactId,
     };
 
     try {
@@ -1364,6 +1413,177 @@ export function EventForm({
                     </Select>
                   </div>
                 </div>
+              </div>
+
+              {/* Contact picker — autosuggest existing contacts as
+                  operator types. Picking one links this event to the
+                  contact via Contact.linked_event_ids (server-side
+                  reconciler handles add/remove/swap). To create a new
+                  contact, operator goes to /dashboard/contacts; this
+                  picker is for existing-only. */}
+              <div className="space-y-2">
+                <Label htmlFor="contact_search">
+                  Linked contact
+                  <span className="ml-2 text-xs font-normal text-muted-foreground">
+                    Optional
+                  </span>
+                </Label>
+                {linkedContactId ? (
+                  // Linked-state pill: shows the current contact, with
+                  // Change / Remove buttons. Click Change → clears + opens
+                  // the search input. Click Remove → unlinks immediately
+                  // (will be reconciled on form submit).
+                  (() => {
+                    const c = contacts.find((x) => x.id === linkedContactId);
+                    if (!c) {
+                      // Edge case: contact was deleted between page load
+                      // and form open. Surface unlink.
+                      return (
+                        <div className="text-xs text-muted-foreground">
+                          Linked contact missing —{" "}
+                          <button
+                            type="button"
+                            onClick={() => setLinkedContactId(null)}
+                            className="text-primary hover:underline"
+                          >
+                            clear link
+                          </button>
+                        </div>
+                      );
+                    }
+                    return (
+                      <div className="flex items-center gap-2 flex-wrap px-3 py-2 rounded-md border border-primary/30 bg-primary/5">
+                        <div className="flex-1 min-w-0">
+                          <div className="font-medium text-sm truncate">
+                            {c.name ?? "(unnamed contact)"}
+                          </div>
+                          {(c.organization || c.email || c.phone) && (
+                            <div className="text-xs text-muted-foreground truncate">
+                              {[c.organization, c.email, c.phone]
+                                .filter(Boolean)
+                                .join(" · ")}
+                            </div>
+                          )}
+                        </div>
+                        <div className="flex gap-1 shrink-0">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setLinkedContactId(null);
+                              setContactPickerOpen(true);
+                              setContactSearch("");
+                            }}
+                            className="text-xs text-primary hover:underline px-2 py-1"
+                          >
+                            Change
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setLinkedContactId(null)}
+                            className="text-xs text-muted-foreground hover:text-destructive px-2 py-1"
+                          >
+                            Remove
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })()
+                ) : (
+                  // Search-state: input + filtered dropdown. The dropdown
+                  // shows top 8 matches by name/organization/email/phone
+                  // — pick or keep typing.
+                  <>
+                    <Input
+                      id="contact_search"
+                      type="search"
+                      value={contactSearch}
+                      onChange={(e) => {
+                        setContactSearch(e.target.value);
+                        setContactPickerOpen(true);
+                      }}
+                      onFocus={() => setContactPickerOpen(true)}
+                      placeholder={
+                        contacts.length === 0
+                          ? "No contacts yet — add one at /dashboard/contacts"
+                          : "Search by name, company, email, phone…"
+                      }
+                      disabled={contacts.length === 0}
+                    />
+                    {contactPickerOpen && contactSearch.trim() !== "" && (() => {
+                      const q = contactSearch.trim().toLowerCase();
+                      const matches = contacts
+                        .filter((c) => {
+                          const hay = [
+                            c.name ?? "",
+                            c.organization ?? "",
+                            c.email ?? "",
+                            c.phone ?? "",
+                          ]
+                            .join(" ")
+                            .toLowerCase();
+                          return hay.includes(q);
+                        })
+                        .slice(0, 8);
+                      if (matches.length === 0) {
+                        return (
+                          <div className="border rounded-md mt-1 px-3 py-2 text-xs text-muted-foreground">
+                            No contacts match &quot;{contactSearch}&quot;. Add one at{" "}
+                            <a
+                              href="/dashboard/contacts"
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-primary hover:underline"
+                            >
+                              /dashboard/contacts
+                            </a>
+                            .
+                          </div>
+                        );
+                      }
+                      return (
+                        <div className="border rounded-md mt-1 max-h-56 overflow-y-auto">
+                          {matches.map((c) => (
+                            <button
+                              key={c.id}
+                              type="button"
+                              onClick={() => {
+                                setLinkedContactId(c.id);
+                                setContactSearch("");
+                                setContactPickerOpen(false);
+                              }}
+                              className="w-full text-left px-3 py-2 hover:bg-muted text-sm border-b last:border-b-0"
+                            >
+                              <div className="font-medium truncate">
+                                {c.name ?? "(unnamed)"}
+                              </div>
+                              {(c.organization || c.email || c.phone) && (
+                                <div className="text-xs text-muted-foreground truncate">
+                                  {[c.organization, c.email, c.phone]
+                                    .filter(Boolean)
+                                    .join(" · ")}
+                                </div>
+                              )}
+                            </button>
+                          ))}
+                        </div>
+                      );
+                    })()}
+                    {contactPickerOpen && contactSearch.trim() === "" && contacts.length > 0 && (
+                      <p className="text-xs text-muted-foreground">
+                        Start typing to find a contact — or{" "}
+                        <a
+                          href="/dashboard/contacts"
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-primary hover:underline"
+                        >
+                          add a new one
+                        </a>
+                        .
+                      </p>
+                    )}
+                  </>
+                )}
               </div>
 
               {/* Notes */}

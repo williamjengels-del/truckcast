@@ -3278,6 +3278,7 @@ export function EventsClient({ initialEvents, userId = "", businessName = "", us
         recentStates={recentStates}
         recentEventsForLinkage={initialEvents}
         canSeeFinancials={financialsVisible}
+        contacts={contacts}
       />
 
       {/* Edit Event Dialog — always mounted so Base UI dialog can open/close correctly */}
@@ -3291,6 +3292,7 @@ export function EventsClient({ initialEvents, userId = "", businessName = "", us
         recentStates={recentStates}
         recentEventsForLinkage={initialEvents}
         canSeeFinancials={financialsVisible}
+        contacts={contacts}
       />
 
       {/* Duplicate Event Dialog — opens a pre-filled create form with cleared sales/dates */}
@@ -3304,6 +3306,7 @@ export function EventsClient({ initialEvents, userId = "", businessName = "", us
         recentStates={recentStates}
         recentEventsForLinkage={initialEvents}
         canSeeFinancials={financialsVisible}
+        contacts={contacts}
       />
 
       {/* Sales Entry Dialog — always mounted for same reason */}
