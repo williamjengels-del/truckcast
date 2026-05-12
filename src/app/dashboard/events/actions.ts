@@ -405,6 +405,24 @@ export async function updateEvent(id: string, formData: Partial<EventFormData>) 
   const newCity = updateData.city as string | null | undefined;
   const newDate = formData.event_date;
   const newState = formData.state;
+  // Flip pos_source to "manual" when the operator edits any financial
+  // field via the event-form modal. This claims the row's sales numbers
+  // as operator-canonical so future POS syncs (sync.ts respects
+  // pos_source==="manual" via its eligibility filter) won't overwrite
+  // them. Bug history: rows that originated from a Square / Toast sync
+  // kept pos_source="square" or "toast" through the form-edit path,
+  // leaving operator's Square+ACH combined edits vulnerable to the
+  // next manual sync silently reverting them to the POS-only slice.
+  // Only flip when a financial field is in the payload — pure metadata
+  // edits (location, notes, contact link) shouldn't claim the sales
+  // numbers as operator-canonical.
+  const financialFieldsTouched =
+    formData.net_sales !== undefined ||
+    formData.invoice_revenue !== undefined;
+  if (financialFieldsTouched) {
+    updateData.pos_source = "manual";
+  }
+
   if ((newCity !== undefined || newDate || newState !== undefined) && !formData.event_weather) {
     const { data: current } = await supabase
       .from("events")
@@ -597,9 +615,13 @@ export async function updateEventSales(id: string, netSales: number) {
     { kind: "unauthorized" }
   >;
 
+  // Flip pos_source to "manual" alongside the net_sales write — see the
+  // same rationale in updateEvent above. updateEventSales is the inline
+  // sales editor; every call mutates the operator's canonical sales
+  // number and therefore should claim the row.
   const { data, error } = await supabase
     .from("events")
-    .update({ net_sales: netSales })
+    .update({ net_sales: netSales, pos_source: "manual" })
     .eq("id", id)
     .eq("user_id", userId)
     .select()
@@ -629,10 +651,14 @@ export async function dismissFlaggedEvent(
     { kind: "unauthorized" }
   >;
 
+  // Charity path writes net_sales=0 intentionally; flip pos_source so a
+  // later POS sync doesn't blow away the zero with a stray POS slice
+  // (same write-path-claim rule as updateEvent / updateEventSales).
+  // Disrupted path doesn't touch net_sales; pos_source stays unchanged.
   const updateData: Record<string, unknown> =
     reason === "disrupted"
       ? { anomaly_flag: "disrupted" }
-      : { anomaly_flag: "normal", net_sales: 0 }; // charity: $0 is intentional
+      : { anomaly_flag: "normal", net_sales: 0, pos_source: "manual" };
 
   const { error } = await supabase
     .from("events")
