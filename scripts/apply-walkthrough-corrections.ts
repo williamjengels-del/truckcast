@@ -212,10 +212,17 @@ async function main() {
       continue;
     }
     const dbCur = current.net_sales == null ? null : Number(current.net_sales);
-    // If current DB value already equals the corrected value, skip (idempotent)
-    if (dbCur !== null && Math.abs(dbCur - t.new_value) < 0.005) {
+    // Fully-idempotent skip: only when both net_sales matches AND
+    // pos_source is already "manual". If pos_source is something else
+    // (e.g., "square"), we still want the write to flip it for sync
+    // protection.
+    if (
+      dbCur !== null &&
+      Math.abs(dbCur - t.new_value) < 0.005 &&
+      current.pos_source === "manual"
+    ) {
       staleSkipped++;
-      console.log(`  ✓ ${t.event_date} "${t.event_name}" already at $${t.new_value} — skip`);
+      console.log(`  ✓ ${t.event_date} "${t.event_name}" already at $${t.new_value} + manual — skip`);
       continue;
     }
     // If DB current doesn't match the TSV's current_value, operator may
