@@ -89,7 +89,84 @@ export type EventFormData = {
    *  one row per date in the range. Each row gets a unique event_date
    *  but shares every other field. */
   multi_day_dates?: string[];
+  /** UI-only — not a column on events. The form's "Link contact"
+   *  picker sets this on the data payload; create/update actions
+   *  reconcile against the prior link (if any) by writing to the
+   *  contacts side (Contact.linked_event_ids) after the event upsert.
+   *
+   *  Semantics:
+   *    null  → operator explicitly cleared any prior link
+   *    undef → no change (preserve current link, no contacts write)
+   *    uuid  → link this contact (and unlink any prior different one) */
+  linked_contact_id?: string | null;
 };
+
+/**
+ * Reconcile the contact-side link for a given event_id. Looks up the
+ * current set of contacts linking to this event, computes the diff
+ * vs the operator's picked contact, and applies the minimum changes
+ * (link new, unlink prior). Called from createEvent + updateEvent +
+ * createMultiDayEvents after the event upsert succeeds.
+ *
+ * Pass nextContactId === undefined to skip entirely (preserve current
+ * state). Pass null to explicitly unlink whatever's currently linked.
+ */
+async function reconcileEventContactLink(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  supabase: any,
+  ownerUserId: string,
+  eventId: string,
+  nextContactId: string | null | undefined
+): Promise<void> {
+  if (nextContactId === undefined) return;
+
+  // Find any contacts currently linking to this event_id. Uses the
+  // GIN-indexed .contains() filter on linked_event_ids.
+  const { data: currentLinks } = await supabase
+    .from("contacts")
+    .select("id, linked_event_ids")
+    .eq("user_id", ownerUserId)
+    .contains("linked_event_ids", [eventId]);
+
+  const currentLinked = (currentLinks ?? []) as {
+    id: string;
+    linked_event_ids: string[] | null;
+  }[];
+
+  // Unlink any contact that's NOT the new pick (handles change + clear).
+  for (const c of currentLinked) {
+    if (c.id === nextContactId) continue;
+    const next = (c.linked_event_ids ?? []).filter((id) => id !== eventId);
+    await supabase
+      .from("contacts")
+      .update({ linked_event_ids: next })
+      .eq("id", c.id)
+      .eq("user_id", ownerUserId);
+  }
+
+  // Link to the new contact (if any) — idempotent.
+  if (nextContactId) {
+    const alreadyLinked = currentLinked.some((c) => c.id === nextContactId);
+    if (!alreadyLinked) {
+      const { data: target } = await supabase
+        .from("contacts")
+        .select("linked_event_ids")
+        .eq("id", nextContactId)
+        .eq("user_id", ownerUserId)
+        .maybeSingle();
+      const existing =
+        (target as { linked_event_ids: string[] | null } | null)
+          ?.linked_event_ids ?? [];
+      if (!existing.includes(eventId)) {
+        await supabase
+          .from("contacts")
+          .update({ linked_event_ids: [...existing, eventId] })
+          .eq("id", nextContactId)
+          .eq("user_id", ownerUserId);
+      }
+    }
+  }
+}
 
 export async function createEvent(formData: EventFormData) {
   const scope = requireWritableScope(await resolveScopedSupabase());
@@ -191,9 +268,23 @@ export async function createEvent(formData: EventFormData) {
 
   if (error) throw new Error(error.message);
 
+  // Reconcile contact link if the form picked one. New event has no
+  // prior link by definition, so this is link-only (no unlink path).
+  if (formData.linked_contact_id !== undefined && data?.id) {
+    await reconcileEventContactLink(
+      supabase,
+      userId,
+      data.id as string,
+      formData.linked_contact_id
+    );
+  }
+
   revalidatePath("/dashboard/events");
   revalidatePath("/dashboard");
   revalidatePath("/dashboard/performance");
+  if (formData.linked_contact_id !== undefined) {
+    revalidatePath("/dashboard/contacts");
+  }
 
   // Recalculate performance and forecasts in the background — for
   // the OWNER's data, regardless of who triggered the action.
@@ -276,6 +367,11 @@ export async function updateEvent(id: string, formData: Partial<EventFormData>) 
     // form already gates it to create-mode but guard here defensively
     // so an accidental payload won't 400 the update.
     if (key === "multi_day_dates") continue;
+    // linked_contact_id is a UI-only field consumed by
+    // reconcileEventContactLink above. Stripping here is belt-and-
+    // suspenders — the generic loop would otherwise try to UPDATE
+    // a non-existent column.
+    if (key === "linked_contact_id") continue;
     if (value !== undefined) {
       updateData[key] = value === "" ? null : value;
     }
@@ -347,6 +443,18 @@ export async function updateEvent(id: string, formData: Partial<EventFormData>) 
     .single();
 
   if (error) throw new Error(error.message);
+
+  // Reconcile contact link if the form sent a (possibly-null) pick.
+  // Undefined = no change, preserve existing link.
+  if (formData.linked_contact_id !== undefined) {
+    await reconcileEventContactLink(
+      supabase,
+      userId,
+      id,
+      formData.linked_contact_id
+    );
+    revalidatePath("/dashboard/contacts");
+  }
 
   revalidatePath("/dashboard/events");
   revalidatePath("/dashboard");
