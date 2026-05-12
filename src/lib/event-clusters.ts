@@ -107,15 +107,29 @@ export function detectMultiDayClusters(
       if (gap > MULTI_DAY_MAX_GAP_DAYS) {
         const cluster = sorted.slice(clusterStart, i);
         const clusterId = cluster[0].id;
-        const totalDays = cluster.length;
-        const startDate = cluster[0].event_date;
-        const endDate = cluster[cluster.length - 1].event_date;
+        // totalDays is the number of UNIQUE DATES in the cluster, not
+        // the number of events. Two same-name events on the SAME date
+        // are not a multi-day event — they're a same-day duplicate (or
+        // two genuinely separate events with the same name). Either way
+        // they shouldn't render the "Day 1 of 2" multi-day badge.
+        // Fix shipped 2026-05-12 after operator caught two Graduation
+        // Party rows on 5/31/26 rendering as a multi-day cluster.
+        const uniqueDates = [
+          ...new Set(cluster.map((e) => e.event_date)),
+        ].sort();
+        const totalDays = uniqueDates.length;
+        const startDate = uniqueDates[0];
+        const endDate = uniqueDates[uniqueDates.length - 1];
         const allEventIds = cluster.map((c) => c.id);
 
-        cluster.forEach((e, idx) => {
+        cluster.forEach((e) => {
+          // dayIndex now refers to position within unique-dates, not
+          // position within the events list. Same-date duplicates share
+          // a dayIndex.
+          const dayIndex = uniqueDates.indexOf(e.event_date);
           out.set(e.id, {
             clusterId,
-            dayIndex: idx,
+            dayIndex,
             totalDays,
             allEventIds,
             startDate,

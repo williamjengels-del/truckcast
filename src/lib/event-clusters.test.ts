@@ -136,6 +136,38 @@ describe("detectMultiDayClusters", () => {
     expect(m.get("b")!.clusterId).not.toBe(m.get("c")!.clusterId);
   });
 
+  it("two same-name events on the SAME date are NOT a multi-day cluster (regression for 2026-05-31 Graduation Party bug)", () => {
+    // Operator-flagged 2026-05-12: two Graduation Party rows on
+    // 2026-05-31 rendered with "Day 1 of 2" / "Day 2 of 2" badges even
+    // though they're a same-day duplicate (or two distinct events
+    // sharing a name), not a multi-day cluster.
+    const events = [
+      mkEvent({ id: "a", event_name: "Graduation Party", event_date: "2026-05-31" }),
+      mkEvent({ id: "b", event_name: "Graduation Party", event_date: "2026-05-31" }),
+    ];
+    const m = detectMultiDayClusters(events);
+    expect(m.get("a")!.totalDays).toBe(1);
+    expect(m.get("b")!.totalDays).toBe(1);
+  });
+
+  it("same-date duplicates within a true multi-day cluster don't inflate totalDays", () => {
+    // Mixed case: 4 events spanning 3 unique consecutive dates, with a
+    // same-date duplicate on day 2. totalDays should be 3 (unique
+    // dates), not 4 (event count).
+    const events = [
+      mkEvent({ id: "d1", event_name: "Festival", event_date: "2026-09-06" }),
+      mkEvent({ id: "d2a", event_name: "Festival", event_date: "2026-09-07" }),
+      mkEvent({ id: "d2b", event_name: "Festival", event_date: "2026-09-07" }),
+      mkEvent({ id: "d3", event_name: "Festival", event_date: "2026-09-08" }),
+    ];
+    const m = detectMultiDayClusters(events);
+    expect(m.get("d1")!.totalDays).toBe(3);
+    expect(m.get("d1")!.dayIndex).toBe(0);
+    expect(m.get("d2a")!.dayIndex).toBe(1);
+    expect(m.get("d2b")!.dayIndex).toBe(1);
+    expect(m.get("d3")!.dayIndex).toBe(2);
+  });
+
   it("does NOT chain weekly recurring same-name events (regression for v54 bug)", () => {
     // Lunchtime Live runs Tue + Thu weekly. With the old 5-day gap,
     // these chained across weeks into bogus "Day 1 of 4" clusters.
