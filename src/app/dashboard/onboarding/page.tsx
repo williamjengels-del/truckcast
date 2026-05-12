@@ -24,6 +24,7 @@ import {
   PlusCircle,
   TrendingUp,
   BarChart3,
+  Globe,
 } from "lucide-react";
 import { US_STATES, US_TIMEZONES } from "@/lib/constants";
 import {
@@ -473,6 +474,33 @@ export default function OnboardingPage() {
                       <Button size="sm" variant="outline" className="h-7 text-xs">
                         <BarChart3 className="mr-1.5 h-3.5 w-3.5" />
                         View forecasts
+                      </Button>
+                    </Link>
+                  </div>
+                </div>
+              </div>
+
+              {/* Share booking link — acquisition-wedge surface per north
+                  star ("most operators don't have a booking form on their
+                  website"). Surfaced here so operators discover the
+                  vendcast.co/<slug> link + embed widget on day 0 rather
+                  than after stumbling into Settings > Customers later. */}
+              <div className="flex items-start gap-3 rounded-lg border p-4">
+                <div className="mt-0.5 h-5 w-5 shrink-0 rounded-full border-2 border-muted-foreground/30" />
+                <div className="flex-1">
+                  <div className="font-medium">Share your booking link</div>
+                  <div className="text-sm text-muted-foreground">
+                    Claim a custom URL like{" "}
+                    <code className="bg-muted px-1 py-0.5 rounded text-xs">
+                      vendcast.co/your-truck
+                    </code>{" "}
+                    so event organizers can find you and request bookings.
+                  </div>
+                  <div className="mt-2">
+                    <Link href="/dashboard/settings?tab=customers">
+                      <Button size="sm" variant="outline" className="h-7 text-xs">
+                        <Globe className="mr-1.5 h-3.5 w-3.5" />
+                        Claim your URL
                       </Button>
                     </Link>
                   </div>
