@@ -439,7 +439,7 @@ export default async function EventDrilldownPage({ params }: PageProps) {
             {unlogged.length} past booking{unlogged.length !== 1 ? "s" : ""} without revenue logged
           </p>
           <p className="text-warning text-xs mt-1">
-            Log sales for these events to improve forecast accuracy.
+            Log sales for these events to tighten your forecast ranges.
           </p>
           <Link href="/dashboard/events?tab=past" className="text-xs font-medium text-warning hover:underline mt-2 inline-block">
             Go to Past Events →

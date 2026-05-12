@@ -864,7 +864,7 @@ export function EventForm({
                   <p className="text-xs text-muted-foreground">
                     {linkageCandidates.length === 0
                       ? "No events in the prior 3 days to link to. Skip is fine."
-                      : "★ marks events that overran their forecast — likely sold-out triggers. Linked carry-overs are excluded from forecast accuracy stats."}
+                      : "★ marks events that overran their forecast — likely sold-out triggers. Linked carry-overs are excluded from the in-range hit rate stat."}
                   </p>
                 </div>
               )}
