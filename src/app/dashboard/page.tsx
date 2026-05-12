@@ -544,7 +544,7 @@ export default async function DashboardPage() {
             <div className="flex items-center gap-2">
               <Sparkles className="h-4 w-4 text-brand-teal shrink-0" />
               <p className="text-sm font-medium text-brand-teal">
-                Forecast accuracy improves with better data — yours is {dataScore}% complete
+                Forecasts get tighter as your data fills in — yours is {dataScore}% complete
               </p>
             </div>
             <Link href="/dashboard/events?tab=past">

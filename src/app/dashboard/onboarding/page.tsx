@@ -484,8 +484,8 @@ export default function OnboardingPage() {
               <TrendingUp className="mt-0.5 h-5 w-5 text-primary shrink-0" />
               <p className="text-sm text-muted-foreground">
                 <span className="font-medium text-foreground">Pro tip:</span>{" "}
-                Operators with 10+ past events see forecast accuracy improve
-                significantly. Import your history when you get a chance.
+                Operators with 10+ past events see their forecast ranges tighten
+                meaningfully. Import your history when you get a chance.
               </p>
             </div>
 
