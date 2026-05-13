@@ -32,6 +32,7 @@
 
 import { createClient } from "@supabase/supabase-js";
 import { geocodeAddress } from "../src/lib/mapbox-geocoder.js";
+import { US_STATE_NAMES } from "../src/lib/constants.js";
 
 const SUPABASE_URL =
   process.env.SUPABASE_URL ?? process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -196,13 +197,74 @@ async function main(): Promise<void> {
 
   // Geocode each unique venue. Mapbox free-tier headroom is 100K/month;
   // 30-100 calls is trivial.
+  //
+  // Quality flag (added 2026-05-15 after first audit pass): Mapbox returns
+  // SOMETHING for almost any input string. When the operator typed a
+  // venue NAME ("9 Mile Garden") rather than a street address, Mapbox
+  // often guesses wildly — "9 Mile Garden, Affton, MO" resolved to
+  // "Nine-mile, Butte, Montana" on the first pass. Without a state-
+  // mismatch detector, operator would have to spot-check every row
+  // for these silent misses. The match_quality column lets operator
+  // sort/filter and bulk-skip the suspicious ones.
+  type MatchQuality = "ok" | "state_mismatch" | "low_precision" | "unresolved";
   type EnrichedBucket = VenueBucket & {
     resolved_address: string;
     latitude: number | null;
     longitude: number | null;
     cell_id: string | null;
     geocode_status: "ok" | "unresolved";
+    match_quality: MatchQuality;
   };
+
+  /**
+   * Classify the match quality based on whether the resolved address
+   * contains the operator's stated state. State match is the strongest
+   * signal — if "Missouri" or "MO" doesn't appear in a resolution where
+   * the operator said the event is in MO, the geocoder picked something
+   * elsewhere (the 9 Mile Garden → Montana case).
+   *
+   * Returns "ok" when both state matches AND the resolved address
+   * appears to contain a street number (suggests street-level precision).
+   * Returns "low_precision" when state matches but the address is city/
+   * region-level (no street number, just "St. Ann, Missouri"). Returns
+   * "state_mismatch" when the resolved address doesn't mention the
+   * operator's state at all.
+   *
+   * Empty operator state → "ok" (we can't validate, but no signal that
+   * it's wrong either).
+   */
+  function classifyMatch(
+    operatorState: string,
+    resolvedAddress: string
+  ): MatchQuality {
+    const trimmedState = (operatorState ?? "").trim().toUpperCase();
+    const resolved = (resolvedAddress ?? "").toLowerCase();
+    if (!trimmedState || trimmedState === "OTHER") {
+      // Can't validate — treat as ok and let operator decide.
+      return inferStreetLevel(resolved) ? "ok" : "low_precision";
+    }
+    const fullName = US_STATE_NAMES[trimmedState];
+    const abbrPattern = new RegExp(`\\b${trimmedState}\\b`, "i");
+    const fullPattern = fullName
+      ? new RegExp(`\\b${fullName}\\b`, "i")
+      : null;
+    const hasState =
+      abbrPattern.test(resolved) ||
+      (fullPattern !== null && fullPattern.test(resolved));
+    if (!hasState) return "state_mismatch";
+    return inferStreetLevel(resolved) ? "ok" : "low_precision";
+  }
+
+  /**
+   * Cheap heuristic: does the resolved address start with a street number?
+   * Mapbox street-level resolutions look like "5372 Saint Charles
+   * Street, Cottleville, Missouri 63304". City/region resolutions look
+   * like "St. Ann, Missouri, United States". Numeric prefix is a strong
+   * street-level signal.
+   */
+  function inferStreetLevel(resolved: string): boolean {
+    return /^\s*\d/.test(resolved);
+  }
   const enriched: EnrichedBucket[] = [];
   let geocodeCount = 0;
   for (const b of sortedBuckets) {
@@ -216,6 +278,7 @@ async function main(): Promise<void> {
       b.sample_state
     );
     if (geo) {
+      const quality = classifyMatch(b.sample_state, geo.resolved_address);
       enriched.push({
         ...b,
         resolved_address: geo.resolved_address,
@@ -223,6 +286,7 @@ async function main(): Promise<void> {
         longitude: geo.longitude,
         cell_id: geo.cell_id,
         geocode_status: "ok",
+        match_quality: quality,
       });
     } else {
       enriched.push({
@@ -232,15 +296,23 @@ async function main(): Promise<void> {
         longitude: null,
         cell_id: null,
         geocode_status: "unresolved",
+        match_quality: "unresolved",
       });
     }
   }
 
+  const okCount = enriched.filter((b) => b.match_quality === "ok").length;
+  const lowPrecCount = enriched.filter(
+    (b) => b.match_quality === "low_precision"
+  ).length;
+  const mismatchCount = enriched.filter(
+    (b) => b.match_quality === "state_mismatch"
+  ).length;
   const unresolvedCount = enriched.filter(
     (b) => b.geocode_status === "unresolved"
   ).length;
   console.error(
-    `Done. ${enriched.length - unresolvedCount} resolved, ${unresolvedCount} unresolved.`
+    `Done. ${okCount} ok, ${lowPrecCount} low_precision, ${mismatchCount} state_mismatch, ${unresolvedCount} unresolved.`
   );
   console.error("");
   console.error("Writing TSV to stdout. Redirect to a file for review:");
@@ -269,8 +341,53 @@ async function main(): Promise<void> {
   );
   console.error("");
 
+  // Sort: ok rows first (sorted by event_count DESC so highest-impact at
+  // top), then low_precision, then state_mismatch, then unresolved. Within
+  // each quality bucket, preserve the event_count DESC ordering. This
+  // puts the operator's review work in priority order: confident matches
+  // up top, suspicious ones at the bottom for bulk-skip.
+  const qualityRank: Record<MatchQuality, number> = {
+    ok: 0,
+    low_precision: 1,
+    state_mismatch: 2,
+    unresolved: 3,
+  };
+  enriched.sort((a, b) => {
+    const ra = qualityRank[a.match_quality];
+    const rb = qualityRank[b.match_quality];
+    if (ra !== rb) return ra - rb;
+    return b.events.length - a.events.length;
+  });
+
+  console.error("");
+  console.error("Tip: in Excel/Sheets, filter by match_quality:");
+  console.error(
+    "  • 'ok'           — confident matches, the bulk-apply candidates"
+  );
+  console.error(
+    "  • 'low_precision' — resolved to the right city/region but no street"
+  );
+  console.error(
+    "                     number; cell_id is a city-area centroid. Useful"
+  );
+  console.error(
+    "                     fallback when operator typed a venue name."
+  );
+  console.error(
+    "  • 'state_mismatch' — Mapbox picked an address in a different state"
+  );
+  console.error(
+    "                     than you typed. Almost always a bad pick. Bulk-"
+  );
+  console.error(
+    "                     skip these or fix the operator's location string"
+  );
+  console.error("                     upstream first.");
+  console.error("");
+
   // TSV header
   const headers = [
+    "match_quality",
     "signature",
     "event_count",
     "operator_count",
@@ -288,6 +405,7 @@ async function main(): Promise<void> {
   process.stdout.write(headers.join("\t") + "\n");
   for (const b of enriched) {
     const row = [
+      b.match_quality,
       b.signature,
       String(b.events.length),
       String(b.user_ids.size),
