@@ -5,6 +5,14 @@ import { recalculateForUser } from "@/lib/recalculate";
 import { autoClassifyWeather } from "@/lib/weather";
 import { canonicalizeCityAndState } from "@/lib/city-normalize";
 import { resolveScopedSupabase, type DashboardScope } from "@/lib/dashboard-scope";
+import {
+  recordManagerAction,
+  readCapturedEventState,
+  pickCapturedFields,
+  diffCapturedFields,
+  summarizeFieldDiff,
+  hasFinancialChange,
+} from "@/lib/manager-audit-log";
 import type { Event } from "@/lib/database.types";
 
 // M-3 fix (2026-05-09): every server action below resolves through
@@ -286,6 +294,24 @@ export async function createEvent(formData: EventFormData) {
     revalidatePath("/dashboard/contacts");
   }
 
+  // Audit-log non-owner create. Captures the inserted row's financial
+  // + structural fields, plus the optional linked_contact_id pick.
+  const afterCreate = pickCapturedFields({
+    ...insertData,
+    linked_contact_id: formData.linked_contact_id ?? null,
+  });
+  if (data?.id) {
+    await recordManagerAction({
+      scope,
+      action: "event.create",
+      targetTable: "events",
+      targetId: data.id as string,
+      before: null,
+      after: afterCreate,
+      summary: `created event '${formData.event_name}' on ${formData.event_date}`,
+    });
+  }
+
   // Recalculate performance and forecasts in the background — for
   // the OWNER's data, regardless of who triggered the action.
   recalculateForUser(userId).catch(() => {});
@@ -358,6 +384,13 @@ export async function updateEvent(id: string, formData: Partial<EventFormData>) 
     DashboardScope,
     { kind: "unauthorized" }
   >;
+
+  // Snapshot the captured-field subset BEFORE applying the update so
+  // the audit row can diff before/after. Skip the read when scope is
+  // owner — no audit row to write anyway. readCapturedEventState uses
+  // the service-role client so the actor's RLS doesn't restrict it.
+  const auditBefore =
+    scope.kind === "normal" ? null : await readCapturedEventState(id);
 
   const updateData: Record<string, unknown> = {};
 
@@ -477,6 +510,37 @@ export async function updateEvent(id: string, formData: Partial<EventFormData>) 
   revalidatePath("/dashboard/events");
   revalidatePath("/dashboard");
   revalidatePath("/dashboard/performance");
+
+  // Audit-log non-owner update. The contact link is a UI-only field
+  // not on the events table, but it's a captured field in the log so
+  // we splice it into the after payload for diffing. The before
+  // snapshot doesn't include linked_contact_id (we'd have to look it
+  // up from the contacts side), so contact link changes always read
+  // as "—  → uuid" in the summary — that's fine, it's still a clear
+  // signal of "manager linked a contact here".
+  const auditAfterRaw: Record<string, unknown> = { ...updateData };
+  if (formData.linked_contact_id !== undefined) {
+    auditAfterRaw.linked_contact_id = formData.linked_contact_id ?? null;
+  }
+  const { beforeChanged, afterChanged } = diffCapturedFields(
+    auditBefore,
+    auditAfterRaw
+  );
+  if (afterChanged) {
+    const action = hasFinancialChange(afterChanged)
+      ? "event.financial_edit"
+      : "event.update";
+    await recordManagerAction({
+      scope,
+      action,
+      targetTable: "events",
+      targetId: id,
+      before: beforeChanged,
+      after: afterChanged,
+      summary: summarizeFieldDiff(beforeChanged, afterChanged),
+    });
+  }
+
   recalculateForUser(userId).catch(() => {});
   return data as Event;
 }
@@ -553,6 +617,14 @@ export async function saveAfterEventSummary(
     update.net_sales = summary.final_sales;
   }
 
+  // Snapshot net_sales before-state for audit when a final_sales write
+  // is in play (only meaningful when a non-owner is editing). The
+  // after_event_summary jsonb itself is cosmetic, not captured.
+  const auditBefore =
+    scope.kind !== "normal" && summary.final_sales !== null
+      ? await readCapturedEventState(eventId)
+      : null;
+
   const { error } = await supabase
     .from("events")
     .update(update)
@@ -562,6 +634,29 @@ export async function saveAfterEventSummary(
 
   revalidatePath("/dashboard");
   revalidatePath("/dashboard/events");
+
+  // Audit-log non-owner after-event-summary writes. Only fire when
+  // net_sales actually changed — the summary jsonb itself doesn't
+  // qualify as captured. summarizeFieldDiff handles the formatting.
+  if (summary.final_sales !== null) {
+    const auditAfter = pickCapturedFields({ net_sales: summary.final_sales });
+    const { beforeChanged, afterChanged } = diffCapturedFields(
+      auditBefore,
+      auditAfter
+    );
+    if (afterChanged) {
+      await recordManagerAction({
+        scope,
+        action: "event.after_event_summary",
+        targetTable: "events",
+        targetId: eventId,
+        before: beforeChanged,
+        after: afterChanged,
+        summary: `wrap-up: ${summarizeFieldDiff(beforeChanged, afterChanged)}`,
+      });
+    }
+  }
+
   recalculateForUser(userId).catch(() => {});
 }
 
@@ -594,6 +689,12 @@ export async function deleteEvent(id: string) {
     { kind: "unauthorized" }
   >;
 
+  // Snapshot the row BEFORE the delete so the audit log preserves what
+  // the manager removed. Skip the read when scope is owner — no audit
+  // row to write.
+  const auditBefore =
+    scope.kind === "normal" ? null : await readCapturedEventState(id);
+
   const { error } = await supabase
     .from("events")
     .delete()
@@ -605,6 +706,24 @@ export async function deleteEvent(id: string) {
   revalidatePath("/dashboard/events");
   revalidatePath("/dashboard");
   revalidatePath("/dashboard/performance");
+
+  // Audit-log non-owner delete. before is the captured snapshot, after
+  // is null. Summary surfaces the event name + date inline so the
+  // owner can identify what was removed without expanding the row.
+  if (auditBefore) {
+    const name = (auditBefore.event_name as string | null) ?? "(unnamed)";
+    const date = (auditBefore.event_date as string | null) ?? "(no date)";
+    await recordManagerAction({
+      scope,
+      action: "event.delete",
+      targetTable: "events",
+      targetId: id,
+      before: auditBefore,
+      after: null,
+      summary: `deleted event '${name}' on ${date}`,
+    });
+  }
+
   recalculateForUser(userId).catch(() => {});
 }
 
@@ -614,6 +733,11 @@ export async function updateEventSales(id: string, netSales: number) {
     DashboardScope,
     { kind: "unauthorized" }
   >;
+
+  // Snapshot net_sales + pos_source before the write so the audit log
+  // can show the diff. Skip for owner scope.
+  const auditBefore =
+    scope.kind === "normal" ? null : await readCapturedEventState(id);
 
   // Flip pos_source to "manual" alongside the net_sales write — see the
   // same rationale in updateEvent above. updateEventSales is the inline
@@ -632,6 +756,30 @@ export async function updateEventSales(id: string, netSales: number) {
   revalidatePath("/dashboard/events");
   revalidatePath("/dashboard");
   revalidatePath("/dashboard/performance");
+
+  // Audit-log non-owner inline-sales edits. Always classified as
+  // financial_edit (the whole point of this endpoint is the net_sales
+  // write). The pos_source flip is captured incidentally.
+  const auditAfter = pickCapturedFields({
+    net_sales: netSales,
+    pos_source: "manual",
+  });
+  const { beforeChanged, afterChanged } = diffCapturedFields(
+    auditBefore,
+    auditAfter
+  );
+  if (afterChanged) {
+    await recordManagerAction({
+      scope,
+      action: "event.financial_edit",
+      targetTable: "events",
+      targetId: id,
+      before: beforeChanged,
+      after: afterChanged,
+      summary: summarizeFieldDiff(beforeChanged, afterChanged),
+    });
+  }
+
   recalculateForUser(userId).catch(() => {});
   return data as Event;
 }
@@ -660,6 +808,11 @@ export async function dismissFlaggedEvent(
       ? { anomaly_flag: "disrupted" }
       : { anomaly_flag: "normal", net_sales: 0, pos_source: "manual" };
 
+  // Snapshot for audit. Charity path zeros out net_sales which is a
+  // financial-impact edit — owner deserves to see this in the log.
+  const auditBefore =
+    scope.kind === "normal" ? null : await readCapturedEventState(id);
+
   const { error } = await supabase
     .from("events")
     .update(updateData)
@@ -670,6 +823,26 @@ export async function dismissFlaggedEvent(
 
   revalidatePath("/dashboard/events");
   revalidatePath("/dashboard");
+
+  // Audit-log non-owner dismissals. The action name keeps the
+  // dismissal-intent visible in the feed (vs a generic event.update).
+  const auditAfter = pickCapturedFields(updateData);
+  const { beforeChanged, afterChanged } = diffCapturedFields(
+    auditBefore,
+    auditAfter
+  );
+  if (afterChanged) {
+    await recordManagerAction({
+      scope,
+      action: "event.dismiss_flagged",
+      targetTable: "events",
+      targetId: id,
+      before: beforeChanged,
+      after: afterChanged,
+      summary: `dismissed as ${reason}: ${summarizeFieldDiff(beforeChanged, afterChanged)}`,
+    });
+  }
+
   recalculateForUser(userId).catch(() => {});
 }
 
