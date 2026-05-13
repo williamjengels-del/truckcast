@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { resolveScopedSupabase } from "@/lib/dashboard-scope";
+import { recordManagerAction } from "@/lib/manager-audit-log";
 
 /**
  * POST /api/event-inquiries/action
@@ -89,6 +90,20 @@ export async function POST(req: NextRequest) {
   if (action === "claimed") {
     eventId = await ensureEventForClaim(scope.client, scope.userId, inquiryId);
   }
+
+  // Audit-log non-owner inquiry actions. The action verb (claimed /
+  // declined / contacted) lands as a tag on the audit row's "after"
+  // jsonb; target is the inquiry row, eventId attached when claim
+  // auto-created one so owner can navigate from the audit feed.
+  await recordManagerAction({
+    scope,
+    action: "inquiry.action",
+    targetTable: "event_inquiries",
+    targetId: inquiryId,
+    before: null,
+    after: { inquiry_action: action, auto_created_event_id: eventId ?? null },
+    summary: `inquiry ${action}${eventId ? " (event auto-created)" : ""}`,
+  });
 
   return NextResponse.json({ ok: true, eventId });
 }

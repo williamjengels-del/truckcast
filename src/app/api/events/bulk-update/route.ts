@@ -30,6 +30,7 @@ import { resolveScopedSupabase } from "@/lib/dashboard-scope";
  */
 
 import type { EventType, EventMode, WeatherType } from "@/lib/database.types";
+import { recordManagerAction } from "@/lib/manager-audit-log";
 
 type BulkField =
   | "event_type"
@@ -147,6 +148,31 @@ export async function POST(req: NextRequest) {
     return NextResponse.json(
       { error: error.message ?? "Update failed" },
       { status: 500 }
+    );
+  }
+
+  // Audit-log non-owner bulk edits. One row per affected event so the
+  // owner's Activity feed shows the impact granularly; the same field+
+  // value pair across rows lets PR 2's UI cluster them into a single
+  // "Sarah bulk-set event_type=Concert on 12 events" entry without
+  // losing per-event traceability. before is the pre-update value
+  // (queryable from the audit row if needed in the future) — kept
+  // null here to skip the per-id read storm, since for the bulk-edit
+  // surface the field+value pair already tells the story.
+  const updatedIds = (data ?? []).map((d) => d.id as string);
+  if (updatedIds.length > 0 && (scope.kind === "manager" || scope.kind === "impersonating")) {
+    await Promise.all(
+      updatedIds.map((eventId) =>
+        recordManagerAction({
+          scope,
+          action: "event.bulk_update",
+          targetTable: "events",
+          targetId: eventId,
+          before: null,
+          after: { [field]: value },
+          summary: `bulk-set ${field} = ${value}`,
+        })
+      )
     );
   }
 
