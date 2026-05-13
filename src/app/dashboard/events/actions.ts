@@ -13,6 +13,7 @@ import {
   summarizeFieldDiff,
   hasFinancialChange,
 } from "@/lib/manager-audit-log";
+import { geocodeAddress } from "@/lib/mapbox-geocoder";
 import type { Event } from "@/lib/database.types";
 
 // M-3 fix (2026-05-09): every server action below resolves through
@@ -230,6 +231,35 @@ export async function createEvent(formData: EventFormData) {
       // Non-fatal — skip if geo/weather fails
     }
   }
+
+  // Address-level geocode for cross-operator venue matching (Phase 2
+  // workstream, Phase 1: input layer). Mapbox-resolved street-level
+  // coords override the city-centroid coords from weather above —
+  // weather classification only needs ~7-mile precision (Open-Meteo
+  // grid is coarse), but cross-op venue match needs ~100m precision
+  // (cell_id grid).
+  //
+  // Token-absent: geocodeAddress returns null silently. cell_id stays
+  // null on the row, engine falls back to existing name-keyed match.
+  // Same path for failed/unresolvable inputs ("9 Mile Garden" without
+  // city/state context, notes-pasted-into-location, etc.).
+  if (formData.location) {
+    try {
+      const geo = await geocodeAddress(
+        formData.location,
+        canonicalCity ?? null,
+        canonicalState ?? null
+      );
+      if (geo) {
+        insertData.latitude = geo.latitude;
+        insertData.longitude = geo.longitude;
+        insertData.cell_id = geo.cell_id;
+      }
+    } catch {
+      // Non-fatal — leave cell_id null and fall back to name-keyed match.
+    }
+  }
+
   if (formData.net_sales !== undefined && formData.net_sales !== null)
     insertData.net_sales = formData.net_sales;
   if (formData.invoice_revenue !== undefined && formData.invoice_revenue !== null)
@@ -481,6 +511,51 @@ export async function updateEvent(id: string, formData: Partial<EventFormData>) 
         }
       } catch {
         // Non-fatal
+      }
+    }
+  }
+
+  // Address-level geocode on update — runs when location, city, or
+  // state is in the payload. Like the create path, street-level coords
+  // override the city-centroid from weather above. Token-absent or
+  // unresolvable input → cell_id stays as whatever was there (or null
+  // for a fresh edit). When the operator clears location to empty,
+  // we don't currently clear cell_id — partial cleanup is acceptable
+  // for v1 since the engine treats null cell_id as "fall back to name
+  // match" anyway. A future Phase 4 polish pass could clear cell_id
+  // when location goes empty.
+  const newLocation =
+    typeof formData.location === "string" ? formData.location : undefined;
+  if (newLocation !== undefined || newCity !== undefined || newState !== undefined) {
+    // Reuse the same { current } read from the weather block above when
+    // possible, but it's scoped inside that `if`. Re-read minimally here
+    // so the address block stands on its own without coupling to weather
+    // execution order.
+    const { data: addrCurrent } = await supabase
+      .from("events")
+      .select("location, city, state")
+      .eq("id", id)
+      .eq("user_id", userId)
+      .single();
+    const resolvedLocation = newLocation ?? addrCurrent?.location ?? null;
+    const resolvedCityForGeo =
+      (updateData.city as string | null | undefined) ?? addrCurrent?.city ?? null;
+    const resolvedStateForGeo =
+      (updateData.state as string | null | undefined) ?? addrCurrent?.state ?? null;
+    if (resolvedLocation && resolvedLocation.trim()) {
+      try {
+        const geo = await geocodeAddress(
+          resolvedLocation,
+          resolvedCityForGeo,
+          resolvedStateForGeo
+        );
+        if (geo) {
+          updateData.latitude = geo.latitude;
+          updateData.longitude = geo.longitude;
+          updateData.cell_id = geo.cell_id;
+        }
+      } catch {
+        // Non-fatal — leave cell_id as-is.
       }
     }
   }
