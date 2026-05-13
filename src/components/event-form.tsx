@@ -229,6 +229,64 @@ export function EventForm({
   const [suggestedLon, setSuggestedLon] = useState<number | null>(initialData?.longitude ?? null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  // Address preview: hits /api/geocode/address on blur of the Address
+  // input. Server route holds the Mapbox token; client never sees it.
+  // Phase 2 workstream Phase 1 (cross-op address-keyed match). Token
+  // unset on the server → status: "disabled" → preview line hides
+  // entirely (form looks identical to pre-Phase-1 state).
+  //
+  // Triggers only on location blur, not city/state changes. Operator
+  // can re-blur location after touching city/state to refresh the
+  // preview. Acceptable for v1; Phase 4 polish can widen the trigger.
+  const [addressPreview, setAddressPreview] = useState<{
+    status: "loading" | "resolved" | "not_found" | "disabled";
+    resolved?: string;
+  } | null>(null);
+  const lastPreviewedAddressRef = useRef<string>("");
+
+  const fetchAddressPreview = useCallback(
+    async (address: string) => {
+      const trimmed = address.trim();
+      if (!trimmed) {
+        setAddressPreview(null);
+        lastPreviewedAddressRef.current = "";
+        return;
+      }
+      // Skip if the operator blurred without changing the value (e.g.
+      // tabbing through). Cheap guard against duplicate quota burn.
+      const signature = `${trimmed}|${cityValue}|${stateValue}`;
+      if (signature === lastPreviewedAddressRef.current) return;
+      lastPreviewedAddressRef.current = signature;
+
+      setAddressPreview({ status: "loading" });
+      try {
+        const res = await fetch("/api/geocode/address", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            address: trimmed,
+            city: cityValue || undefined,
+            state: stateValue || undefined,
+          }),
+        });
+        const data = await res.json();
+        if (data?.ok) {
+          setAddressPreview({
+            status: "resolved",
+            resolved: String(data.resolved_address ?? ""),
+          });
+        } else if (data?.reason === "disabled") {
+          setAddressPreview({ status: "disabled" });
+        } else {
+          setAddressPreview({ status: "not_found" });
+        }
+      } catch {
+        setAddressPreview({ status: "not_found" });
+      }
+    },
+    [cityValue, stateValue]
+  );
+
   const fetchWeatherSuggestion = useCallback(async (city: string, date: string, state: string) => {
     if (!city.trim() || !date) return;
     setWeatherFetching(true);
@@ -996,7 +1054,22 @@ export function EventForm({
                       name="location"
                       defaultValue={initialData?.location ?? ""}
                       placeholder="e.g. Kiener Plaza or 1234 Locust St"
+                      onBlur={(e) => fetchAddressPreview(e.currentTarget.value)}
                     />
+                    {/* Mapbox-resolved address preview. Server route gates on
+                        the operator's session + holds the token. When the
+                        geocoder is disabled (token unset) the line stays
+                        hidden — form looks identical to pre-Phase-1. */}
+                    {addressPreview && addressPreview.status !== "disabled" && (
+                      <p className="text-xs text-muted-foreground">
+                        {addressPreview.status === "loading" &&
+                          "Resolving address…"}
+                        {addressPreview.status === "resolved" &&
+                          `Resolved to: ${addressPreview.resolved}`}
+                        {addressPreview.status === "not_found" &&
+                          "Couldn't resolve — we'll use city-only for forecasts."}
+                      </p>
+                    )}
                     <p className="text-xs text-muted-foreground">
                       We use this to forecast attendance + sales for this
                       event. No address yet means no forecast — your data
