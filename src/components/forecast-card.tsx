@@ -362,7 +362,7 @@ export function ForecastInline({ event, forecast }: ForecastInlineProps) {
             />
             <TooltipContent side="left" className="max-w-[220px] text-xs">
               Tightened with community data — other operators&apos; history
-              at this event narrowed your range. Their identities stay private.
+              at this venue narrowed your range. Their identities stay private.
             </TooltipContent>
           </Tooltip>
         )}
