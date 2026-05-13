@@ -32,7 +32,7 @@ export function EmbedWidgetSection({ userId, subscriptionTier }: EmbedWidgetSect
   }
 
   return (
-    <Card className="max-w-2xl">
+    <Card className="max-w-2xl" id="embed-widget">
       <CardHeader>
         <CardTitle>Embed Schedule Widget</CardTitle>
       </CardHeader>
