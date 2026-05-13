@@ -55,6 +55,23 @@ const isMissingCancellationReason = (e: Event) =>
 
 export const CHIP_CATALOG: EventChip[] = [
   // Status — mutually-exclusive radio within category.
+  //
+  // The "All" chip is a discoverable shortcut to "no status filter" —
+  // functionally equivalent to having no status chip selected, but
+  // surfaces the affordance so operators don't need to know that
+  // deselecting Booked yields the same result. Operator request
+  // 2026-05-13: "view all booked and unbooked" on the Upcoming tab.
+  // Clicking it clears other status chips (radio behavior); predicate
+  // matches everything so the result depends only on the tab scope
+  // (e.g., Upcoming = future-dated & not cancelled; "All" inside that
+  // scope = booked + unbooked future events).
+  {
+    id: "all",
+    label: "All",
+    category: "status",
+    radioInCategory: true,
+    predicate: () => true,
+  },
   {
     id: "booked",
     label: "Booked",
