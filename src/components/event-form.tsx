@@ -972,15 +972,21 @@ export function EventForm({
           {/* ── Advanced fields ── */}
           {advancedMode && (
             <>
-              {/* Location details */}
+              {/* Address details. Section heading + field label both
+                  say "Address" per operator 2026-05-13 — the underlying
+                  column is still `events.location` (no schema change)
+                  but the operator-facing copy clarifies what we use this
+                  for (cross-op cluster match). Not a hard lock — events
+                  save fine without it, just no forecast + day-of card
+                  has no address until the field is filled. */}
               <div className="space-y-4">
                 <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">
-                  Location
+                  Address
                 </h3>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div className="col-span-2 space-y-2">
                     <Label htmlFor="location">
-                      Venue / Address
+                      Address
                       <span className="ml-2 text-xs font-normal text-muted-foreground">
                         Required for forecasts
                       </span>

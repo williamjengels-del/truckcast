@@ -2521,7 +2521,7 @@ export function EventsClient({ initialEvents, userId = "", businessName = "", us
 
   function exportCSV() {
     const headers = [
-      "Event Name", "Date", "Mode", "Type", "Tier", "Location", "City",
+      "Event Name", "Date", "Mode", "Type", "Tier", "Address", "City",
       "Booked", "Cancelled", "Cancellation Reason", "Net Sales", "Invoice Revenue", "After Fees", "Forecast",
       "Food Cost", "Labor Cost", "Other Costs", "Net Profit",
       "Fee Type", "Fee Rate", "Sales Minimum", "Weather", "Anomaly", "Notes",
