@@ -493,6 +493,31 @@ function SettingsContent() {
                         : `/schedule/${profile?.id}`}
                     </code>
                   </div>
+
+                  {/* Day-0 discovery: most operators reach this tab through
+                      the onboarding "Share your booking link" prompt. The
+                      slug is the share-link, but the embed widget below
+                      is the higher-leverage acquisition wedge ("most
+                      operators don't have a booking form on their website
+                      at all" per north star). Surface it inline so the
+                      operator scrolls / jumps rather than guessing it
+                      exists. */}
+                  <div className="rounded-md border border-brand-teal/30 bg-brand-teal/5 p-3 text-sm">
+                    <p className="font-medium text-brand-teal">
+                      Want the booking form on your website too?
+                    </p>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Drop a one-line embed snippet into any page — your
+                      schedule + inquiry form render right where event
+                      organizers are already looking.
+                    </p>
+                    <a
+                      href="#embed-widget"
+                      className="mt-2 inline-block text-xs font-medium text-brand-teal hover:underline"
+                    >
+                      Get the embed code ↓
+                    </a>
+                  </div>
                 </>
               )}
             </CardContent>
