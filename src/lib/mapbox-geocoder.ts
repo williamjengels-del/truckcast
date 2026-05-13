@@ -118,7 +118,21 @@ export async function geocodeAddress(
   url.searchParams.set("access_token", token);
 
   try {
-    const res = await fetch(url.toString());
+    // Mapbox enforces token URL restrictions on ALL calls by matching the
+    // Referer header — including server-side requests. Without the header,
+    // a URL-restricted token returns 403 Forbidden. Vercel's server-side
+    // fetches don't set Referer to the deployed domain by default, and
+    // local dev scripts don't either, so we explicitly set it here. The
+    // header acts as a CSRF-style "this call is on behalf of vendcast.co"
+    // signal; it's not a meaningful security gate (any caller can spoof
+    // Referer), but it satisfies Mapbox's per-token URL allow-list.
+    //
+    // If the token is later issued WITHOUT URL restrictions, this header
+    // is harmless. Keep it set as defense-in-depth so we don't silently
+    // depend on either configuration state.
+    const res = await fetch(url.toString(), {
+      headers: { Referer: "https://vendcast.co/" },
+    });
     if (!res.ok) return null;
     const data = (await res.json()) as MapboxV6Response;
     const feature = data.features?.[0];
