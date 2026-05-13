@@ -451,7 +451,7 @@ export default async function DashboardPage() {
     const missingLocation = pastBookedEvents.filter((e) => !e.location && !e.city).length;
     if (missingType > 0) dataQualityGaps.push({ label: "Event Type", count: missingType, href: "/dashboard/events?tab=needs_attention&chips=missing-type", field: "type" });
     if (missingWeather > 0) dataQualityGaps.push({ label: "Weather", count: missingWeather, href: "/dashboard/events?tab=needs_attention&chips=missing-weather", field: "weather" });
-    if (missingLocation > 0) dataQualityGaps.push({ label: "Location", count: missingLocation, href: "/dashboard/events?tab=needs_attention&chips=missing-location", field: "location" });
+    if (missingLocation > 0) dataQualityGaps.push({ label: "Address", count: missingLocation, href: "/dashboard/events?tab=needs_attention&chips=missing-location", field: "location" });
     dataQualityGaps.sort((a, b) => b.count - a.count);
   }
   const filledFields = pastBookedEvents.length >= 5
