@@ -460,10 +460,21 @@ async function main(): Promise<void> {
      *  may have used variants ("St. Louis" vs "Saint Louis"). */
     all_city_variants: string;
   };
+  // Cell-merge is SAFE only for `ok` match quality. For low_precision
+  // rows the cell_id is the CITY centroid (Mapbox couldn't find the
+  // venue, fell back to a city/region centroid). Two different venues
+  // in the same city would share that centroid cell_id and get falsely
+  // merged into one bucket — e.g., Wellspent Brewing + Kiener Plaza +
+  // Music Park all in "Saint Louis" centroid would collapse to ONE
+  // TSV row. That's the wrong cluster. Same risk for state_mismatch
+  // and unresolved.
+  //
+  // Operator-surfaced 2026-05-15 after seeing a 161-event bucket with
+  // 60+ distinct venues merged into one row. Fix: only merge ok rows.
   const mergedByCell = new Map<string, EnrichedBucket[]>();
   const unmerged: EnrichedBucket[] = [];
   for (const b of enriched) {
-    if (b.cell_id) {
+    if (b.cell_id && b.match_quality === "ok") {
       if (!mergedByCell.has(b.cell_id)) mergedByCell.set(b.cell_id, []);
       mergedByCell.get(b.cell_id)!.push(b);
     } else {
