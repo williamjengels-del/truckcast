@@ -69,16 +69,118 @@ function normalizeForSignature(s: string | null | undefined): string {
   return s.trim().toLowerCase().replace(/\s+/g, " ");
 }
 
+/**
+ * Venue signature: (location, city) only, case-insensitive. State is
+ * EXCLUDED to collapse state-null and state-populated rows for the same
+ * physical venue into one group — operator's prior corrections set
+ * state on 714 of 996 events, leaving 282 nulls. Without this collapse
+ * the audit shows "9 Mile Garden | Affton | MO" and "9 Mile Garden |
+ * Affton | (null)" as two separate venues, which is silly and forces
+ * the operator to re-decide what they already decided.
+ *
+ * Per-group state inference (inferConsensusState below) fills the gap.
+ */
 function venueSignature(
   location: string | null,
-  city: string | null,
-  state: string | null
+  city: string | null
 ): string {
   return [
     normalizeForSignature(location),
     normalizeForSignature(city),
-    normalizeForSignature(state),
   ].join("|");
+}
+
+/**
+ * Operator-locked rule (2026-05-15): default state for any event with
+ * blank state = MO, UNLESS the row carries an explicit Illinois signal
+ * (Scott AFB region, Belleville per v45 cleanup, or "IL"/"Illinois"
+ * mentioned in city or location strings).
+ *
+ * This bypasses the per-event TSV review for state — the operator
+ * authorized the rule globally. Used both for signature grouping
+ * (inferred state guides Mapbox call) and as the consensus state
+ * fallback when ALL events in a venue group have null state.
+ */
+function inferStateFromFields(
+  location: string | null,
+  city: string | null
+): "IL" | "MO" {
+  const haystack = `${(location ?? "")} ${(city ?? "")}`.toLowerCase();
+  // Scott AFB / Belleville always IL per operator (v45 cleanup
+  // established 50 Belleville rows → IL). Explicit "IL" or "illinois"
+  // in either field also IL.
+  if (
+    haystack.includes("scott a") ||
+    haystack.includes("belleville") ||
+    /\bil\b/.test(haystack) ||
+    haystack.includes("illinois")
+  ) {
+    return "IL";
+  }
+  return "MO";
+}
+
+/**
+ * Consensus state for a venue group. Resolution order:
+ *
+ *   1. **IL override**: inferStateFromFields scans the sample
+ *      location/city for clear IL signals (Scott AFB, Belleville,
+ *      explicit "IL"/"Illinois"). When it fires, IL wins even over
+ *      populated state values. Reason: operator's rule was authorized
+ *      globally, and we discovered events where state was typed MO
+ *      but the location was clearly an IL venue ("604 Tyler St, Scott
+ *      AFB, Illinois 62225" with state="MO"). The rule is authoritative.
+ *   2. **Populated mode**: any non-null state value, mode across the
+ *      group. The operator's prior corrections drive consensus.
+ *   3. **MO default**: no populated state and no IL signal → MO.
+ *
+ * Also reports how many events in the group are missing state — the
+ * apply step uses this signal to backfill state alongside cell_id.
+ */
+function consensusStateFor(events: EventRow[]): {
+  state: string;
+  source: "populated" | "inferred";
+  events_missing_state: number;
+} {
+  const populated = events
+    .map((e) => e.state)
+    .filter((s): s is string => !!s && s.trim().length > 0);
+  const missingCount = events.length - populated.length;
+
+  // Rule 1: IL signal overrides populated values when the location
+  // clearly references an IL venue. Authorized by operator 2026-05-15.
+  const sample = events[0];
+  const inferred = inferStateFromFields(sample.location, sample.city);
+  if (inferred === "IL") {
+    return {
+      state: "IL",
+      source: "inferred",
+      events_missing_state: missingCount,
+    };
+  }
+
+  // Rule 2: populated mode wins when no IL override.
+  if (populated.length > 0) {
+    const counts = new Map<string, number>();
+    for (const s of populated) {
+      counts.set(s, (counts.get(s) ?? 0) + 1);
+    }
+    const sorted = Array.from(counts.entries()).sort(
+      (a, b) => b[1] - a[1] || a[0].localeCompare(b[0])
+    );
+    return {
+      state: sorted[0][0],
+      source: "populated",
+      events_missing_state: missingCount,
+    };
+  }
+
+  // Rule 3: no populated state, no IL signal → MO default.
+  return {
+    state: inferred, // = "MO" here
+    source: "inferred",
+    events_missing_state: missingCount,
+  };
 }
 
 type EventRow = {
@@ -95,7 +197,11 @@ type VenueBucket = {
   signature: string;
   sample_location: string;
   sample_city: string;
-  sample_state: string;
+  /** Consensus state — populated mode if any event in the group has a
+   *  non-null state, else applied via the inferStateFromFields rule. */
+  consensus_state: string;
+  consensus_state_source: "populated" | "inferred";
+  events_missing_state: number;
   user_ids: Set<string>;
   events: EventRow[];
 };
@@ -164,29 +270,63 @@ async function main(): Promise<void> {
     process.exit(0);
   }
 
-  // Group by venue signature. Track all events per signature so the
-  // apply step can write to every matching event in one batch.
-  const buckets = new Map<string, VenueBucket>();
+  // Group by venue signature (location + city, ignoring state). Track
+  // all events per signature so the apply step can write to every
+  // matching event in one batch. State is filled per-group via the
+  // consensus rule below — operator's prior state corrections drive
+  // the consensus when populated; falls back to the operator's
+  // Missouri-default rule (Belleville/Scott-AFB/IL signal → IL, else
+  // MO) when ALL events in the group are state-null.
+  type ProtoBucket = {
+    signature: string;
+    sample_location: string;
+    sample_city: string;
+    user_ids: Set<string>;
+    events: EventRow[];
+  };
+  const protoBuckets = new Map<string, ProtoBucket>();
   for (const r of allRows) {
-    const sig = venueSignature(r.location, r.city, r.state);
+    const sig = venueSignature(r.location, r.city);
     if (!sig.replace(/\|/g, "").trim()) continue; // pure-empty signature, skip
-    let bucket = buckets.get(sig);
+    let bucket = protoBuckets.get(sig);
     if (!bucket) {
       bucket = {
         signature: sig,
         sample_location: r.location ?? "",
         sample_city: r.city ?? "",
-        sample_state: r.state ?? "",
         user_ids: new Set<string>(),
         events: [],
       };
-      buckets.set(sig, bucket);
+      protoBuckets.set(sig, bucket);
     }
     bucket.user_ids.add(r.user_id);
     bucket.events.push(r);
   }
 
-  console.error(`Grouped into ${buckets.size} unique venue signatures.`);
+  // Finalize buckets with consensus state.
+  const buckets = new Map<string, VenueBucket>();
+  for (const [sig, p] of protoBuckets) {
+    const consensus = consensusStateFor(p.events);
+    buckets.set(sig, {
+      ...p,
+      consensus_state: consensus.state,
+      consensus_state_source: consensus.source,
+      events_missing_state: consensus.events_missing_state,
+    });
+  }
+
+  const inferredCount = Array.from(buckets.values()).filter(
+    (b) => b.consensus_state_source === "inferred"
+  ).length;
+  console.error(
+    `Grouped into ${buckets.size} unique venue signatures (location + city, state-agnostic).`
+  );
+  console.error(
+    `  ${buckets.size - inferredCount} have populated state in at least one event (consensus picks the most common).`
+  );
+  console.error(
+    `  ${inferredCount} have NO populated state; defaulted via Missouri rule (Belleville/Scott AFB/IL signal → IL, else MO).`
+  );
   console.error(`Geocoding each via Mapbox (one call per venue)…`);
 
   // Sort by event count DESC so operator sees highest-impact venues
@@ -275,10 +415,10 @@ async function main(): Promise<void> {
     const geo = await geocodeAddress(
       b.sample_location,
       b.sample_city,
-      b.sample_state
+      b.consensus_state
     );
     if (geo) {
-      const quality = classifyMatch(b.sample_state, geo.resolved_address);
+      const quality = classifyMatch(b.consensus_state, geo.resolved_address);
       enriched.push({
         ...b,
         resolved_address: geo.resolved_address,
@@ -301,16 +441,86 @@ async function main(): Promise<void> {
     }
   }
 
-  const okCount = enriched.filter((b) => b.match_quality === "ok").length;
-  const lowPrecCount = enriched.filter(
+  // Post-geocode merge: signatures that resolved to the same cell_id
+  // are the same physical venue typed differently by the operator
+  // ("1 convention plaza" + "1 convention center plaza" both resolve
+  // to the same Mapbox cell). Collapse them into one TSV row so the
+  // operator sees one logical venue instead of N variants.
+  //
+  // Apply step parses the all_location_variants column on each row
+  // and matches events against ANY of the listed location strings.
+  // Unresolved venues (cell_id null) stay one TSV row per signature
+  // — no canonical key to merge on.
+  type MergedBucket = EnrichedBucket & {
+    /** All location strings the operator has used for this venue.
+     *  Comma-separated; first entry is the highest-event-count one
+     *  (kept as sample_location). Apply step iterates over this list. */
+    all_location_variants: string;
+    /** Mirror for cities — usually the same string, but operator
+     *  may have used variants ("St. Louis" vs "Saint Louis"). */
+    all_city_variants: string;
+  };
+  const mergedByCell = new Map<string, EnrichedBucket[]>();
+  const unmerged: EnrichedBucket[] = [];
+  for (const b of enriched) {
+    if (b.cell_id) {
+      if (!mergedByCell.has(b.cell_id)) mergedByCell.set(b.cell_id, []);
+      mergedByCell.get(b.cell_id)!.push(b);
+    } else {
+      unmerged.push(b);
+    }
+  }
+  const merged: MergedBucket[] = [];
+  for (const [, group] of mergedByCell) {
+    // Sort within group by event_count DESC so the most-used variant
+    // becomes the canonical sample.
+    group.sort((a, b) => b.events.length - a.events.length);
+    const primary = group[0];
+    // Union all events, recompute operator_count + state consensus
+    // across the merged set.
+    const allEvents = group.flatMap((g) => g.events);
+    const allUserIds = new Set<string>();
+    for (const g of group) for (const u of g.user_ids) allUserIds.add(u);
+    const mergedConsensus = consensusStateFor(allEvents);
+    const variantLocations = Array.from(
+      new Set(group.map((g) => g.sample_location.trim()).filter(Boolean))
+    );
+    const variantCities = Array.from(
+      new Set(group.map((g) => g.sample_city.trim()).filter(Boolean))
+    );
+    merged.push({
+      ...primary,
+      user_ids: allUserIds,
+      events: allEvents,
+      consensus_state: mergedConsensus.state,
+      consensus_state_source: mergedConsensus.source,
+      events_missing_state: mergedConsensus.events_missing_state,
+      all_location_variants: variantLocations.join(" || "),
+      all_city_variants: variantCities.join(" || "),
+    });
+  }
+  for (const u of unmerged) {
+    merged.push({
+      ...u,
+      all_location_variants: u.sample_location,
+      all_city_variants: u.sample_city,
+    });
+  }
+
+  const okCount = merged.filter((b) => b.match_quality === "ok").length;
+  const lowPrecCount = merged.filter(
     (b) => b.match_quality === "low_precision"
   ).length;
-  const mismatchCount = enriched.filter(
+  const mismatchCount = merged.filter(
     (b) => b.match_quality === "state_mismatch"
   ).length;
-  const unresolvedCount = enriched.filter(
+  const unresolvedCount = merged.filter(
     (b) => b.geocode_status === "unresolved"
   ).length;
+  const mergedAwayCount = enriched.length - merged.length;
+  console.error(
+    `Cell-merge collapsed ${enriched.length} signatures → ${merged.length} unique venues (${mergedAwayCount} variants merged into canonical rows).`
+  );
   console.error(
     `Done. ${okCount} ok, ${lowPrecCount} low_precision, ${mismatchCount} state_mismatch, ${unresolvedCount} unresolved.`
   );
@@ -352,7 +562,7 @@ async function main(): Promise<void> {
     state_mismatch: 2,
     unresolved: 3,
   };
-  enriched.sort((a, b) => {
+  merged.sort((a, b) => {
     const ra = qualityRank[a.match_quality];
     const rb = qualityRank[b.match_quality];
     if (ra !== rb) return ra - rb;
@@ -385,15 +595,23 @@ async function main(): Promise<void> {
   console.error("                     upstream first.");
   console.error("");
 
-  // TSV header
+  // TSV header. consensus_state replaces sample_state — operator sees
+  // the value that drove the Mapbox call. events_missing_state shows
+  // how many rows in the group will ALSO get state backfilled when
+  // apply runs. all_location_variants lists every operator-typed
+  // location string that resolved to this venue — apply step matches
+  // events using ANY variant.
   const headers = [
     "match_quality",
-    "signature",
     "event_count",
     "operator_count",
     "sample_location",
+    "all_location_variants",
     "sample_city",
-    "sample_state",
+    "all_city_variants",
+    "consensus_state",
+    "consensus_state_source",
+    "events_missing_state",
     "resolved_address",
     "latitude",
     "longitude",
@@ -403,15 +621,18 @@ async function main(): Promise<void> {
     "notes",
   ];
   process.stdout.write(headers.join("\t") + "\n");
-  for (const b of enriched) {
+  for (const b of merged) {
     const row = [
       b.match_quality,
-      b.signature,
       String(b.events.length),
       String(b.user_ids.size),
       b.sample_location,
+      b.all_location_variants,
       b.sample_city,
-      b.sample_state,
+      b.all_city_variants,
+      b.consensus_state,
+      b.consensus_state_source,
+      String(b.events_missing_state),
       b.resolved_address,
       b.latitude !== null ? b.latitude.toFixed(6) : "",
       b.longitude !== null ? b.longitude.toFixed(6) : "",

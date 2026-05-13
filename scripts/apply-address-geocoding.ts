@@ -51,11 +51,21 @@ if (!tsvPath || tsvPath.startsWith("--")) {
 }
 
 interface TsvRow {
-  signature: string;
   event_count: string;
   sample_location: string;
+  /** Updated 2026-05-15: when the audit's cell-merge collapses multiple
+   *  operator-typed location strings into one venue (e.g., "1 convention
+   *  plaza" + "1 convention center plaza" both resolve to the same cell),
+   *  all variants are joined with " || " here. Apply step iterates over
+   *  each variant when matching events. */
+  all_location_variants: string;
   sample_city: string;
-  sample_state: string;
+  all_city_variants: string;
+  /** consensus_state replaces sample_state. Apply step also writes
+   *  this state to events in the group whose state is still null
+   *  (operator's MO/IL inference rule lets us backfill remaining
+   *  state nulls as a side-effect of the cell_id apply). */
+  consensus_state: string;
   resolved_address: string;
   latitude: string;
   longitude: string;
@@ -81,12 +91,26 @@ function parseTsv(path: string): TsvRow[] {
   const out: TsvRow[] = [];
   for (let i = 1; i < lines.length; i++) {
     const cells = lines[i].split("\t").map(unquote);
+    // Backward-compat: prefer consensus_state column (new), fall back
+    // to sample_state column (old) for any TSV produced before the
+    // 2026-05-15 audit script update. all_location_variants likewise
+    // falls back to sample_location.
+    const consensusState =
+      cells[idx("consensus_state")] ??
+      cells[idx("sample_state")] ??
+      "";
+    const sampleLoc = cells[idx("sample_location")] ?? "";
+    const allVariants =
+      cells[idx("all_location_variants")] ?? sampleLoc;
+    const allCityVariants =
+      cells[idx("all_city_variants")] ?? (cells[idx("sample_city")] ?? "");
     out.push({
-      signature: cells[idx("signature")] ?? "",
       event_count: cells[idx("event_count")] ?? "",
-      sample_location: cells[idx("sample_location")] ?? "",
+      sample_location: sampleLoc,
+      all_location_variants: allVariants,
       sample_city: cells[idx("sample_city")] ?? "",
-      sample_state: cells[idx("sample_state")] ?? "",
+      all_city_variants: allCityVariants,
+      consensus_state: consensusState,
       resolved_address: cells[idx("resolved_address")] ?? "",
       latitude: cells[idx("latitude")] ?? "",
       longitude: cells[idx("longitude")] ?? "",
@@ -118,15 +142,19 @@ function normalizeForSignature(s: string | null | undefined): string {
   return s.trim().toLowerCase().replace(/\s+/g, " ");
 }
 
+/**
+ * Matches the audit script's 2026-05-15 signature: location + city
+ * only, state-agnostic. The apply path groups events the same way so
+ * a venue with both state-populated and state-null events lands in
+ * one bucket and gets a consistent cell_id + backfilled state.
+ */
 function venueSignatureFromRow(r: {
   location: string | null;
   city: string | null;
-  state: string | null;
 }): string {
   return [
     normalizeForSignature(r.location),
     normalizeForSignature(r.city),
-    normalizeForSignature(r.state),
   ].join("|");
 }
 
@@ -174,9 +202,8 @@ async function main(): Promise<void> {
     console.log(" ⚠ Confirmed rows missing coords / cell_id");
     console.log("─".repeat(72));
     for (const r of invalid) {
-      console.log(`  • signature: ${r.signature}`);
       console.log(
-        `    location="${r.sample_location}" city="${r.sample_city}" state="${r.sample_state}"`
+        `  • location="${r.sample_location}" city="${r.sample_city}" state="${r.consensus_state}"`
       );
       console.log(
         `    lat="${r.latitude}" lng="${r.longitude}" cell_id="${r.cell_id}"`
@@ -201,46 +228,75 @@ async function main(): Promise<void> {
     eventName: string;
     eventDate: string;
     userId: string;
-    signature: string;
+    /** Human-readable label for the venue this op writes to. Used in
+     *  dry-run output. Prefers Mapbox resolved_address when present,
+     *  falls back to the operator-typed sample_location. */
+    cellLabel: string;
     latitude: number;
     longitude: number;
     cellId: string;
     resolvedAddress: string;
+    /** When non-null, the event's state column is currently NULL and
+     *  the apply step will backfill it to this value (consensus state
+     *  from the TSV). When null, the event already has state populated
+     *  and we leave it alone. */
+    stateBackfill: string | null;
   };
   const planned: Op[] = [];
   const staleRows: { eventId: string; reason: string }[] = [];
 
   for (const r of validApplyRows) {
-    // Reverse-match: query events with matching location/city/state
-    // strings (case-insensitive) AND cell_id null. Scope to all sharing
-    // ops since the audit script defaults to all sharing ops.
-    // We use ilike for case-insensitive equality on the raw string
-    // since the signature normalization happens in code, not in
-    // Postgres.
-    const { data: candidates, error } = await supabase
-      .from("events")
-      .select("id, user_id, event_name, event_date, location, city, state, cell_id")
-      .ilike("location", r.sample_location.trim())
-      .is("cell_id", null);
-    if (error) {
-      console.log(
-        `  ✗ fetch failed for signature "${r.signature}": ${error.message}`
-      );
-      continue;
+    // Reverse-match: events whose location string matches ANY of the
+    // operator-typed variants the audit merged into this venue (cell-
+    // merge dedupe). Query each variant with ilike, then filter in
+    // memory by the variant + city signature. Cell_id must still be
+    // null (stale-row protection happens later per-event).
+    const variants = (r.all_location_variants || r.sample_location)
+      .split("||")
+      .map((s) => s.trim())
+      .filter((s) => s.length > 0);
+    const cityVariants = (r.all_city_variants || r.sample_city)
+      .split("||")
+      .map((s) => s.trim().toLowerCase())
+      .filter((s) => s.length > 0);
+    const matched: DbRow[] = [];
+    for (const v of variants) {
+      const { data: candidates, error } = await supabase
+        .from("events")
+        .select("id, user_id, event_name, event_date, location, city, state, cell_id")
+        .ilike("location", v)
+        .is("cell_id", null);
+      if (error) {
+        console.log(
+          `  ✗ fetch failed for location variant "${v}": ${error.message}`
+        );
+        continue;
+      }
+      for (const c of (candidates ?? []) as DbRow[]) {
+        // Confirm city also matches one of the variants. Without this,
+        // a location string like "Main Street" could match Main Street
+        // in two different cities and we'd write the wrong cell_id.
+        const eventCity = (c.city ?? "").toLowerCase().trim();
+        if (!cityVariants.includes(eventCity) && cityVariants.length > 0) {
+          continue;
+        }
+        // Skip if already added (operator-typed two variants but a
+        // single event somehow matched both — defensive).
+        if (matched.some((m) => m.id === c.id)) continue;
+        matched.push(c);
+      }
     }
-    const matched = (candidates ?? []).filter((c: DbRow) => {
-      const sig = venueSignatureFromRow(c);
-      return sig === r.signature;
-    });
     if (matched.length === 0) {
-      console.log(`  ⚠ no events matched signature "${r.signature}"`);
+      console.log(
+        `  ⚠ no events matched variants [${variants.join(" || ")}]`
+      );
       continue;
     }
     const lat = parseFloat(r.latitude);
     const lng = parseFloat(r.longitude);
     if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
       console.log(
-        `  ✗ invalid coords for signature "${r.signature}": lat="${r.latitude}" lng="${r.longitude}"`
+        `  ✗ invalid coords for "${r.sample_location}": lat="${r.latitude}" lng="${r.longitude}"`
       );
       continue;
     }
@@ -255,16 +311,26 @@ async function main(): Promise<void> {
         });
         continue;
       }
+      // State backfill rule: if this event's state is null AND the
+      // consensus_state from the TSV is non-empty, schedule it for
+      // backfill. Honors the operator's MO/IL inference rule globally
+      // — saves them from having to re-confirm state on the 282 null
+      // events one by one.
+      const evState = (ev.state ?? "").trim();
+      const consensusState = (r.consensus_state ?? "").trim();
+      const stateBackfill =
+        !evState && consensusState ? consensusState : null;
       planned.push({
         eventId: ev.id,
         eventName: ev.event_name,
         eventDate: ev.event_date,
         userId: ev.user_id,
-        signature: r.signature,
+        cellLabel: r.resolved_address || r.sample_location,
         latitude: lat,
         longitude: lng,
         cellId: r.cell_id,
         resolvedAddress: r.resolved_address,
+        stateBackfill,
       });
     }
   }
@@ -272,26 +338,30 @@ async function main(): Promise<void> {
   console.log("─".repeat(72));
   console.log(" Planned updates");
   console.log("─".repeat(72));
+  const stateBackfillCount = planned.filter((p) => p.stateBackfill).length;
   console.log(`  ✓ Apply: ${planned.length} events`);
+  console.log(
+    `  + State backfill alongside cell_id: ${stateBackfillCount} events`
+  );
   console.log(`  ⚠ Stale (cell_id populated since audit): ${staleRows.length}`);
   console.log("");
 
   if (planned.length > 0) {
-    // Summary per signature so the output stays readable.
-    const bySignature = new Map<
+    // Summary per cell so the output stays readable.
+    const byCell = new Map<
       string,
       { count: number; sample: Op }
     >();
     for (const op of planned) {
-      const existing = bySignature.get(op.signature);
+      const existing = byCell.get(op.cellId);
       if (existing) {
         existing.count += 1;
       } else {
-        bySignature.set(op.signature, { count: 1, sample: op });
+        byCell.set(op.cellId, { count: 1, sample: op });
       }
     }
-    for (const [sig, info] of bySignature) {
-      console.log(`  ▸ ${sig}`);
+    for (const [, info] of byCell) {
+      console.log(`  ▸ ${info.sample.cellLabel}`);
       console.log(
         `      ${info.count} events  →  lat=${info.sample.latitude.toFixed(
           6
@@ -319,14 +389,22 @@ async function main(): Promise<void> {
   console.log("─".repeat(72));
   let updated = 0;
   let failed = 0;
+  let stateBackfilled = 0;
   for (const op of planned) {
+    const updateData: Record<string, unknown> = {
+      latitude: op.latitude,
+      longitude: op.longitude,
+      cell_id: op.cellId,
+    };
+    // State backfill: only when event state was null AND TSV carried
+    // a consensus_state. Honors the operator's MO/IL inference rule
+    // without requiring per-row confirm (rule was authorized globally).
+    if (op.stateBackfill) {
+      updateData.state = op.stateBackfill;
+    }
     const { error } = await supabase
       .from("events")
-      .update({
-        latitude: op.latitude,
-        longitude: op.longitude,
-        cell_id: op.cellId,
-      })
+      .update(updateData)
       .eq("id", op.eventId);
     if (error) {
       console.log(`  ✗ ${op.eventId} update failed: ${error.message}`);
@@ -334,9 +412,12 @@ async function main(): Promise<void> {
       continue;
     }
     updated++;
+    if (op.stateBackfill) stateBackfilled++;
   }
   console.log("");
-  console.log(`Updated ${updated} events. Failed: ${failed}.`);
+  console.log(
+    `Updated ${updated} events. Failed: ${failed}. State backfilled on ${stateBackfilled}.`
+  );
   console.log("");
   console.log(
     "NOTE: cell_id changes affect the engine's cross-op matching on the"
