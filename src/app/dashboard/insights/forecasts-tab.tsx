@@ -67,10 +67,30 @@ export async function ForecastsTab() {
   // variant so the median the engine sees is "what other operators
   // see" rather than a value partially regressing toward this
   // operator's own mean (operator-notes Q2, 2026-04-29).
+  //
+  // Phase 2 cross-op address canonicalization (2026-05-14): pass the
+  // cell_id per unique event_name so the platform aggregate unions
+  // name-matched + cell-matched rows. First non-null cell per name
+  // wins (a name with two different cells is rare and the union
+  // already covers most of it via cell-batched matching).
   const upcomingNames = [...new Set(upcomingEvents.map((e) => e.event_name))];
+  const cellByUpcomingName = new Map<string, string | null>();
+  for (const e of upcomingEvents) {
+    const existing = cellByUpcomingName.get(e.event_name);
+    if (!existing && e.cell_id) {
+      cellByUpcomingName.set(e.event_name, e.cell_id);
+    }
+  }
+  const upcomingCells = upcomingNames.map(
+    (n) => cellByUpcomingName.get(n) ?? null
+  );
   const platformMap =
     scope.kind !== "unauthorized"
-      ? await getPlatformEventsExcludingUser(upcomingNames, scope.userId).catch(
+      ? await getPlatformEventsExcludingUser(
+          upcomingNames,
+          scope.userId,
+          upcomingCells
+        ).catch(
           () => new Map<string, import("@/lib/database.types").PlatformEvent>()
         )
       : new Map<string, import("@/lib/database.types").PlatformEvent>();

@@ -100,6 +100,14 @@ export interface Event {
   city_area: string | null;
   latitude: number | null;
   longitude: number | null;
+  /** 100m grid cell key derived from latitude+longitude when the
+   *  address geocoder resolves (migration 20260514000002).
+   *  Format: `${Math.round(lat*1000)}_${Math.round(lng*1000)}`. Null
+   *  until the operator saves an address with the Mapbox token live,
+   *  OR for events that pre-date Phase 1 (1,300+ rows backfilled
+   *  separately via TSV-and-confirm in Phase 3). Engine's cross-op
+   *  match unions name-keyed + cell-keyed aggregates when non-null. */
+  cell_id?: string | null;
   booked: boolean;
   is_private?: boolean;
   net_sales: number | null;

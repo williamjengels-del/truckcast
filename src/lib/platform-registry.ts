@@ -579,7 +579,24 @@ export async function getPlatformEvents(
  */
 export async function getPlatformEventsExcludingUser(
   eventNames: string[],
-  excludeUserId: string
+  excludeUserId: string,
+  /**
+   * Phase 2 cross-op address canonicalization (cell_id union — 2026-05-14).
+   * Aligned by index with eventNames. For each i, if cellIds[i] is a
+   * non-null string, the i-th result UNIONS rows matched by name (alias-
+   * resolved, existing behavior) with rows in the same 100m cell. Rows
+   * are deduped by id so an event that matches both axes counts once.
+   *
+   * Null/undefined entries (or omitting cellIds entirely) preserve the
+   * pre-Phase-2 name-only behavior. Callers without cell_id data can
+   * keep calling with just (eventNames, excludeUserId).
+   *
+   * Privacy floor still applies on the UNION bucket (≥2 distinct
+   * operators including viewer). Cell-matched rows can push a name-
+   * matched bucket over the threshold (or vice-versa), which IS the
+   * whole point — same venue under different names now counts.
+   */
+  cellIds: (string | null | undefined)[] = []
 ): Promise<Map<string, PlatformEvent>> {
   if (eventNames.length === 0) return new Map();
   const client = getServiceClient();
@@ -611,13 +628,26 @@ export async function getPlatformEventsExcludingUser(
   );
   if (sharingUserIds.size === 0) return new Map();
 
+  // Row shape extends AggregatableRow with id + event_name + cell_id.
+  // id is required for dedup when we union name-matched and cell-matched
+  // rows (an event matching both axes must count once); cell_id needed
+  // so callers see which axis matched. event_name keeps the existing
+  // alias-resolved grouping.
+  type EventRowWithName = AggregatableRow & {
+    id: string;
+    event_name: string;
+    cell_id: string | null;
+  };
+  const ROW_COLUMNS =
+    "id, user_id, net_sales, event_type, city, event_name, cell_id, other_trucks, expected_attendance, fee_type, fee_rate, event_date, event_weather";
+
   // One batch fetch for all event names — IN filter on event_name
   // (case-insensitive matches the cached version's ilike behavior).
   // For a small number of event names this is cheaper than N
   // separate queries.
   const { data: rows } = await client
     .from("events")
-    .select("user_id, net_sales, event_type, city, event_name, other_trucks, expected_attendance, fee_type, fee_rate, event_date, event_weather")
+    .select(ROW_COLUMNS)
     .in(
       "event_name",
       // Use the original casing the operator stored — ilike below
@@ -631,15 +661,13 @@ export async function getPlatformEventsExcludingUser(
 
   if (!rows) return new Map();
 
-  type EventRowWithName = AggregatableRow & { event_name: string };
   // Eligible = sharing-enabled (viewer included for privacy-floor count;
   // computeAggregateExcludingViewer excludes them from medians below).
   const eligible = (rows as EventRowWithName[]).filter((r) =>
     sharingUserIds.has(r.user_id)
   );
 
-  // Group by canonical normalized event name (resolve through aliases),
-  // then compute aggregate per group.
+  // Group by canonical normalized event name (resolve through aliases).
   const groups = new Map<string, EventRowWithName[]>();
   for (const r of eligible) {
     const lc = r.event_name.toLowerCase().trim();
@@ -648,16 +676,79 @@ export async function getPlatformEventsExcludingUser(
     groups.get(key)!.push(r);
   }
 
-  const byCanonical = new Map<string, PlatformEvent>();
-  for (const [key, groupRows] of groups) {
-    const agg = computeAggregateExcludingViewer(groupRows, excludeUserId);
+  // Phase 2: second batch fetch for cell-matched rows. Only fires when
+  // the caller provided non-null cellIds. Same filters (booked,
+  // net_sales > 0, not disrupted, sharing-eligible operator) so the
+  // privacy + quality contract is identical to the name-matched path.
+  const uniqueCells = Array.from(
+    new Set(
+      cellIds.filter((c): c is string => typeof c === "string" && c.length > 0)
+    )
+  );
+  const cellGroups = new Map<string, EventRowWithName[]>();
+  if (uniqueCells.length > 0) {
+    const { data: cellRows } = await client
+      .from("events")
+      .select(ROW_COLUMNS)
+      .in("cell_id", uniqueCells)
+      .eq("booked", true)
+      .not("net_sales", "is", null)
+      .gt("net_sales", 0)
+      .neq("anomaly_flag", "disrupted");
+    const cellEligible = ((cellRows ?? []) as EventRowWithName[]).filter(
+      (r) => sharingUserIds.has(r.user_id)
+    );
+    for (const r of cellEligible) {
+      if (!r.cell_id) continue;
+      if (!cellGroups.has(r.cell_id)) cellGroups.set(r.cell_id, []);
+      cellGroups.get(r.cell_id)!.push(r);
+    }
+  }
+
+  // Compute the per-input aggregate as the UNION of name-matched +
+  // cell-matched rows, deduped by row id. When no cell_id supplied for
+  // an input (or no cell-matched rows found), this collapses to the
+  // existing name-only path.
+  const out = new Map<string, PlatformEvent>();
+  for (let i = 0; i < eventNames.length; i++) {
+    const inputName = inputNormalized[i];
+    const canonical = resolveMap.get(inputName) ?? inputName;
+    const cellId = cellIds[i] ?? null;
+
+    const nameRows = groups.get(canonical) ?? [];
+    const cellMatchedRows =
+      cellId && cellId.length > 0 ? (cellGroups.get(cellId) ?? []) : [];
+
+    // Union by id. If a row matches both axes (same event came back via
+    // its name AND its cell), it only counts once.
+    const seen = new Set<string>();
+    const union: EventRowWithName[] = [];
+    for (const r of nameRows) {
+      if (seen.has(r.id)) continue;
+      seen.add(r.id);
+      union.push(r);
+    }
+    for (const r of cellMatchedRows) {
+      if (seen.has(r.id)) continue;
+      seen.add(r.id);
+      union.push(r);
+    }
+    if (union.length === 0) continue;
+
+    const agg = computeAggregateExcludingViewer(union, excludeUserId);
     if (!agg) continue;
-    // Synthesize a PlatformEvent shape so callers don't need to
-    // branch. Fields the cached table tracks (event_name_normalized,
-    // event_name_display, updated_at) are filled best-effort.
-    const display = groupRows[0].event_name;
-    byCanonical.set(key, {
-      event_name_normalized: key,
+
+    // Display name preference: prefer a name-matched row's name so the
+    // PlatformEvent's event_name_display reflects what the operator
+    // typed. Falls back to a cell-only match's name when no name-matched
+    // row exists (rare — same-venue different-name cross-op case).
+    const display =
+      (nameRows[0]?.event_name) ??
+      (cellMatchedRows[0]?.event_name) ??
+      inputName;
+
+    out.set(inputName, {
+      event_name_normalized: canonical,
       event_name_display: display,
       operator_count: agg.operator_count,
       total_instances: agg.total_instances,
@@ -679,13 +770,5 @@ export async function getPlatformEventsExcludingUser(
     } as PlatformEvent);
   }
 
-  // Re-key by input normalized so callers can do
-  // `map.get(name.toLowerCase().trim())` and not think about aliases.
-  const out = new Map<string, PlatformEvent>();
-  for (const input of inputNormalized) {
-    const canonical = resolveMap.get(input) ?? input;
-    const row = byCanonical.get(canonical);
-    if (row) out.set(input, row);
-  }
   return out;
 }
