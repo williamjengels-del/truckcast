@@ -1,3 +1,9 @@
+import { Users } from "lucide-react";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import type { Event } from "@/lib/database.types";
 import type { ForecastResult } from "@/lib/forecast-engine";
 import {
@@ -317,19 +323,50 @@ export function ForecastInline({ event, forecast }: ForecastInlineProps) {
     high = event.forecast_high;
   }
 
+  // Cross-operator network-effect signal. When the v2 engine grounded
+  // the prior on platform (community) data, surface a tiny indicator so
+  // the operator can see the network effect firing on their forecast.
+  // Privacy contract preserved — never names the contributing operator;
+  // upstream privacy floor already enforces ≥2 distinct operators in the
+  // full bucket (viewer included). This mirrors the disclosure level of
+  // forecastContextSentence ("Based on your N prior + M other operators'
+  // data") which is already visible in the full ForecastCard.
+  const usedCommunityData = event.forecast_bayesian_prior_src === "platform";
+
   return (
     <div className="leading-tight">
-      {low !== null && high !== null ? (
-        <div className="tabular-nums">
-          {formatDollars(low)}–{formatDollars(high)}
-        </div>
-      ) : (
-        <div className="tabular-nums">
-          {formatDollars(
-            event.forecast_bayesian_point ?? forecast?.forecast ?? event.forecast_sales ?? 0
-          )}
-        </div>
-      )}
+      <div className="flex items-center justify-end gap-1.5">
+        {low !== null && high !== null ? (
+          <div className="tabular-nums">
+            {formatDollars(low)}–{formatDollars(high)}
+          </div>
+        ) : (
+          <div className="tabular-nums">
+            {formatDollars(
+              event.forecast_bayesian_point ?? forecast?.forecast ?? event.forecast_sales ?? 0
+            )}
+          </div>
+        )}
+        {usedCommunityData && (
+          <Tooltip>
+            <TooltipTrigger
+              render={
+                <span
+                  className="inline-flex h-4 w-4 items-center justify-center rounded-full bg-brand-teal/10 text-brand-teal"
+                  data-testid="forecast-inline-community-badge"
+                  aria-label="Tightened with community data"
+                >
+                  <Users className="h-2.5 w-2.5" aria-hidden />
+                </span>
+              }
+            />
+            <TooltipContent side="left" className="max-w-[220px] text-xs">
+              Tightened with community data — other operators&apos; history
+              at this event narrowed your range. Their identities stay private.
+            </TooltipContent>
+          </Tooltip>
+        )}
+      </div>
     </div>
   );
 }
