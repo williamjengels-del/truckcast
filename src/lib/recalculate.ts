@@ -198,11 +198,33 @@ async function recalculateForUserUnlocked(
   // Fetch platform event data for booked upcoming event names (for Level 0 blending)
   const bookedUpcoming = allEvents.filter((e) => e.event_date >= today && e.booked);
   const upcomingNames = [...new Set(bookedUpcoming.map((e) => e.event_name))];
+  // Phase 2 cross-op address canonicalization: pass the cell_id
+  // for each unique event_name so the platform-prior aggregate unions
+  // name-matched + cell-matched rows (same venue under different names
+  // now counts). When two of the operator's events share a name but
+  // have different cell_ids, we pick one representative cell — the
+  // engine's per-event lookup still keys by name, and the union of all
+  // sharing operators' rows in EITHER axis is what defeats the
+  // missed-overlap case. For names where the operator has multiple
+  // cells, we union all of them by passing the array; for names with a
+  // single cell, that's the cell sent.
+  //
+  // Implementation note: cellIds aligned by index with upcomingNames.
+  // Pick the first non-null cell_id per unique name from bookedUpcoming.
+  const cellByName = new Map<string, string | null>();
+  for (const e of bookedUpcoming) {
+    const existing = cellByName.get(e.event_name);
+    if (!existing && e.cell_id) {
+      cellByName.set(e.event_name, e.cell_id);
+    }
+  }
+  const upcomingCells = upcomingNames.map((n) => cellByName.get(n) ?? null);
   // Self-excluding aggregate (operator-notes Q2): the engine's blend
   // shouldn't regress toward this operator's own mean.
   const platformMap = await getPlatformEventsExcludingUser(
     upcomingNames,
-    userId
+    userId,
+    upcomingCells
   ).catch(() => new Map<string, import("@/lib/database.types").PlatformEvent>());
 
   // Recalculate forecasts for ALL future events — booked AND unbooked.
