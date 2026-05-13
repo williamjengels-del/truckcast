@@ -63,6 +63,12 @@ export default function OnboardingPage() {
     state: "",
     timezone: "America/Chicago",
   });
+  // Tracks the state value we auto-filled from the browser timezone so
+  // we can show a "detected — verify" hint until the operator either
+  // confirms (saves) or overrides. Operators on VPN / traveling can
+  // otherwise miss that the State select was guessed for them and
+  // silently submit the wrong state.
+  const [autofilledState, setAutofilledState] = useState<string | null>(null);
   const router = useRouter();
   const supabase = createClient();
 
@@ -126,18 +132,25 @@ export default function OnboardingPage() {
       const guessedState = guessStateFromTimezone(detectedTimezone);
 
       if (data) {
+        const resolvedState = data.state ?? guessedState ?? "";
         setProfile({
           business_name: data.business_name ?? "",
           city: data.city ?? "",
-          state: data.state ?? guessedState ?? "",
+          state: resolvedState,
           timezone: data.timezone ?? detectedTimezone ?? "America/Chicago",
         });
+        // Only flag as autofilled when there was no saved state on the
+        // profile (the guess is what's being shown).
+        if (!data.state && guessedState) {
+          setAutofilledState(guessedState);
+        }
       } else {
         setProfile((prev) => ({
           ...prev,
           state: guessedState ?? prev.state,
           timezone: detectedTimezone ?? prev.timezone,
         }));
+        if (guessedState) setAutofilledState(guessedState);
       }
     }
     loadProfile();
@@ -323,9 +336,13 @@ export default function OnboardingPage() {
                 <Label htmlFor="state">State</Label>
                 <Select
                   value={profile.state}
-                  onValueChange={(val) =>
-                    setProfile({ ...profile, state: val ?? "" })
-                  }
+                  onValueChange={(val) => {
+                    setProfile({ ...profile, state: val ?? "" });
+                    // Operator engaged with the field — drop the
+                    // detected hint regardless of which value they
+                    // picked (including re-selecting the guess).
+                    if (autofilledState) setAutofilledState(null);
+                  }}
                 >
                   <SelectTrigger>
                     <SelectValue placeholder="Select state" />
@@ -338,6 +355,11 @@ export default function OnboardingPage() {
                     ))}
                   </SelectContent>
                 </Select>
+                {autofilledState && profile.state === autofilledState && (
+                  <p className="text-xs text-muted-foreground">
+                    Detected from your timezone — please verify.
+                  </p>
+                )}
               </div>
             </div>
             <div className="space-y-2">
