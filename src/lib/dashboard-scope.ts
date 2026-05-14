@@ -68,6 +68,13 @@ export type DashboardScope =
       // performance data. Operations access (events, inquiries,
       // calendar, contacts, notes) is independent of this flag.
       financialsEnabled: boolean;
+      // Owner-controlled per-manager Prep access. Off by default.
+      // When false, the manager doesn't see the /dashboard/prep page
+      // or the Prep nav item, and RLS rejects their reads/writes on
+      // prep_items. Lets an owner grant kitchen-checklist access to
+      // a kitchen manager without granting booking access (or vice
+      // versa). Separate axis from financialsEnabled.
+      prepAccess: boolean;
     }
   | {
       kind: "impersonating";
@@ -89,6 +96,16 @@ export type DashboardScope =
  */
 export function canSeeFinancials(scope: DashboardScope): boolean {
   if (scope.kind === "manager") return scope.financialsEnabled;
+  return scope.kind === "normal" || scope.kind === "impersonating";
+}
+
+/**
+ * Can the current viewer see + edit the Prep checklists? Owners +
+ * impersonating admins always can. Managers only when their owner
+ * has flipped prep_access on for them specifically.
+ */
+export function canAccessPrep(scope: DashboardScope): boolean {
+  if (scope.kind === "manager") return scope.prepAccess;
   return scope.kind === "normal" || scope.kind === "impersonating";
 }
 
@@ -159,14 +176,16 @@ export async function resolveScopedSupabase(): Promise<DashboardScope> {
     // out of view if we can't verify the grant.
     const { data: membership } = await rlsClient
       .from("team_members")
-      .select("financials_enabled")
+      .select("financials_enabled, prep_access")
       .eq("member_user_id", user.id)
       .eq("owner_user_id", ownerId)
       .eq("status", "active")
       .maybeSingle();
-    const financialsEnabled =
-      (membership as { financials_enabled: boolean | null } | null)
-        ?.financials_enabled === true;
+    const m = membership as
+      | { financials_enabled: boolean | null; prep_access: boolean | null }
+      | null;
+    const financialsEnabled = m?.financials_enabled === true;
+    const prepAccess = m?.prep_access === true;
     return {
       kind: "manager",
       userId: ownerId,
@@ -174,6 +193,7 @@ export async function resolveScopedSupabase(): Promise<DashboardScope> {
       client: rlsClient,
       isImpersonating: false,
       financialsEnabled,
+      prepAccess,
     };
   }
 

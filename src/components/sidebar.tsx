@@ -31,6 +31,7 @@ export function Sidebar() {
   const [unloggedCount, setUnloggedCount] = useState(0);
   const [openInquiryCount, setOpenInquiryCount] = useState(0);
   const [isManager, setIsManager] = useState(false);
+  const [prepAccess, setPrepAccess] = useState(false);
 
   useEffect(() => {
     async function load() {
@@ -42,11 +43,13 @@ export function Sidebar() {
           is_manager: boolean;
           unlogged_count: number;
           open_inquiry_count?: number;
+          prep_access?: boolean;
         };
         setTier(data.subscription_tier);
         setIsManager(data.is_manager);
         setUnloggedCount(data.unlogged_count);
         setOpenInquiryCount(data.open_inquiry_count ?? 0);
+        setPrepAccess(data.prep_access ?? false);
       } catch {
         // Non-fatal — sidebar renders with default state. A real
         // network outage surfaces elsewhere in the UI.
@@ -93,7 +96,21 @@ export function Sidebar() {
       <nav className="flex-1 px-3 py-4 space-y-1">
         {navItems
           .filter((item) => {
-            if (isManager) return ["/dashboard", "/dashboard/events", "/dashboard/inbox", "/dashboard/settings"].includes(item.href);
+            // Prep entry: visible if the API says prep_access is true
+            // (owner / impersonating admin / manager-with-grant). The
+            // manager allow-list below already excludes /dashboard/prep
+            // by default; this branch lets a granted manager see it.
+            if (item.requiresPrepAccess && !prepAccess) return false;
+            if (isManager) {
+              const managerAllow = [
+                "/dashboard",
+                "/dashboard/events",
+                "/dashboard/inbox",
+                "/dashboard/settings",
+              ];
+              if (item.requiresPrepAccess && prepAccess) return true;
+              return managerAllow.includes(item.href);
+            }
             return !item.tier || item.tier === tier;
           })
           .map((item) => {

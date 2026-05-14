@@ -1054,6 +1054,7 @@ interface TeamMemberRow {
   member_email: string;
   status: "pending" | "active";
   financials_enabled: boolean;
+  prep_access: boolean;
 }
 
 function ManagerInviteCard({ profile }: { profile: Profile | null }) {
@@ -1061,6 +1062,7 @@ function ManagerInviteCard({ profile }: { profile: Profile | null }) {
   const [loading, setLoading] = useState(true);
   const [email, setEmail] = useState("");
   const [financialsEnabled, setFinancialsEnabled] = useState(false);
+  const [prepAccess, setPrepAccess] = useState(false);
   const [inviting, setInviting] = useState(false);
   const [revoking, setRevoking] = useState<string | null>(null);
   const [resending, setResending] = useState<string | null>(null);
@@ -1085,29 +1087,35 @@ function ManagerInviteCard({ profile }: { profile: Profile | null }) {
     setLoading(false);
   }
 
-  // Toggle the Financials flag on a member. Optimistic UI flips the
-  // local row immediately so the checkbox feels instant; on server
-  // failure we revert and surface the error.
-  async function toggleFinancials(memberId: string, next: boolean) {
+  // Toggle a single permission flag on a member with optimistic UI:
+  // flip the local row immediately so the checkbox feels instant; on
+  // server failure revert and surface the error. `permKey` matches
+  // both the API body field and the TeamMemberRow column ("financials_enabled"
+  // or "prep_access").
+  async function togglePermission(
+    memberId: string,
+    permKey: "financials_enabled" | "prep_access",
+    next: boolean
+  ) {
     setPermissionSaving((prev) => {
       const s = new Set(prev);
       s.add(memberId);
       return s;
     });
     setMembers((prev) =>
-      prev.map((m) => (m.id === memberId ? { ...m, financials_enabled: next } : m))
+      prev.map((m) => (m.id === memberId ? { ...m, [permKey]: next } : m))
     );
     try {
       const res = await fetch("/api/team/invite", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ memberId, financials_enabled: next }),
+        body: JSON.stringify({ memberId, [permKey]: next }),
       });
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
         setMembers((prev) =>
           prev.map((m) =>
-            m.id === memberId ? { ...m, financials_enabled: !next } : m
+            m.id === memberId ? { ...m, [permKey]: !next } : m
           )
         );
         setError(body.error ?? "Failed to update permission");
@@ -1115,7 +1123,7 @@ function ManagerInviteCard({ profile }: { profile: Profile | null }) {
     } catch (e) {
       setMembers((prev) =>
         prev.map((m) =>
-          m.id === memberId ? { ...m, financials_enabled: !next } : m
+          m.id === memberId ? { ...m, [permKey]: !next } : m
         )
       );
       setError(e instanceof Error ? e.message : "Network error");
@@ -1139,7 +1147,11 @@ function ManagerInviteCard({ profile }: { profile: Profile | null }) {
     const res = await fetch("/api/team/invite", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email: email.trim(), financials_enabled: financialsEnabled }),
+      body: JSON.stringify({
+        email: email.trim(),
+        financials_enabled: financialsEnabled,
+        prep_access: prepAccess,
+      }),
     });
     const data = await res.json();
     if (!res.ok) {
@@ -1278,7 +1290,11 @@ function ManagerInviteCard({ profile }: { profile: Profile | null }) {
                           checked={!!m.financials_enabled}
                           disabled={permissionSaving.has(m.id)}
                           onCheckedChange={(checked) =>
-                            toggleFinancials(m.id, checked === true)
+                            togglePermission(
+                              m.id,
+                              "financials_enabled",
+                              checked === true
+                            )
                           }
                           className="mt-0.5"
                         />
@@ -1286,6 +1302,33 @@ function ManagerInviteCard({ profile }: { profile: Profile | null }) {
                           <span className="block">Financials access</span>
                           <span className="block text-muted-foreground">
                             Revenue, forecasts, and post-event sales entry. Off by default.
+                          </span>
+                        </span>
+                      </Label>
+                      {/* Prep access — separate axis from Financials.
+                          Kitchen manager gets this; booking manager
+                          may not. Off by default. */}
+                      <Label
+                        htmlFor={`prep-${m.id}`}
+                        className="flex items-start gap-2 text-xs font-normal cursor-pointer mt-2"
+                      >
+                        <Checkbox
+                          id={`prep-${m.id}`}
+                          checked={!!m.prep_access}
+                          disabled={permissionSaving.has(m.id)}
+                          onCheckedChange={(checked) =>
+                            togglePermission(
+                              m.id,
+                              "prep_access",
+                              checked === true
+                            )
+                          }
+                          className="mt-0.5"
+                        />
+                        <span className="space-y-0.5">
+                          <span className="block">Prep access</span>
+                          <span className="block text-muted-foreground">
+                            Kitchen checklists — what&apos;s on hand, to prep, to get. Off by default.
                           </span>
                         </span>
                       </Label>
@@ -1325,6 +1368,20 @@ function ManagerInviteCard({ profile }: { profile: Profile | null }) {
                       <span className="block">Financials access</span>
                       <span className="block text-xs text-muted-foreground">
                         Revenue, forecasts, and post-event sales entry. Off by default — operations access (events, inquiries, calendar, notes) is always on.
+                      </span>
+                    </span>
+                  </label>
+                  <label className="flex items-start gap-2 text-sm cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={prepAccess}
+                      onChange={(e) => setPrepAccess(e.target.checked)}
+                      className="mt-0.5 rounded"
+                    />
+                    <span className="space-y-0.5">
+                      <span className="block">Prep access</span>
+                      <span className="block text-xs text-muted-foreground">
+                        Kitchen checklists — what&apos;s on hand, to prep, to get. Off by default.
                       </span>
                     </span>
                   </label>
