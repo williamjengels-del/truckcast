@@ -29,6 +29,19 @@ function getSecret(): string {
   return s;
 }
 
+/**
+ * Returns true iff the unsubscribe-token secret is set and long
+ * enough. Use this at the entry of routes / server components that
+ * want to distinguish "misconfigured server" from "invalid token" —
+ * `verifyUnsubscribeToken` collapses both into `false` deliberately
+ * (security: don't leak misconfig as a verify-success path), so
+ * callers that need the distinction must probe via this function.
+ */
+export function isUnsubscribeSecretConfigured(): boolean {
+  const s = process.env.UNSUBSCRIBE_TOKEN_SECRET;
+  return typeof s === "string" && s.length >= 32;
+}
+
 function tokenMessage(userId: string): string {
   return `unsubscribe:${userId}`;
 }

@@ -2,7 +2,10 @@ import type { Metadata } from "next";
 import Image from "next/image";
 import Link from "next/link";
 import { TruckIcon, CheckCircle2, XCircle } from "lucide-react";
-import { verifyUnsubscribeToken } from "@/lib/unsubscribe-token";
+import {
+  verifyUnsubscribeToken,
+  isUnsubscribeSecretConfigured,
+} from "@/lib/unsubscribe-token";
 import { UnsubscribeConfirmForm } from "./unsubscribe-confirm-form";
 
 export const metadata: Metadata = {
@@ -32,6 +35,16 @@ export default async function UnsubscribePage({
   const userId = params.u ?? "";
   const token = params.t ?? "";
   const done = params.done === "1";
+
+  // Log when the secret is missing/misconfigured. verifyUnsubscribeToken
+  // collapses both "secret missing" and "bad token" into `false` for
+  // security; without this server-log line, ops would have no signal
+  // that the env var is wrong (every user just sees "invalid link").
+  // The user-facing UX stays the same — they can opt out via the
+  // logged-in preferences toggle in the fallback link below.
+  if (!isUnsubscribeSecretConfigured()) {
+    console.error("[unsubscribe] UNSUBSCRIBE_TOKEN_SECRET missing or too short");
+  }
 
   const tokenValid = verifyUnsubscribeToken(userId, token);
 

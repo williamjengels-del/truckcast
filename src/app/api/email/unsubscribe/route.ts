@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient as createServiceClient } from "@supabase/supabase-js";
-import { verifyUnsubscribeToken } from "@/lib/unsubscribe-token";
+import {
+  verifyUnsubscribeToken,
+  isUnsubscribeSecretConfigured,
+} from "@/lib/unsubscribe-token";
 
 // POST /api/email/unsubscribe
 //
@@ -35,22 +38,25 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Re-verify the token server-side — don't trust the page-load
-    // check. UNSUBSCRIBE_TOKEN_SECRET being absent / misconfigured
-    // surfaces as 500 here (not a silent 401 that would let valid
-    // tokens fail).
-    let valid: boolean;
-    try {
-      valid = verifyUnsubscribeToken(userId, token);
-    } catch {
-      console.error("[unsubscribe] UNSUBSCRIBE_TOKEN_SECRET misconfigured");
+    // Probe secret config before verifying. verifyUnsubscribeToken
+    // intentionally collapses "secret missing" into a `false` return
+    // (security: don't leak misconfig as a verify-success path).
+    // That means without this explicit probe, a misconfigured server
+    // returns 401 "Invalid or expired link" for every request — which
+    // gives ops no signal to chase the actual root cause. Surface
+    // misconfig as 503 instead.
+    if (!isUnsubscribeSecretConfigured()) {
+      console.error("[unsubscribe] UNSUBSCRIBE_TOKEN_SECRET missing or too short");
       return NextResponse.json(
         { error: "Server misconfigured" },
         { status: 503 }
       );
     }
 
-    if (!valid) {
+    // Re-verify the token server-side — don't trust the page-load
+    // check. With secret confirmed configured above, a `false` here
+    // means the token genuinely doesn't match this userId.
+    if (!verifyUnsubscribeToken(userId, token)) {
       return NextResponse.json(
         { error: "Invalid or expired link" },
         { status: 401 }

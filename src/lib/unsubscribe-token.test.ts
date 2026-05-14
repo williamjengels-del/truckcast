@@ -11,6 +11,7 @@ import {
   signUnsubscribeToken,
   verifyUnsubscribeToken,
   buildUnsubscribeUrl,
+  isUnsubscribeSecretConfigured,
 } from "./unsubscribe-token";
 
 const TEST_SECRET = "a".repeat(64); // 512 bits, deterministic
@@ -110,5 +111,41 @@ describe("buildUnsubscribeUrl", () => {
     const url = buildUnsubscribeUrl(USER_A);
     const tokenPart = url.split("&t=")[1];
     expect(verifyUnsubscribeToken(USER_A, tokenPart)).toBe(true);
+  });
+});
+
+describe("isUnsubscribeSecretConfigured", () => {
+  it("returns true when secret is set and long enough", () => {
+    expect(isUnsubscribeSecretConfigured()).toBe(true);
+  });
+
+  it("returns false when secret is missing", () => {
+    const saved = process.env.UNSUBSCRIBE_TOKEN_SECRET;
+    delete process.env.UNSUBSCRIBE_TOKEN_SECRET;
+    try {
+      expect(isUnsubscribeSecretConfigured()).toBe(false);
+    } finally {
+      process.env.UNSUBSCRIBE_TOKEN_SECRET = saved;
+    }
+  });
+
+  it("returns false when secret is too short", () => {
+    const saved = process.env.UNSUBSCRIBE_TOKEN_SECRET;
+    process.env.UNSUBSCRIBE_TOKEN_SECRET = "shorty";
+    try {
+      expect(isUnsubscribeSecretConfigured()).toBe(false);
+    } finally {
+      process.env.UNSUBSCRIBE_TOKEN_SECRET = saved;
+    }
+  });
+
+  it("returns true at exactly 32 chars (boundary)", () => {
+    const saved = process.env.UNSUBSCRIBE_TOKEN_SECRET;
+    process.env.UNSUBSCRIBE_TOKEN_SECRET = "x".repeat(32);
+    try {
+      expect(isUnsubscribeSecretConfigured()).toBe(true);
+    } finally {
+      process.env.UNSUBSCRIBE_TOKEN_SECRET = saved;
+    }
   });
 });
