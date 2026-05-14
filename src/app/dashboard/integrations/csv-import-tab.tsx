@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import {
   buildImportTemplateCsv,
+  computeCsvRowSignature,
   matchFeeType,
   matchHeader,
   parseCSV,
@@ -404,11 +405,25 @@ export function CsvImportTab() {
       }
     }
 
-    const insertData = rowsToInsert.map((r) => {
+    const insertData = await Promise.all(rowsToInsert.map(async (r) => {
       // Resolve event_mode first — downstream defaults (fee_type below)
       // depend on knowing whether the row lands as catering.
       const resolvedMode: "food_truck" | "catering" =
         (r.event_mode ?? batchDefaultMode) === "catering" ? "catering" : "food_truck";
+      // Per-row signature for csv-2 silent-duplicate prevention
+      // (migration 20260515000001). Same CSV row content hashes to
+      // the same signature; UNIQUE(user_id, source_row_signature)
+      // catches re-imports without breaking legitimate same-day pairs
+      // (since those carry different content). Manual entries get
+      // null signature via the create-event form path.
+      const signature = await computeCsvRowSignature({
+        event_name: r.event_name,
+        event_date: r.event_date,
+        net_sales: r.net_sales ?? null,
+        location: r.location ?? null,
+        city: r.city ?? null,
+        state: r.state ?? batchDefaultState ?? null,
+      });
       // fee_type default per mode: catering rows are almost always
       // pre-settled (operator is invoiced up-front, no walk-up sales to
       // settle), so when the CSV doesn't provide a fee_type we seed
@@ -450,8 +465,14 @@ export function CsvImportTab() {
         ...(r.food_cost !== undefined ? { food_cost: r.food_cost } : {}),
         ...(r.labor_cost !== undefined ? { labor_cost: r.labor_cost } : {}),
         ...(r.other_costs !== undefined ? { other_costs: r.other_costs } : {}),
+        // csv-2 (2026-05-15 migration). Re-imports of the same row
+        // hit the partial unique index and surface as a 23505 error
+        // in the row-by-row fallback below; we humanize that into
+        // an "already imported" message instead of a generic DB
+        // error so the operator knows the row was protected.
+        source_row_signature: signature,
       };
-    });
+    }));
 
     if (insertData.length === 0) {
       setImportError(`Nothing to insert — rowsToInsert was empty. Valid rows: ${validRows.length}, duplicates: ${resolvedDuplicates.length}, actions: ${resolvedDuplicates.map(d => d.action).join(",").slice(0, 100)}`);
@@ -475,17 +496,35 @@ export function CsvImportTab() {
       if (error) {
         // Batch failed — fall back to row-by-row so one bad row doesn't kill the whole batch
         let rowsInsertedInBatch = 0;
+        let alreadyImportedInBatch = 0;
         for (let j = 0; j < batch.length; j++) {
           const { error: rowError } = await supabase.from("events").insert(batch[j]);
           if (rowError) {
             const rowNum = i + j + 1;
             const eventName = (batch[j] as { event_name: string }).event_name ?? `row ${rowNum}`;
-            errors.push(`Row ${rowNum} "${eventName}": ${rowError.message}`);
+            // csv-2: 23505 = unique violation. With the partial
+            // (user_id, source_row_signature) index from migration
+            // 20260515000001, this fires when the operator re-imports
+            // a CSV row that's already in the DB. Surface as a clean
+            // "already imported" signal rather than a generic DB
+            // error — operator's intent in the re-import was almost
+            // certainly accidental, and the protection is the value.
+            const code = (rowError as { code?: string }).code;
+            if (code === "23505") {
+              alreadyImportedInBatch++;
+            } else {
+              errors.push(`Row ${rowNum} "${eventName}": ${rowError.message}`);
+            }
           } else {
             rowsInsertedInBatch++;
           }
         }
         totalInserted += rowsInsertedInBatch;
+        if (alreadyImportedInBatch > 0) {
+          errors.push(
+            `${alreadyImportedInBatch} row${alreadyImportedInBatch === 1 ? "" : "s"} already imported (skipped to prevent duplicates)`
+          );
+        }
       } else {
         totalInserted += batch.length;
       }

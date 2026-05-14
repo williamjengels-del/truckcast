@@ -4,6 +4,7 @@ import { getAdminUser } from "@/lib/admin";
 import { logAdminAction } from "@/lib/admin-audit";
 import { recalculateForUserWithClient } from "@/lib/recalculate-service";
 import {
+  computeCsvRowSignature,
   matchFeeType,
   parseCSV,
   parseWithMapping,
@@ -200,10 +201,20 @@ export async function POST(req: NextRequest) {
   // a hard-coded "food_truck" fallback; this lets an admin flip it to
   // "catering" for predominantly-catering historical imports.
   const batchDefaultMode = body.defaultMode ?? null;
-  const insertData = rowsToInsert.map((r) => {
+  const insertData = await Promise.all(rowsToInsert.map(async (r) => {
     // Resolve event_mode first — fee_type default below depends on it.
     const resolvedMode: "food_truck" | "catering" =
       (r.event_mode ?? batchDefaultMode) === "catering" ? "catering" : "food_truck";
+    // Per-row signature for csv-2 silent-duplicate prevention
+    // (migration 20260515000001). Mirrors the self-serve path.
+    const signature = await computeCsvRowSignature({
+      event_name: r.event_name,
+      event_date: r.event_date,
+      net_sales: r.net_sales ?? null,
+      location: r.location ?? null,
+      city: r.city ?? null,
+      state: r.state ?? batchDefaultState ?? null,
+    });
     // Catering rows are almost always pre-settled (operator invoiced
     // up-front, no walk-up sales to settle). When the CSV doesn't
     // provide a fee_type, seed "pre_settled" for catering, "none"
@@ -243,11 +254,15 @@ export async function POST(req: NextRequest) {
     ...(r.food_cost !== undefined ? { food_cost: r.food_cost } : {}),
     ...(r.labor_cost !== undefined ? { labor_cost: r.labor_cost } : {}),
     ...(r.other_costs !== undefined ? { other_costs: r.other_costs } : {}),
+    // csv-2 signature — re-imports of the same CSV row hit the
+    // partial UNIQUE index from migration 20260515000001.
+    source_row_signature: signature,
     };
-  });
+  }));
 
   const BATCH_SIZE = 50;
   let inserted = 0;
+  let alreadyImported = 0;
   const errors: InsertError[] = [];
 
   for (let i = 0; i < insertData.length; i += BATCH_SIZE) {
@@ -261,11 +276,21 @@ export async function POST(req: NextRequest) {
           .from("events")
           .insert(batch[j]);
         if (rowError) {
-          errors.push({
-            row: i + j + 1,
-            event_name: batch[j].event_name,
-            message: rowError.message,
-          });
+          // csv-2: 23505 = unique violation on
+          // (user_id, source_row_signature). Surface as "already
+          // imported" rather than a generic DB error — the partial
+          // UNIQUE index is doing its job protecting the operator
+          // from a silent duplicate.
+          const code = (rowError as { code?: string }).code;
+          if (code === "23505") {
+            alreadyImported++;
+          } else {
+            errors.push({
+              row: i + j + 1,
+              event_name: batch[j].event_name,
+              message: rowError.message,
+            });
+          }
         } else {
           inserted++;
         }
@@ -300,6 +325,7 @@ export async function POST(req: NextRequest) {
       metadata: {
         inserted,
         skipped_duplicates: skippedDuplicates,
+        already_imported_via_signature: alreadyImported,
         replaced: replaceIds.length,
         errors_count: errors.length,
         invalid_rows: parsed.length - validRows.length,
@@ -312,6 +338,7 @@ export async function POST(req: NextRequest) {
   return NextResponse.json({
     inserted,
     skipped_duplicates: skippedDuplicates,
+    already_imported_via_signature: alreadyImported,
     replaced: replaceIds.length,
     invalid_rows: parsed.length - validRows.length,
     total_rows: parsed.length,
