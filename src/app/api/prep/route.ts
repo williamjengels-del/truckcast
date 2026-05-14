@@ -26,9 +26,9 @@ function isSection(v: unknown): v is Section {
 }
 
 // GET — return all items for the current dashboard scope, grouped by
-// section client-side. Order: open items first (by created_at desc),
-// then done items (by done_at desc). Single payload keeps the page
-// load to one round-trip.
+// section client-side. Order: open items first (`done` ascending puts
+// false before true), newest-created first within each group. Single
+// payload keeps the page load to one round-trip.
 export async function GET() {
   const scope = await resolveScopedSupabase();
   if (scope.kind === "unauthorized") {
@@ -157,10 +157,17 @@ export async function PATCH(request: Request) {
     .select(
       "id, section, text, done, created_at, updated_at, done_at, created_by, done_by"
     )
-    .single();
+    .maybeSingle();
 
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });
+  }
+  // .maybeSingle() returns null when the row doesn't exist or doesn't
+  // match the user_id scope (vs .single() which would return a
+  // PGRST116 error in that case). Surface as 404 so the client can
+  // distinguish missing vs. genuine server error.
+  if (!data) {
+    return NextResponse.json({ error: "Item not found" }, { status: 404 });
   }
 
   return NextResponse.json({ item: data });

@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Trash2, Plus } from "lucide-react";
+import { Trash2, Plus, X } from "lucide-react";
 
 // /dashboard/prep
 //
@@ -69,7 +69,14 @@ export default function PrepPage() {
   const { effectiveUserId } = useImpersonation();
   const [items, setItems] = useState<PrepItem[]>([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  // Split error state. `loadError` is fatal (replaces the page; user
+  // sees a retry button). `actionError` is a single failed mutation
+  // (renders inline above the lists, dismissible). Without the split,
+  // one failed Add/Toggle/Delete click would replace the whole page
+  // with an error screen and the operator would lose their lists from
+  // a transient network hiccup.
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
   const [showDone, setShowDone] = useState(false);
 
   // Initial + post-mutation list reload. Inline async closure inside
@@ -77,19 +84,19 @@ export default function PrepPage() {
   // setState inside the awaited promise is not considered "set-state
   // synchronously in effect," so the lint rule is satisfied.
   async function load() {
-    setError(null);
+    setLoadError(null);
     try {
       const res = await fetch("/api/prep");
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
-        setError(body.error ?? `Failed to load (HTTP ${res.status})`);
+        setLoadError(body.error ?? `Failed to load (HTTP ${res.status})`);
         setLoading(false);
         return;
       }
       const data = (await res.json()) as { items: PrepItem[] };
       setItems(data.items);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Network error");
+      setLoadError(e instanceof Error ? e.message : "Network error");
     }
     setLoading(false);
   }
@@ -110,15 +117,25 @@ export default function PrepPage() {
     );
   }
 
-  if (error) {
+  if (loadError) {
     return (
       <div className="space-y-4">
         <div>
           <h1 className="text-2xl font-bold">Prep</h1>
         </div>
         <Card>
-          <CardContent className="py-6">
-            <p className="text-sm text-destructive">{error}</p>
+          <CardContent className="py-6 space-y-3">
+            <p className="text-sm text-destructive">{loadError}</p>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => {
+                setLoading(true);
+                load();
+              }}
+            >
+              Try again
+            </Button>
           </CardContent>
         </Card>
       </div>
@@ -143,6 +160,20 @@ export default function PrepPage() {
         </label>
       </div>
 
+      {actionError && (
+        <div className="rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm text-destructive flex items-start gap-2">
+          <span className="flex-1">{actionError}</span>
+          <button
+            type="button"
+            onClick={() => setActionError(null)}
+            aria-label="Dismiss"
+            className="text-destructive/70 hover:text-destructive"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+      )}
+
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         {SECTIONS.map((s) => (
           <SectionCard
@@ -151,7 +182,7 @@ export default function PrepPage() {
             items={items.filter((i) => i.section === s.key)}
             showDone={showDone}
             onChange={load}
-            onError={setError}
+            onError={setActionError}
           />
         ))}
       </div>
