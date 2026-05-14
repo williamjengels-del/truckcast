@@ -10,6 +10,7 @@
  */
 
 import { Resend } from "resend";
+import { buildUnsubscribeUrl } from "./unsubscribe-token";
 
 function getResend() {
   return new Resend(process.env.RESEND_API_KEY!);
@@ -29,32 +30,52 @@ const APP_URL = "https://vendcast.co";
 // inquiry confirmations, manager invites, login security alerts, MFA-disabled
 // notifications) are exempt and don't get the footer.
 //
-// The unsubscribe link deep-links to /dashboard/settings?tab=notifications
-// where the existing `email_reminders_enabled` toggle lives. Operators flip
-// it off; that boolean is read by cron senders to skip future emails.
-// CAN-SPAM requires unsubscribe to take effect within 10 business days;
-// instant-via-toggle exceeds that bar.
-//
-// Sender mailing address: VendCast is a personal LLC without a public office
-// address. We list the company name + support email, which satisfies sender
-// identification. If a public mailing address becomes available later, drop
-// it into ADDRESS_LINE.
+// Unsubscribe path:
+//   - When `userId` is provided, embed a per-user HMAC-signed tokenized
+//     link to /unsubscribe?u=<id>&t=<token>. One click → confirmation
+//     page → flips `email_reminders_enabled` to false WITHOUT login.
+//     This is the CAN-SPAM-compliant path: the recipient must be able
+//     to opt out without auth.
+//   - When `userId` is absent (defensive fallback), link to the
+//     /dashboard/settings?tab=notifications toggle. Borderline non-
+//     compliant since it requires login — every marketing call site
+//     should pass userId.
 const SENDER_NAME = "VendCast";
 const SENDER_EMAIL = "support@vendcast.co";
 const ADDRESS_LINE = ""; // populate when a public mailing address exists
 
-function marketingEmailFooterHtml(): string {
+function marketingEmailFooterHtml(userId?: string): string {
   const addressBlock = ADDRESS_LINE
     ? `<div style="margin-bottom: 4px;">${ADDRESS_LINE}</div>`
     : "";
+
+  // Prefer the tokenized one-click path. Token generation requires the
+  // UNSUBSCRIBE_TOKEN_SECRET env var; if that's misconfigured we'd
+  // rather degrade to the login-required link than throw inside a
+  // cron / email send and abort the whole batch.
+  let unsubscribeHref: string;
+  let unsubscribeLabel: string;
+  if (userId) {
+    try {
+      unsubscribeHref = buildUnsubscribeUrl(userId, APP_URL);
+      unsubscribeLabel = "Unsubscribe";
+    } catch {
+      unsubscribeHref = `${APP_URL}/dashboard/settings?tab=notifications`;
+      unsubscribeLabel = "Manage email preferences";
+    }
+  } else {
+    unsubscribeHref = `${APP_URL}/dashboard/settings?tab=notifications`;
+    unsubscribeLabel = "Manage email preferences";
+  }
+
   return `
     <div style="margin-top: 32px; padding-top: 16px; border-top: 1px solid #e2e8f0; color: #94a3b8; font-size: 11px; line-height: 1.5;">
       <div style="margin-bottom: 4px;"><strong>${SENDER_NAME}</strong> &middot; <a href="mailto:${SENDER_EMAIL}" style="color: #94a3b8;">${SENDER_EMAIL}</a></div>
       ${addressBlock}
       <div style="margin-top: 6px;">
         You&rsquo;re receiving this because you have a VendCast account.
-        <a href="${APP_URL}/dashboard/settings?tab=notifications" style="color: #0d4f5c;">Manage email preferences</a>
-        to opt out.
+        <a href="${unsubscribeHref}" style="color: #0d4f5c;">${unsubscribeLabel}</a>
+        to opt out of marketing emails.
       </div>
     </div>
   `;
@@ -62,7 +83,11 @@ function marketingEmailFooterHtml(): string {
 
 // ─── Welcome Email ─────────────────────────────────────────────────────────
 
-export async function sendWelcomeEmail(to: string, businessName: string) {
+export async function sendWelcomeEmail(
+  to: string,
+  businessName: string,
+  userId?: string
+) {
   if (!process.env.RESEND_API_KEY) return;
 
   const resend = getResend();
@@ -127,7 +152,7 @@ export async function sendWelcomeEmail(to: string, businessName: string) {
       </p>
     </div>
 
-    ${marketingEmailFooterHtml()}
+    ${marketingEmailFooterHtml(userId)}
   </div>
 </body>
 </html>
@@ -214,7 +239,8 @@ export interface UnloggedEvent {
 export async function sendSalesReminderEmail(
   to: string,
   businessName: string,
-  events: UnloggedEvent[]
+  events: UnloggedEvent[],
+  userId?: string
 ) {
   if (!process.env.RESEND_API_KEY) return;
   const resend = getResend();
@@ -280,7 +306,7 @@ export async function sendSalesReminderEmail(
       </p>
     </div>
     <div style="padding:20px 40px;border-top:1px solid #f3f4f6;">
-      ${marketingEmailFooterHtml()}
+      ${marketingEmailFooterHtml(userId)}
     </div>
   </div>
 </body>
@@ -600,7 +626,7 @@ export async function sendInquiryNotificationEmail(
  * Sent ~24h after signup if the user hasn't completed onboarding.
  * Goal: bring them back to the setup wizard with a low-pressure reminder.
  */
-export async function sendOnboardingNudgeEmail(to: string) {
+export async function sendOnboardingNudgeEmail(to: string, userId?: string) {
   if (!process.env.RESEND_API_KEY) return;
   const resend = getResend();
 
@@ -653,7 +679,7 @@ export async function sendOnboardingNudgeEmail(to: string) {
       </p>
     </div>
 
-    ${marketingEmailFooterHtml()}
+    ${marketingEmailFooterHtml(userId)}
   </div>
 </body>
 </html>
@@ -666,7 +692,8 @@ export async function sendOnboardingNudgeEmail(to: string) {
 export async function sendTrialExpiryEmail(
   to: string,
   businessName: string,
-  daysLeft: number
+  daysLeft: number,
+  userId?: string
 ) {
   if (!process.env.RESEND_API_KEY) return;
   const resend = getResend();
@@ -705,7 +732,7 @@ export async function sendTrialExpiryEmail(
       </p>
     </div>
     <div style="padding:20px 40px;border-top:1px solid #f3f4f6;">
-      ${marketingEmailFooterHtml()}
+      ${marketingEmailFooterHtml(userId)}
     </div>
   </div>
 </body>
@@ -724,7 +751,8 @@ export async function sendTrialExpiryEmail(
 export async function sendTrialExpiredEmail(
   to: string,
   businessName: string,
-  gracePeriodActive = false
+  gracePeriodActive = false,
+  userId?: string
 ) {
   if (!process.env.RESEND_API_KEY) return;
   const resend = getResend();
@@ -757,7 +785,7 @@ export async function sendTrialExpiredEmail(
       <p style="margin:24px 0 0;font-size:13px;color:#9ca3af;">Plans start at $19/month. Cancel anytime.</p>
     </div>
     <div style="padding:20px 40px;border-top:1px solid #f3f4f6;">
-      ${marketingEmailFooterHtml()}
+      ${marketingEmailFooterHtml(userId)}
     </div>
   </div>
 </body>
@@ -1028,6 +1056,10 @@ export async function sendMfaDisabledViaRecoveryEmail(
 
 export interface WeeklyDigestPayload {
   to: string;
+  /** Operator user_id — used to build the tokenized unsubscribe link
+   *  in the marketing footer. Cron senders should always provide this;
+   *  optional only because pre-CAN-SPAM-update call sites may not yet. */
+  userId?: string;
   businessName: string;
   weekRangeLabel: string;          // "April 28 – May 4"
   eventsRun: number;
@@ -1109,7 +1141,7 @@ export async function sendWeeklyDigestEmail(payload: WeeklyDigestPayload) {
 
     </div>
 
-    ${marketingEmailFooterHtml()}
+    ${marketingEmailFooterHtml(payload.userId)}
   </div>
 </body>
 </html>

@@ -235,6 +235,7 @@ export async function GET(req: NextRequest) {
     ? null
     : {
         to: email,
+        userId: targetUserId,
         businessName: profile.business_name ?? "",
         weekRangeLabel,
         eventsRun,

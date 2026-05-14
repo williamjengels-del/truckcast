@@ -17,7 +17,7 @@ export async function POST(req: NextRequest) {
     }
 
     const { businessName } = await req.json().catch(() => ({}));
-    await sendWelcomeEmail(user.email!, businessName ?? "");
+    await sendWelcomeEmail(user.email!, businessName ?? "", user.id);
 
     return NextResponse.json({ ok: true });
   } catch (err) {
