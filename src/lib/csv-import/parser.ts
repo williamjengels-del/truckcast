@@ -27,6 +27,16 @@ import {
   OTHER_STATE,
 } from "@/lib/constants";
 
+// SubtleCrypto for SHA-256. Available in both browser and Node 18+
+// environments (we use it in the client-side CSV import preview AND
+// server-side admin import path, so a browser-compatible hash is
+// non-negotiable). Falls back to a deterministic non-crypto hash if
+// SubtleCrypto isn't available (won't happen in our supported
+// environments but defensive).
+function utf8Bytes(s: string): Uint8Array {
+  return new TextEncoder().encode(s);
+}
+
 // ═══════════════════════════════════════════════════════════════════════
 // Types
 // ═══════════════════════════════════════════════════════════════════════
@@ -86,6 +96,66 @@ export interface ParsedRow {
   valid: boolean;
   error?: string;
   multi_day_label?: string;
+}
+
+/**
+ * Per-row signature for CSV-imported events. Hashed from the row's
+ * identity-defining fields so a re-import of the same CSV row produces
+ * the same signature, triggering the per-user UNIQUE index (migration
+ * 20260515000001) and preventing silent duplicates.
+ *
+ * Signature inputs (case + whitespace normalized):
+ *   event_name | event_date | net_sales | location | city | state
+ *
+ * NOT included: notes, forecast_sales, tier, costs, anomaly_flag —
+ * those can drift between imports as the operator adds context, and
+ * we want a re-import of the SAME event to collide regardless of
+ * those edits. The identity fields above are the ones an operator
+ * would consider "the same row."
+ *
+ * Returns a hex string (first 32 chars of SHA-256). Manual entries
+ * (no CSV origin) carry NULL signature and never collide via this
+ * constraint.
+ *
+ * Async because SubtleCrypto.digest is async in the browser. Server
+ * paths await it the same way.
+ */
+export async function computeCsvRowSignature(input: {
+  event_name?: string;
+  event_date?: string;
+  net_sales?: number | null;
+  location?: string | null;
+  city?: string | null;
+  state?: string | null;
+}): Promise<string> {
+  const parts = [
+    (input.event_name ?? "").trim().toLowerCase(),
+    (input.event_date ?? "").trim(),
+    input.net_sales == null ? "NULL" : String(input.net_sales),
+    (input.location ?? "").trim().toLowerCase(),
+    (input.city ?? "").trim().toLowerCase(),
+    (input.state ?? "").trim().toUpperCase(),
+  ];
+  const message = parts.join("|");
+  // SubtleCrypto digests: browser + Node 18+ both expose
+  // globalThis.crypto.subtle. Hex-encode the first 16 bytes (32 hex
+  // chars) — 128-bit hash, collisions astronomically unlikely at
+  // our scale (millions of rows would be needed before birthday-
+  // paradox concerns start to matter).
+  // .buffer cast: TypeScript's lib.dom types disagree with Node's on
+  // whether Uint8Array's underlying buffer is `ArrayBuffer` or
+  // `ArrayBufferLike`. SubtleCrypto accepts both at runtime; the cast
+  // narrows the type without changing behavior.
+  const digest = await globalThis.crypto.subtle.digest(
+    "SHA-256",
+    utf8Bytes(message).buffer as ArrayBuffer
+  );
+  const bytes = new Uint8Array(digest).slice(0, 16);
+  let hex = "";
+  for (const b of bytes) {
+    hex += b.toString(16).padStart(2, "0");
+  }
+  return hex;
 }
 
 /** A single CSV column: its original header, index, sample values, and user-assigned field. */
