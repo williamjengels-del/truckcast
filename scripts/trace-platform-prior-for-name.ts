@@ -73,13 +73,52 @@ async function main() {
   const sharingIds = new Set(sharingRows.map((u) => u.id));
   console.log("");
 
-  // Same query as platform-registry.ts:618-630.
+  // Resolve event_name through the alias system so we match rows
+  // stored under any alias form (e.g. "Fenton Food Truck Night" rolls
+  // up to canonical "Fenton Food Truck Nights"). Production
+  // getPlatformEventsExcludingUser does this via resolveAliases; the
+  // trace script previously did exact-name lookup and misled on
+  // alias-rich buckets (operator-notes v60 hand-off — flagged as
+  // "trace-script alias gap").
+  const normalizedInput = eventName.toLowerCase().trim();
+  const { data: aliasRows } = await supabase
+    .from("event_name_aliases")
+    .select("canonical_normalized, alias_normalized");
+  const aliasRecs = (aliasRows ?? []) as Array<{
+    canonical_normalized: string;
+    alias_normalized: string;
+  }>;
+  // Step 1: what canonical does our input map to?
+  const aliasToCanonical = new Map<string, string>();
+  for (const r of aliasRecs) aliasToCanonical.set(r.alias_normalized, r.canonical_normalized);
+  const canonical = aliasToCanonical.get(normalizedInput) ?? normalizedInput;
+  // Step 2: expand the canonical to ALL its alias forms (so the query
+  // captures every operator-typed variant rolling up to this bucket).
+  const allFormsSet = new Set<string>([canonical]);
+  for (const r of aliasRecs) {
+    if (r.canonical_normalized === canonical) allFormsSet.add(r.alias_normalized);
+  }
+  // Step 3: build a case-tolerant IN clause. event_name in the DB
+  // preserves operator casing; the alias table normalizes lower/trim.
+  // We need to match against ANY case variant — Postgres `ilike` with
+  // an OR list does this efficiently for small sets. For our typical
+  // 1-5 alias forms per canonical, a per-form `.or()` chain is fine.
+  if (allFormsSet.size > 1) {
+    console.log("");
+    console.log(`Alias-expanded forms (canonical "${canonical}"):`);
+    for (const f of allFormsSet) console.log(`  • ${f}`);
+  }
+  const allForms = Array.from(allFormsSet);
+  // Build the .or() filter — ilike for case-insensitive exact match.
+  const orFilter = allForms
+    .map((f) => `event_name.ilike.${f.replace(/[,()]/g, "\\$&")}`)
+    .join(",");
   const { data: rows, error } = await supabase
     .from("events")
     .select(
       "user_id, net_sales, event_name, event_date, booked, anomaly_flag"
     )
-    .in("event_name", [eventName])
+    .or(orFilter)
     .eq("booked", true)
     .not("net_sales", "is", null)
     .gt("net_sales", 0)
