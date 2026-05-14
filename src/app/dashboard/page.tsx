@@ -35,6 +35,7 @@ import { DunningBanner } from "@/components/dunning-banner";
 import { JourneyCallout } from "@/components/journey-callout";
 import { KeyTakeaways } from "@/components/key-takeaways";
 import { SampleDataSeedButton, SampleDataBanner } from "@/components/sample-data-controls";
+import { SeeForecastsTile } from "@/components/see-forecasts-tile";
 import { computeJourneyState } from "@/lib/user-journey";
 import { computeReportsAggregates } from "@/lib/reports-aggregates";
 import type { Event, EventPerformance } from "@/lib/database.types";
@@ -642,21 +643,11 @@ export default async function DashboardPage() {
                 </div>
               </Link>
 
-              {/* Option 3 — Forecasts preview */}
-              <Link href="/dashboard/insights?tab=forecasts" className="group">
-                <div className="h-full rounded-xl border bg-card p-5 hover:border-primary/50 hover:shadow-md transition-all">
-                  <div className="w-10 h-10 rounded-lg bg-brand-teal/10 flex items-center justify-center mb-3">
-                    <TrendingUp className="h-5 w-5 text-brand-teal" />
-                  </div>
-                  <p className="font-semibold text-sm mb-1">See how forecasts work</p>
-                  <p className="text-xs text-muted-foreground leading-relaxed">
-                    With 10+ past events logged, VendCast generates revenue forecasts calibrated to your truck&apos;s history.
-                  </p>
-                  <p className="text-xs font-medium text-primary mt-3 flex items-center gap-1 group-hover:gap-2 transition-all">
-                    Explore forecasts <ArrowRight className="h-3.5 w-3.5" />
-                  </p>
-                </div>
-              </Link>
+              {/* Option 3 — Forecasts preview. Triggers sample-data
+                  seed instead of linking to the empty forecasts tab
+                  (A4 fix from v60 brief queue — prior fresh-account
+                  click landed on an empty page). */}
+              <SeeForecastsTile />
             </div>
           </div>
 
