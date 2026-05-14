@@ -394,6 +394,7 @@ function SettingsContent() {
         <TabsContent value="team" className="space-y-6">
           <TeamAccessCard profile={profile} />
           <ManagerInviteCard profile={profile} />
+          <ManagerActivityCard profile={profile} />
         </TabsContent>
 
         {/* PLAN — subscription tier picker + Stripe billing portal */}
@@ -1343,6 +1344,317 @@ function ManagerInviteCard({ profile }: { profile: Profile | null }) {
               </p>
             )}
           </>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+// ─── Manager Activity Log (PR 2 of audit-log workstream) ────────────────────
+//
+// Surfaces manager_audit_log rows the owner has SELECT access to. PR 1
+// (commit 8ef5c9b, 2026-05-14) shipped the write-capture: every event
+// create / update / delete / financial-edit / inquiry action a manager
+// (or admin-impersonating session) takes against owner data writes one
+// row. This card is the read surface — owner sees who did what.
+//
+// Default view: last 90 days. "Show all" toggle stretches to the full
+// 365-day retention window (cron prunes older). Filters: actor (which
+// manager) + action type.
+//
+// Display contract:
+//   - One row per audit entry
+//   - Show relative + absolute timestamps
+//   - Show actor (manager's name from profiles.full_name / business_name)
+//   - Action gets a humanized label
+//   - Summary text from the audit row (writer pre-composed it)
+//   - target_id → deep-link when target_table === "events"
+//
+// Empty state: distinct copy depending on whether the operator HAS
+// active managers but they haven't done anything (likely Sarah-just-
+// activated state) vs has no managers (link to ManagerInviteCard).
+
+type AuditRow = {
+  id: string;
+  actor_user_id: string;
+  actor_kind: "manager" | "impersonating";
+  action: string;
+  target_table: string;
+  target_id: string | null;
+  summary: string | null;
+  created_at: string;
+};
+
+type ActorProfile = {
+  id: string;
+  full_name: string | null;
+  business_name: string | null;
+};
+
+const ACTIVITY_DEFAULT_DAYS = 90;
+const ACTIVITY_MAX_DAYS = 365;
+
+function humanizeAction(action: string): string {
+  switch (action) {
+    case "event.create":
+      return "Created event";
+    case "event.update":
+      return "Edited event";
+    case "event.delete":
+      return "Deleted event";
+    case "event.financial_edit":
+      return "Edited financials";
+    case "event.dismiss_flagged":
+      return "Dismissed flagged event";
+    case "event.after_event_summary":
+      return "Logged wrap-up";
+    case "event.bulk_update":
+      return "Bulk-edited event";
+    case "inquiry.action":
+      return "Acted on inquiry";
+    default:
+      return action;
+  }
+}
+
+function formatRelativeTime(iso: string): string {
+  const t = new Date(iso).getTime();
+  const now = Date.now();
+  const diffMs = now - t;
+  const minutes = Math.round(diffMs / 60000);
+  if (minutes < 1) return "just now";
+  if (minutes < 60) return `${minutes}m ago`;
+  const hours = Math.round(minutes / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.round(hours / 24);
+  if (days < 30) return `${days}d ago`;
+  const months = Math.round(days / 30);
+  if (months < 12) return `${months}mo ago`;
+  const years = Math.round(months / 12);
+  return `${years}y ago`;
+}
+
+function ManagerActivityCard({ profile }: { profile: Profile | null }) {
+  const supabase = createClient();
+  const [rows, setRows] = useState<AuditRow[] | null>(null);
+  const [actors, setActors] = useState<Map<string, ActorProfile>>(new Map());
+  const [loading, setLoading] = useState(true);
+  const [daysBack, setDaysBack] = useState<number>(ACTIVITY_DEFAULT_DAYS);
+  const [actorFilter, setActorFilter] = useState<string>("all");
+  const [actionFilter, setActionFilter] = useState<string>("all");
+
+  useEffect(() => {
+    let cancelled = false;
+    async function load() {
+      if (!profile) return;
+      setLoading(true);
+      const cutoff = new Date();
+      cutoff.setDate(cutoff.getDate() - daysBack);
+
+      let query = supabase
+        .from("manager_audit_log")
+        .select(
+          "id, actor_user_id, actor_kind, action, target_table, target_id, summary, created_at"
+        )
+        .eq("owner_user_id", profile.id)
+        .gte("created_at", cutoff.toISOString())
+        .order("created_at", { ascending: false })
+        .limit(500);
+      if (actorFilter !== "all") query = query.eq("actor_user_id", actorFilter);
+      if (actionFilter !== "all") query = query.eq("action", actionFilter);
+
+      const { data, error } = await query;
+      if (cancelled) return;
+      if (error || !data) {
+        setRows([]);
+        setLoading(false);
+        return;
+      }
+      const auditRows = data as AuditRow[];
+      setRows(auditRows);
+
+      // Fetch actor profile names — distinct actor_user_ids only.
+      const actorIds = Array.from(new Set(auditRows.map((r) => r.actor_user_id)));
+      if (actorIds.length > 0) {
+        const { data: profiles } = await supabase
+          .from("profiles")
+          .select("id, full_name, business_name")
+          .in("id", actorIds);
+        if (!cancelled) {
+          const map = new Map<string, ActorProfile>();
+          for (const p of (profiles ?? []) as ActorProfile[]) {
+            map.set(p.id, p);
+          }
+          setActors(map);
+        }
+      } else {
+        setActors(new Map());
+      }
+      setLoading(false);
+    }
+    load();
+    return () => {
+      cancelled = true;
+    };
+  }, [profile, daysBack, actorFilter, actionFilter, supabase]);
+
+  // Build the actor list for the filter dropdown from the loaded rows
+  // (manager set the owner has interacted with, regardless of current
+  // team_members status — a manager who left still shows in history).
+  const actorOptions = (() => {
+    if (!rows) return [];
+    const seen = new Set<string>();
+    const out: { id: string; label: string }[] = [];
+    for (const r of rows) {
+      if (seen.has(r.actor_user_id)) continue;
+      seen.add(r.actor_user_id);
+      const a = actors.get(r.actor_user_id);
+      const label =
+        a?.full_name?.trim() ||
+        a?.business_name?.trim() ||
+        r.actor_user_id.slice(0, 8);
+      out.push({ id: r.actor_user_id, label });
+    }
+    return out.sort((a, b) => a.label.localeCompare(b.label));
+  })();
+
+  // Action types present in the loaded rows — same logic as actors.
+  const actionOptions = (() => {
+    if (!rows) return [];
+    return Array.from(new Set(rows.map((r) => r.action))).sort();
+  })();
+
+  function actorLabel(actorId: string, actorKind: AuditRow["actor_kind"]): string {
+    const a = actors.get(actorId);
+    const name =
+      a?.full_name?.trim() ||
+      a?.business_name?.trim() ||
+      `${actorId.slice(0, 8)}…`;
+    return actorKind === "impersonating" ? `${name} (admin)` : name;
+  }
+
+  return (
+    <Card className="max-w-4xl">
+      <CardHeader>
+        <CardTitle>Activity</CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <p className="text-sm text-muted-foreground">
+          Every event create, edit, delete, or inquiry action your managers
+          take on your account is captured here. Read-only history. We keep
+          a year of records.
+        </p>
+
+        {/* Filter row — only renders when there's data to filter. Keeps
+            the empty state cleaner. */}
+        {rows && rows.length > 0 && (
+          <div className="flex flex-wrap items-center gap-2 text-sm">
+            <Select
+              value={String(daysBack)}
+              onValueChange={(v) => v != null && setDaysBack(Number(v))}
+            >
+              <SelectTrigger className="h-9 w-32">
+                <SelectValue placeholder="Time" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="7">Last 7 days</SelectItem>
+                <SelectItem value="30">Last 30 days</SelectItem>
+                <SelectItem value={String(ACTIVITY_DEFAULT_DAYS)}>Last 90 days</SelectItem>
+                <SelectItem value={String(ACTIVITY_MAX_DAYS)}>Show all</SelectItem>
+              </SelectContent>
+            </Select>
+            {actorOptions.length > 1 && (
+              <Select
+                value={actorFilter}
+                onValueChange={(v) => v != null && setActorFilter(v)}
+              >
+                <SelectTrigger className="h-9 w-44">
+                  <SelectValue placeholder="Who" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All people</SelectItem>
+                  {actorOptions.map((a) => (
+                    <SelectItem key={a.id} value={a.id}>
+                      {a.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
+            {actionOptions.length > 1 && (
+              <Select
+                value={actionFilter}
+                onValueChange={(v) => v != null && setActionFilter(v)}
+              >
+                <SelectTrigger className="h-9 w-48">
+                  <SelectValue placeholder="What" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All actions</SelectItem>
+                  {actionOptions.map((a) => (
+                    <SelectItem key={a} value={a}>
+                      {humanizeAction(a)}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
+          </div>
+        )}
+
+        {loading ? (
+          <p className="text-sm text-muted-foreground">Loading…</p>
+        ) : !rows || rows.length === 0 ? (
+          <p className="text-sm text-muted-foreground">
+            Nothing yet. When a manager creates, edits, or deletes events on
+            your account, their actions will show here.
+          </p>
+        ) : (
+          <ul className="divide-y divide-border rounded-md border">
+            {rows.map((r) => {
+              const isoDate = new Date(r.created_at).toLocaleString();
+              const targetLink =
+                r.target_table === "events" && r.target_id
+                  ? `/dashboard/events?highlight=${r.target_id}`
+                  : null;
+              return (
+                <li
+                  key={r.id}
+                  className="flex items-start justify-between gap-3 px-3 py-2 text-sm"
+                >
+                  <div className="min-w-0 flex-1 space-y-0.5">
+                    <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
+                      <span className="font-medium">
+                        {actorLabel(r.actor_user_id, r.actor_kind)}
+                      </span>
+                      <span className="text-muted-foreground">
+                        {humanizeAction(r.action)}
+                      </span>
+                      {targetLink && (
+                        <Link
+                          href={targetLink}
+                          className="text-brand-teal hover:underline"
+                        >
+                          view event
+                        </Link>
+                      )}
+                    </div>
+                    {r.summary && (
+                      <p className="text-xs text-muted-foreground">
+                        {r.summary}
+                      </p>
+                    )}
+                  </div>
+                  <div
+                    className="shrink-0 text-right text-xs text-muted-foreground"
+                    title={isoDate}
+                  >
+                    {formatRelativeTime(r.created_at)}
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
         )}
       </CardContent>
     </Card>
