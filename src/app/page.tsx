@@ -334,8 +334,17 @@ export default async function LandingPage() {
             Acquisition axis per feedback_value_prop_priority Tier-1 — the
             wedge that works at any operator scale (vs. find-a-vendor which
             is gated on density). Teal tint matches the soft-teal treatment
-            elsewhere (not the orange-reserved-for-closer rule). */}
-        <div className="border-t bg-brand-teal/5">
+            elsewhere (not the orange-reserved-for-closer rule).
+
+            Intentionally NOT tagged with the `insight-block-*` testid
+            prefix — existing e2e `tests/e2e/homepage-rebuild.spec.ts`
+            expects exactly 4 of those. Distinct `homepage-operator-wedge`
+            testid keeps this selectable for future tests without
+            breaking the count assertion. */}
+        <div
+          data-testid="homepage-operator-wedge"
+          className="border-t bg-brand-teal/5"
+        >
           <div className="container mx-auto px-4 py-16 max-w-4xl text-center">
             <h2 className="text-2xl font-bold tracking-tight sm:text-3xl lg:text-4xl">
               Your booking page. Anywhere you want it.
