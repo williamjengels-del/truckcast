@@ -25,6 +25,7 @@ import { DashboardCharts } from "./dashboard-charts";
 import { DashboardHeroChart } from "./hero-chart";
 import { SetupProgress } from "@/components/setup-progress";
 import { PosNudgeBanner } from "@/components/pos-nudge-banner";
+import { SlugNudgeBanner } from "@/components/slug-nudge-banner";
 import { DashboardForecastCard } from "@/components/dashboard-forecast-card";
 import { DayOfEventBlock } from "@/components/day-of-event-block";
 import {
@@ -532,6 +533,24 @@ export default async function DashboardPage() {
         }
         posConnected={posConnected}
         hasSales={hasSales}
+      />
+
+      {/* Tier-1 ACQUISITION axis nudge (feedback_value_prop_priority).
+          Operators who skipped the onboarding wizard's step-3 "Share
+          your booking link" card or signed up before it existed get a
+          one-time dashboard prompt to claim their vendcast.co/<slug>
+          URL — the wedge surface for Cat 1/2 operators per north-star.
+          Pro+ only (Starter doesn't get a public schedule). Dismissible
+          per browser; the slug remains claimable via Settings →
+          Customers regardless. */}
+      <SlugNudgeBanner
+        slugEligible={
+          (profile?.subscription_tier ?? "starter") === "pro" ||
+          (profile?.subscription_tier ?? "starter") === "premium"
+        }
+        hasSlug={
+          !!(profile as { public_slug?: string | null } | null)?.public_slug
+        }
       />
 
       <JourneyCallout journeyContext={journeyContext} />
