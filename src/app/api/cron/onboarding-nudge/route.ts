@@ -65,7 +65,7 @@ export async function GET(req: NextRequest) {
     if (!email) continue;
 
     try {
-      await sendOnboardingNudgeEmail(email);
+      await sendOnboardingNudgeEmail(email, profile.id);
       sent++;
     } catch (err) {
       errors.push(`${email}: ${String(err)}`);

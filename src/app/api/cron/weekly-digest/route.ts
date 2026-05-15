@@ -272,6 +272,7 @@ export async function GET(req: NextRequest) {
 
     const payload: WeeklyDigestPayload = {
       to: email,
+      userId: profile.id,
       businessName: profile.business_name ?? "",
       weekRangeLabel,
       eventsRun,

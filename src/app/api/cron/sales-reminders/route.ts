@@ -146,7 +146,7 @@ export async function GET(req: NextRequest) {
       .map((e) => ({ event_name: e.event_name, event_date: e.event_date }));
 
     try {
-      await sendSalesReminderEmail(email, businessName, topEvents);
+      await sendSalesReminderEmail(email, businessName, topEvents, userId);
       results.push({ userId, status: "sent" });
     } catch (err) {
       console.error(`[sales-reminders] Failed for ${email}:`, err);

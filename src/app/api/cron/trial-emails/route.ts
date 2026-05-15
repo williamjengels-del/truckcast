@@ -136,7 +136,12 @@ export async function GET(req: NextRequest) {
           // operator escape the gate that an ET operator hit on the
           // same wall-clock second.
           const gracePeriodActive = new Date() < HARD_GATE_DATE;
-          await sendTrialExpiredEmail(email, profile.business_name ?? "", gracePeriodActive);
+          await sendTrialExpiredEmail(
+            email,
+            profile.business_name ?? "",
+            gracePeriodActive,
+            profile.id
+          );
           results.expired++;
         } else {
           results.skipped++;
@@ -145,7 +150,8 @@ export async function GET(req: NextRequest) {
         await sendTrialExpiryEmail(
           email,
           profile.business_name ?? "",
-          daysLeft
+          daysLeft,
+          profile.id
         );
         results.warnings++;
       } else {
