@@ -323,6 +323,64 @@ export default async function LandingPage() {
           </div>
         </div>
 
+        {/* Operator-owned wedge — the SECOND direction inquiries flow from.
+            The orange band above tells the find-a-vendor story (organizers
+            searching VendCast); this section tells the wedge story (your
+            own URL + your own form, embed-anywhere). Per north star origin:
+            "Most operators don't even have an event inquiry form on their
+            website... That's not a marginal improvement to add — it's a
+            missing organ they don't know they're missing."
+
+            Acquisition axis per feedback_value_prop_priority Tier-1 — the
+            wedge that works at any operator scale (vs. find-a-vendor which
+            is gated on density). Teal tint matches the soft-teal treatment
+            elsewhere (not the orange-reserved-for-closer rule).
+
+            Intentionally NOT tagged with the `insight-block-*` testid
+            prefix — existing e2e `tests/e2e/homepage-rebuild.spec.ts`
+            expects exactly 4 of those. Distinct `homepage-operator-wedge`
+            testid keeps this selectable for future tests without
+            breaking the count assertion. */}
+        <div
+          data-testid="homepage-operator-wedge"
+          className="border-t bg-brand-teal/5"
+        >
+          <div className="container mx-auto px-4 py-16 max-w-4xl text-center">
+            <h2 className="text-2xl font-bold tracking-tight sm:text-3xl lg:text-4xl">
+              Your booking page. Anywhere you want it.
+            </h2>
+            <p className="mx-auto mt-4 max-w-2xl text-base text-muted-foreground">
+              Most mobile vendors don&apos;t have a booking form on their
+              website at all. Yours is part of the plan.
+            </p>
+            <div className="mt-10 grid gap-6 md:grid-cols-2 max-w-3xl mx-auto text-left">
+              <div className="space-y-2">
+                <p className="font-semibold text-foreground">
+                  A bookable URL.
+                </p>
+                <p className="text-sm text-muted-foreground leading-relaxed">
+                  <code className="rounded bg-muted px-1.5 py-0.5 text-xs">
+                    vendcast.co/your-truck
+                  </code>{" "}
+                  goes in your Instagram bio, on your flyers, in your email
+                  signature. Organizers click; they land on your schedule
+                  and your request form.
+                </p>
+              </div>
+              <div className="space-y-2">
+                <p className="font-semibold text-foreground">
+                  Requests in your inbox.
+                </p>
+                <p className="text-sm text-muted-foreground leading-relaxed">
+                  The form lives on that page. Submissions hit your VendCast
+                  inbox the moment they arrive — and your calendar the
+                  moment you say yes.
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+
         {/* Feature grid — Phase 2.5 brand integration. Each card now
             anchors the lucide icon in a brand-teal filled square (white
             icon inside) so the section carries brand presence after the
