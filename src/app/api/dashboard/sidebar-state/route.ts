@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { resolveScopedSupabase } from "@/lib/dashboard-scope";
+import { resolveScopedSupabase, canAccessPrep } from "@/lib/dashboard-scope";
 
 // GET /api/dashboard/sidebar-state
 //
@@ -110,10 +110,17 @@ export async function GET() {
     (i) => !i.operator_actions?.[scope.userId]?.action
   ).length;
 
+  // `prep_access` lets the sidebar gate the Prep nav entry on a
+  // per-manager basis. Owners + impersonating admins always get true;
+  // managers only when their owner has flipped prep_access on for
+  // them. canAccessPrep does the right thing across all scope kinds.
+  const prep_access = canAccessPrep(scope);
+
   return NextResponse.json({
     subscription_tier: profile?.subscription_tier ?? "starter",
     is_manager: !!profile?.owner_user_id,
     unlogged_count,
     open_inquiry_count,
+    prep_access,
   });
 }

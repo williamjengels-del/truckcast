@@ -30,6 +30,7 @@ export function MobileNav() {
   const [unloggedCount, setUnloggedCount] = useState(0);
   const [openInquiryCount, setOpenInquiryCount] = useState(0);
   const [isManager, setIsManager] = useState(false);
+  const [prepAccess, setPrepAccess] = useState(false);
 
   useEffect(() => {
     // Reads via /api/dashboard/sidebar-state — same endpoint the desktop
@@ -43,11 +44,13 @@ export function MobileNav() {
           is_manager: boolean;
           unlogged_count: number;
           open_inquiry_count?: number;
+          prep_access?: boolean;
         };
         setTier(data.subscription_tier);
         setIsManager(data.is_manager);
         setUnloggedCount(data.unlogged_count);
         setOpenInquiryCount(data.open_inquiry_count ?? 0);
+        setPrepAccess(data.prep_access ?? false);
       } catch {
         // Non-fatal
       }
@@ -96,7 +99,21 @@ export function MobileNav() {
         <nav className="flex-1 overflow-y-auto px-3 py-4 space-y-1">
           {navItems
             .filter((item) => {
-              if (isManager) return ["/dashboard", "/dashboard/events", "/dashboard/inbox", "/dashboard/settings"].includes(item.href);
+              // Mirror sidebar.tsx gating: Prep entry is visible when
+              // prep_access is true (owner / admin impersonating /
+              // granted manager). Managers without prep_access never
+              // see /dashboard/prep, regardless of allow-list.
+              if (item.requiresPrepAccess && !prepAccess) return false;
+              if (isManager) {
+                const managerAllow = [
+                  "/dashboard",
+                  "/dashboard/events",
+                  "/dashboard/inbox",
+                  "/dashboard/settings",
+                ];
+                if (item.requiresPrepAccess && prepAccess) return true;
+                return managerAllow.includes(item.href);
+              }
               return !item.tier || item.tier === tier;
             })
             .map((item) => {

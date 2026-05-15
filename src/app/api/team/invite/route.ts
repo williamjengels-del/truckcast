@@ -63,7 +63,8 @@ export async function POST(request: Request) {
     );
   }
 
-  const { email, financials_enabled = false } = await request.json();
+  const { email, financials_enabled = false, prep_access = false } =
+    await request.json();
 
   if (!email || typeof email !== "string") {
     return NextResponse.json({ error: "Email is required." }, { status: 400 });
@@ -92,6 +93,7 @@ export async function POST(request: Request) {
       member_email: email.toLowerCase(),
       status: "pending",
       financials_enabled,
+      prep_access,
     });
 
   if (insertError) {
@@ -234,12 +236,16 @@ export async function GET() {
 
 /**
  * PATCH /api/team/invite
- * Body: { memberId, financials_enabled }
+ * Body: { memberId, financials_enabled? , prep_access? }
  *
- * Update a manager's Financials toggle after invite. Only the
- * caller's own team rows are mutable (RLS enforces this — the
- * "Owners manage their team" policy gates writes by
- * owner_user_id = auth.uid()), but we also gate by user.id in the
+ * Update one or more permission toggles on a manager row. Sends
+ * whichever subset of toggles is present in the body — caller can
+ * flip Financials and Prep independently. Each toggle defaults to
+ * "unchanged" when omitted.
+ *
+ * Only the caller's own team rows are mutable (RLS enforces this —
+ * the "Owners manage their team" policy gates writes by
+ * owner_user_id = auth.uid()); we also gate by user.id in the
  * WHERE clause as belt-and-suspenders.
  */
 export async function PATCH(request: Request) {
@@ -253,16 +259,24 @@ export async function PATCH(request: Request) {
     return NextResponse.json({ error: "memberId required" }, { status: 400 });
   }
 
-  if (typeof body.financials_enabled !== "boolean") {
+  const update: Record<string, boolean> = {};
+  if (typeof body.financials_enabled === "boolean") {
+    update.financials_enabled = body.financials_enabled;
+  }
+  if (typeof body.prep_access === "boolean") {
+    update.prep_access = body.prep_access;
+  }
+
+  if (Object.keys(update).length === 0) {
     return NextResponse.json(
-      { error: "financials_enabled (boolean) required" },
+      { error: "At least one of financials_enabled or prep_access (boolean) required" },
       { status: 400 }
     );
   }
 
   const { error: updateError } = await supabase
     .from("team_members")
-    .update({ financials_enabled: body.financials_enabled })
+    .update(update)
     .eq("id", memberId)
     .eq("owner_user_id", user.id);
 
