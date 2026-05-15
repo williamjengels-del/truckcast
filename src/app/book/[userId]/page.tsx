@@ -1,8 +1,8 @@
 "use client";
 
-import { useState, use } from "react";
+import { useState, useEffect, use } from "react";
 import Image from "next/image";
-import { TruckIcon } from "lucide-react";
+import { TruckIcon, CheckCircle2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -29,19 +29,29 @@ export default function BookingPage({ params }: { params: Promise<{ userId: stri
   const [attendanceRange, setAttendanceRange] = useState("");
   const [message, setMessage] = useState("");
 
-  // Load business name
-  useState(() => {
+  // Load business name. Previously this was a misused
+  // useState(() => { ... fetch ... }) which happened to fire the
+  // network call as a side effect during initialization but
+  // (a) breaks React conventions, (b) doesn't re-run on userId
+  // change, (c) lint can flag side effects in init functions.
+  // Proper useEffect dependency is the right shape.
+  useEffect(() => {
     const supabase = createClient();
+    let cancelled = false;
     supabase
       .from("profiles")
       .select("business_name")
       .eq("id", userId)
       .single()
       .then(({ data }) => {
+        if (cancelled) return;
         setBusinessName(data?.business_name ?? null);
         setLoadingProfile(false);
       });
-  });
+    return () => {
+      cancelled = true;
+    };
+  }, [userId]);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -66,6 +76,19 @@ export default function BookingPage({ params }: { params: Promise<{ userId: stri
       setError("Event type is required.");
       setSubmitting(false);
       return;
+    }
+    // Past-date guard. Operators reported organizers occasionally
+    // submitting requests with last-week's date (typo, autofill, etc.).
+    // Server-side route already accepts whatever date, but surfacing
+    // the error here avoids confusing "no response" outcomes when the
+    // operator dismisses the inquiry as nonsense.
+    if (eventDate) {
+      const today = new Date().toISOString().split("T")[0];
+      if (eventDate < today) {
+        setError("Event date is in the past. Please pick a future date.");
+        setSubmitting(false);
+        return;
+      }
     }
 
     try {
@@ -126,16 +149,36 @@ export default function BookingPage({ params }: { params: Promise<{ userId: stri
 
       <main className="max-w-2xl mx-auto px-4 py-10">
         {submitted ? (
-          <div className="text-center space-y-4">
+          <div className="text-center space-y-4 max-w-md mx-auto">
             <div className="rounded-full bg-green-100 dark:bg-green-900/30 w-16 h-16 flex items-center justify-center mx-auto">
-              <svg className="h-8 w-8 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-              </svg>
+              <CheckCircle2 className="h-9 w-9 text-green-600" />
             </div>
-            <h1 className="text-2xl font-bold">Request Received!</h1>
+            <h1 className="text-2xl font-bold">Request sent</h1>
             <p className="text-muted-foreground">
-              Thanks! We&apos;ll be in touch soon.
+              {businessName ?? "The operator"} got your request. They&apos;ll
+              reach out directly via email to confirm availability — usually
+              within 24-48 hours.
             </p>
+            <div className="rounded-lg border bg-card text-left p-4 mt-6 text-sm text-muted-foreground">
+              <p className="font-medium text-foreground mb-1">
+                What happens next
+              </p>
+              <ol className="list-decimal pl-5 space-y-1">
+                <li>{businessName ?? "The operator"} reviews your request.</li>
+                <li>They reply directly to <span className="font-mono text-foreground">{email || "your email"}</span> — VendCast doesn&apos;t sit between you.</li>
+                <li>You agree on details (menu, pricing, logistics) and book.</li>
+              </ol>
+              <p className="mt-3 text-xs">
+                Didn&apos;t hear back within 48 hours? Email{" "}
+                <a
+                  className="underline"
+                  href="mailto:support@vendcast.co"
+                >
+                  support@vendcast.co
+                </a>{" "}
+                and we&apos;ll follow up.
+              </p>
+            </div>
           </div>
         ) : (
           <div className="space-y-6">
@@ -296,9 +339,18 @@ export default function BookingPage({ params }: { params: Promise<{ userId: stri
                 />
               </div>
 
-              <Button type="submit" className="w-full" disabled={submitting}>
+              <Button
+                type="submit"
+                size="lg"
+                className="w-full bg-brand-orange text-white hover:bg-brand-orange/90"
+                disabled={submitting}
+              >
                 {submitting ? "Submitting..." : "Submit Request"}
               </Button>
+              <p className="text-xs text-muted-foreground text-center">
+                No commission, no middleman. {businessName ?? "The operator"}{" "}
+                replies directly to your email.
+              </p>
             </form>
           </div>
         )}
