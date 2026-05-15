@@ -1,7 +1,8 @@
 import Link from "next/link";
-import { TruckIcon, MapPin, Clock, Calendar } from "lucide-react";
+import { TruckIcon, MapPin, Clock, Calendar, ArrowRight } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { createClient } from "@/lib/supabase/server";
 
 // Shared server-rendered public schedule view. Two surfaces consume it:
@@ -132,17 +133,54 @@ export default async function PublicScheduleView({
           <p className="text-sm text-muted-foreground mt-2">
             Upcoming Event Schedule
           </p>
+
+          {/* Primary CTA — request-a-booking. The operator-acquisition
+              wedge: every operator who shares their vendcast.co/<slug>
+              link in their bio is doing it so organizers can both see
+              the schedule AND request bookings directly. Pre-this-PR
+              the page was read-only; organizers had no path forward.
+              Orange = closer action per brand discipline. */}
+          <div className="mt-5 flex justify-center">
+            <Link
+              href={`/book/${userId}`}
+              data-testid="public-schedule-request-booking-cta"
+            >
+              <Button
+                size="lg"
+                className="rounded-full bg-brand-orange text-white hover:bg-brand-orange/90 gap-2"
+              >
+                Request a booking
+                <ArrowRight className="h-4 w-4" />
+              </Button>
+            </Link>
+          </div>
         </div>
       </header>
 
       <main className="container mx-auto px-4 py-8 max-w-2xl">
         {upcomingEvents.length === 0 ? (
+          // Empty state — still lead with the booking CTA. Organizers
+          // landing on a quiet schedule shouldn't bounce; the operator's
+          // calendar being open is the buying signal.
           <Card>
             <CardContent
-              className="py-12 text-center text-muted-foreground"
+              className="py-12 text-center"
               data-testid="public-schedule-empty"
             >
-              No upcoming events scheduled.
+              <Calendar className="h-10 w-10 text-muted-foreground/40 mx-auto mb-3" />
+              <p className="text-foreground font-medium mb-1">
+                No public events scheduled right now.
+              </p>
+              <p className="text-sm text-muted-foreground mb-5">
+                Have an event in mind? Send a booking request — the operator
+                will get back to you directly.
+              </p>
+              <Link href={`/book/${userId}`}>
+                <Button className="bg-brand-orange text-white hover:bg-brand-orange/90 gap-2">
+                  Request a booking
+                  <ArrowRight className="h-4 w-4" />
+                </Button>
+              </Link>
             </CardContent>
           </Card>
         ) : (
@@ -190,6 +228,30 @@ export default async function PublicScheduleView({
                 </div>
               </div>
             ))}
+
+            {/* Bottom CTA — after the organizer has scrolled the
+                schedule and gotten a sense of what this operator does,
+                close with a second booking-request prompt. Restated
+                instead of just "above the fold" — the page can be
+                long on a busy schedule and the header CTA scrolls out
+                of view. */}
+            <Card className="mt-2 border-brand-orange/30 bg-brand-orange/5">
+              <CardContent className="py-6 text-center">
+                <p className="text-foreground font-medium mb-1">
+                  Got an event for {profile.business_name}?
+                </p>
+                <p className="text-sm text-muted-foreground mb-4">
+                  Send a request and they&apos;ll get back to you
+                  directly — no commission, no middleman.
+                </p>
+                <Link href={`/book/${userId}`}>
+                  <Button className="bg-brand-orange text-white hover:bg-brand-orange/90 gap-2">
+                    Request a booking
+                    <ArrowRight className="h-4 w-4" />
+                  </Button>
+                </Link>
+              </CardContent>
+            </Card>
           </div>
         )}
       </main>
