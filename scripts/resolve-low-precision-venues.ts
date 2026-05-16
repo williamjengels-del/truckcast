@@ -124,9 +124,11 @@ const KNOWN_VENUES: Record<
   "ssm cardinal glennon hospital": { address: "1465 S Grand Blvd", city: "St. Louis", state: "MO" },
   "mercy hospital off ballas rd": { address: "615 S New Ballas Rd", city: "St. Louis", state: "MO" },
 
-  // STL music park / 9 mile garden
-  "st. louis music park": { address: "9375 Gravois Rd", city: "Affton", state: "MO" },
+  // 9 Mile Garden (food-truck garden, Affton) and St. Louis Music Park
+  // (amphitheater in the Maryland Heights casino complex) are DIFFERENT
+  // venues ~25km apart — do not collapse them onto one address.
   "9 mile garden": { address: "9375 Gravois Rd", city: "Affton", state: "MO" },
+  "st. louis music park": { address: "750 Casino Center Dr", city: "Maryland Heights", state: "MO" },
 
   // O'Fallon, MO
   "civic park": { address: "100 N Main St", city: "O'Fallon", state: "MO" },
