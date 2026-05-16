@@ -1499,6 +1499,7 @@ function ManagerActivityCard({ profile }: { profile: Profile | null }) {
   const [daysBack, setDaysBack] = useState<number>(ACTIVITY_DEFAULT_DAYS);
   const [actorFilter, setActorFilter] = useState<string>("all");
   const [actionFilter, setActionFilter] = useState<string>("all");
+  const [search, setSearch] = useState<string>("");
 
   useEffect(() => {
     let cancelled = false;
@@ -1590,6 +1591,25 @@ function ManagerActivityCard({ profile }: { profile: Profile | null }) {
     return actorKind === "impersonating" ? `${name} (admin)` : name;
   }
 
+  // Free-text search over the loaded rows — matches the summary text,
+  // the humanized action label, and the actor's name. Applied after the
+  // dropdown filters so search narrows within the current view.
+  const trimmedSearch = search.trim().toLowerCase();
+  const displayedRows = (() => {
+    if (!rows) return null;
+    if (!trimmedSearch) return rows;
+    return rows.filter((r) => {
+      const haystack = [
+        r.summary ?? "",
+        humanizeAction(r.action),
+        actorLabel(r.actor_user_id, r.actor_kind),
+      ]
+        .join(" ")
+        .toLowerCase();
+      return haystack.includes(trimmedSearch);
+    });
+  })();
+
   return (
     <Card className="max-w-4xl">
       <CardHeader>
@@ -1656,6 +1676,13 @@ function ManagerActivityCard({ profile }: { profile: Profile | null }) {
                 </SelectContent>
               </Select>
             )}
+            <Input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search activity…"
+              className="h-9 w-48"
+              aria-label="Search activity"
+            />
           </div>
         )}
 
@@ -1666,9 +1693,13 @@ function ManagerActivityCard({ profile }: { profile: Profile | null }) {
             Nothing yet. When a manager creates, edits, or deletes events on
             your account, their actions will show here.
           </p>
+        ) : !displayedRows || displayedRows.length === 0 ? (
+          <p className="text-sm text-muted-foreground">
+            No activity matches &ldquo;{search.trim()}&rdquo;.
+          </p>
         ) : (
           <ul className="divide-y divide-border rounded-md border">
-            {rows.map((r) => {
+            {displayedRows.map((r) => {
               const isoDate = new Date(r.created_at).toLocaleString();
               const targetLink =
                 r.target_table === "events" && r.target_id
