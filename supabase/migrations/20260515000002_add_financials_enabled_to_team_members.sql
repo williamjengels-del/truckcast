@@ -1,0 +1,38 @@
+-- Corrective migration — add the missing team_members.financials_enabled
+-- column.
+--
+-- Root cause: migration 20260503000006_collapse_team_member_permissions.sql
+-- (which adds `financials_enabled`, backfills it from the old
+-- can_view_revenue / can_view_forecasts booleans, drops those two, and
+-- adds the event_inquiries manager RLS policies) was never run in
+-- production. Verified 2026-05-15 by direct schema probe:
+--   financials_enabled  → MISSING
+--   prep_access         → exists (migration 20260514000003 applied)
+--   can_view_revenue    → still exists (should have been dropped)
+--   can_view_forecasts  → still exists (should have been dropped)
+--
+-- The application code (src/lib/dashboard-scope.ts, the manager-invite
+-- route, the settings ManagerInviteCard) all reference
+-- `financials_enabled`, so EVERY manager invite has been failing with
+-- "Could not find the 'financials_enabled' column" since PR #160
+-- shipped the code without its migration.
+--
+-- This migration adds ONLY the missing column. Scope is deliberately
+-- minimal:
+--   * No backfill from the legacy booleans. There is exactly one
+--     team_members row in production (operator's events coordinator)
+--     and the conservative default — financials access OFF until the
+--     owner explicitly re-grants — matches the original
+--     20260503000006 intent ("default to off so owners opt back in
+--     deliberately").
+--   * The legacy can_view_revenue / can_view_forecasts columns are
+--     left in place. They are dead weight, not a hazard. A future
+--     cleanup migration can drop them.
+--   * The event_inquiries manager RLS policies from 20260503000006
+--     are NOT included here — that's a separate concern (manager
+--     visibility into the inquiry inbox) and bundling unrelated RLS
+--     changes into a column-fix migration makes it scarier to paste.
+--     Tracked separately.
+
+ALTER TABLE team_members
+  ADD COLUMN IF NOT EXISTS financials_enabled boolean NOT NULL DEFAULT false;
