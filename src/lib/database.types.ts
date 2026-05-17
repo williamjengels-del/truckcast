@@ -1,17 +1,28 @@
 export type SubscriptionTier = "starter" | "pro" | "premium";
 export type EventType =
+  // Current food-truck taxonomy (reclassification 2026-05-17, migration
+  // 20260517000001/2). One coherent axis: what kind of revenue moment.
+  | "Food Destination"
+  | "Festival/Fair"
+  | "Office/Workday Lunch"
+  | "Concert/Sports"
+  | "Community Event"
+  | "Private Event"
+  // Catering taxonomy.
+  | "Wedding"
+  | "Corporate"
+  | "Private Party"
+  | "Reception"
+  | "Fundraiser/Charity"
+  // Legacy values — retained for historical rows + CSV round-trip,
+  // hidden from new-event selectors. Superseded by the types above.
   | "Festival"
   | "Concert"
   | "Community/Neighborhood"
-  | "Corporate"
   | "Weekly Series"
   | "Private"
-  | "Private/Catering" // legacy — retained for historical rows, hidden from new-event selects
-  | "Sports Event"
-  | "Fundraiser/Charity"
-  | "Wedding"
-  | "Private Party"
-  | "Reception";
+  | "Private/Catering"
+  | "Sports Event";
 export type EventTier = "A" | "B" | "C" | "D";
 export type WeatherType =
   | "Clear"

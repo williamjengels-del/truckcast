@@ -1,29 +1,28 @@
 // Event Types
 //
 // Split by mode so EventForm can offer the semantically-correct subset
-// based on the operator's food_truck ↔ catering toggle. See migration
-// 20260421000001 for the enum additions (Private, Wedding, Private
-// Party, Reception) that underpin these lists.
+// based on the operator's food_truck ↔ catering toggle.
 //
-// Corporate and Fundraiser/Charity legitimately appear in both modes
-// — a corporate lunch can be a truck parked at an office picnic OR
-// a catered drop-off, and a fundraiser can be either a public gate
-// event or a catered gala. Both modes can target the same event_type.
+// The food-truck list was reclassified 2026-05-17 (migration
+// 20260517000001/2) onto one coherent axis: what kind of revenue
+// moment the event is. The old 8-type list mixed three questions —
+// who booked it, what it is, how often — which the forecast engine
+// could not cluster on. See the reclassification proposal brief.
 //
-// The legacy "Private/Catering" value is deliberately absent from BOTH
-// lists. Existing rows carrying that value still render (enum value
-// retained for backward compat); new events land on one of the new
-// mode-specific types as operators select them.
+// The legacy food-truck values (Festival, Concert, Community/
+// Neighborhood, Corporate, Weekly Series, Private, Sports Event,
+// Private/Catering) are retained in the `event_type` enum for
+// historical rows + CSV round-trip, but no longer appear in the
+// food-truck selector. Catering keeps Corporate + Fundraiser/Charity
+// (a catered corporate drop-off / gala is still that).
 
 export const EVENT_TYPES_FOOD_TRUCK = [
-  "Festival",
-  "Concert",
-  "Community/Neighborhood",
-  "Corporate",
-  "Weekly Series",
-  "Private",
-  "Sports Event",
-  "Fundraiser/Charity",
+  "Food Destination",
+  "Festival/Fair",
+  "Office/Workday Lunch",
+  "Concert/Sports",
+  "Community Event",
+  "Private Event",
 ] as const;
 
 export const EVENT_TYPES_CATERING = [
@@ -35,22 +34,21 @@ export const EVENT_TYPES_CATERING = [
 ] as const;
 
 // Union of both lists, deduped — used where the UI doesn't know which
-// mode applies yet (admin cross-tenant filter, public booking form
-// where inquirers can tag any event type, CSV parser validation).
-// Order preserves food-truck-first then catering-only additions so
-// the most common shapes for existing operators surface first.
+// mode applies yet (admin cross-tenant filter, public booking + inquiry
+// forms where organizers tag any event type). Food-truck types first,
+// then catering-only additions.
 export const EVENT_TYPES = [
-  "Festival",
-  "Concert",
-  "Community/Neighborhood",
-  "Corporate",
-  "Weekly Series",
-  "Private",
-  "Sports Event",
-  "Fundraiser/Charity",
+  "Food Destination",
+  "Festival/Fair",
+  "Office/Workday Lunch",
+  "Concert/Sports",
+  "Community Event",
+  "Private Event",
   "Wedding",
+  "Corporate",
   "Private Party",
   "Reception",
+  "Fundraiser/Charity",
 ] as const;
 
 // Event Tiers with descriptions
