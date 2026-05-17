@@ -1,8 +1,9 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest, NextResponse, after } from "next/server";
 import { createClient as createServiceClient } from "@supabase/supabase-js";
 import { getAdminUser } from "@/lib/admin";
 import { logAdminAction } from "@/lib/admin-audit";
 import { recalculateForUserWithClient } from "@/lib/recalculate-service";
+import { geocodeUserEvents } from "@/lib/geocode-events";
 import {
   computeCsvRowSignature,
   matchFeeType,
@@ -300,20 +301,32 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  // Recalculate forecasts and performance for the target user so they
-  // reflect the newly-imported events. Uses the service-role variant
-  // directly (same function the cron auto-sync uses), so the recalc
-  // runs against the target user's data without needing their cookies.
-  // Non-critical: import is considered successful even if recalc fails.
+  // Post-import: geocode the newly-imported events, then recalculate.
+  // Runs inside `after()` so the import response returns immediately —
+  // geocoding a few hundred unique venues through Mapbox would
+  // otherwise risk the route timeout. Order matters: geocode first so
+  // the recalc picks up the fresh cell_id values for cross-op matching.
+  // Both steps are non-critical — the import is successful regardless.
   if (inserted > 0) {
-    try {
-      await recalculateForUserWithClient(userId, service);
-    } catch (err) {
-      console.error("admin_import_recalc_failed", {
-        userId,
-        error: err instanceof Error ? err.message : String(err),
-      });
-    }
+    after(async () => {
+      try {
+        const geo = await geocodeUserEvents(userId, service);
+        console.log("admin_import_geocode", { userId, ...geo });
+      } catch (err) {
+        console.error("admin_import_geocode_failed", {
+          userId,
+          error: err instanceof Error ? err.message : String(err),
+        });
+      }
+      try {
+        await recalculateForUserWithClient(userId, service);
+      } catch (err) {
+        console.error("admin_import_recalc_failed", {
+          userId,
+          error: err instanceof Error ? err.message : String(err),
+        });
+      }
+    });
   }
 
   await logAdminAction(
