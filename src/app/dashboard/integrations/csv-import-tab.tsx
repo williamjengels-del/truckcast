@@ -531,6 +531,16 @@ export function CsvImportTab() {
     }
 
     if (totalInserted > 0) {
+      // Geocode the imported venues so the events join the cross-
+      // operator forecast match by location, not just by event name.
+      // Runs before the recalc so the recalc sees the fresh cell_ids.
+      // Non-critical — events still match cross-op by name without it.
+      setImportProgress("Locating venues for cross-operator matching...");
+      try {
+        await fetch("/api/events/geocode-pending", { method: "POST" });
+      } catch {
+        // Non-critical
+      }
       setImportProgress("Recalculating forecasts and performance...");
       try {
         await fetch("/api/recalculate", { method: "POST" });
